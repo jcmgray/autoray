@@ -14,10 +14,15 @@ A lightweight python AUTOmatic-arRAY library. Write numeric code that works for:
 * `mars <https://github.com/mars-project/mars>`_
 * ... and indeed **any** library that provides a numpy-*ish* api.
 
-
 .. image:: https://travis-ci.org/jcmgray/autoray.svg?branch=master
-    :target: https://travis-ci.org/jcmgray/autoray
-
+  :target: https://travis-ci.org/jcmgray/autoray
+  :alt: Travis-CI
+.. image:: https://codecov.io/gh/jcmgray/autoray/branch/master/graph/badge.svg
+  :target: https://codecov.io/gh/jcmgray/autoray
+  :alt: Code Coverage
+.. image:: https://img.shields.io/lgtm/grade/python/g/jcmgray/autoray.svg
+  :target: https://lgtm.com/projects/g/jcmgray/autoray/
+  :alt: Code Quality
 
 For example consider this function that orthogonalizes a matrix using the modified Gram-Schmidt algorithm:
 
