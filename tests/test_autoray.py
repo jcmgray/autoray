@@ -26,20 +26,20 @@ def gen_rand(shape, backend):
         tf.enable_eager_execution()
         return tf.random.uniform(shape=shape, dtype='float64')
 
-    if backend == 'cupy':
+    if backend == 'cupy':  # pragma: no cover
         import cupy as cp
         return cp.random.uniform(size=shape, dtype='float64')
 
 
 def to_numpy(array, backend):
-    if backend == 'cupy':
-        return array.get()
+    if backend == 'dask':
+        return array.compute()
 
     if backend == 'tensorflow':
         return array.numpy()
 
-    if backend == 'dask':
-        return array.compute()
+    if backend == 'cupy':  # pragma: no cover
+        return array.get()
 
     return array
 
