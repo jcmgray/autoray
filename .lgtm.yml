@@ -1,0 +1,6 @@
+path_classifiers:
+  library:
+    - versioneer.py
+    - setup.py
+  generated:
+    - autoray/_version.py

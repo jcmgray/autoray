@@ -1,0 +1,12 @@
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - numpy
+  - tensorflow
+  - dask
+  - pytest
+  - pytest-cov
+  - coverage
+  - coveralls
+  - codecov

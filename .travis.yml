@@ -1,0 +1,20 @@
+language: python
+python:
+  - 3.5
+  - 3.6
+  - 3.7
+
+before_install:
+  - travis_wait bash deps/travis-install-conda.sh
+  - export PATH="$HOME/conda/bin:$PATH"
+  - source activate "test-environment-${TRAVIS_PYTHON_VERSION}"
+
+install:
+  - pip install .
+
+script:
+  - pytest
+
+after_success:
+  - coveralls
+  - codecov
