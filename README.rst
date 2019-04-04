@@ -2,6 +2,7 @@
 
     <img src="https://github.com/jcmgray/autoray/blob/master/docs/images/autoray-header.png" width="500px">
 
+
 A lightweight python AUTOmatic-arRAY library. Write numeric code that works for:
 
 * `numpy <https://github.com/numpy/numpy>`_
@@ -12,6 +13,11 @@ A lightweight python AUTOmatic-arRAY library. Write numeric code that works for:
 * `jax <https://github.com/google/jax>`_
 * `mars <https://github.com/mars-project/mars>`_
 * ... and indeed **any** library that provides a numpy-*ish* api.
+
+
+.. image:: https://travis-ci.org/jcmgray/autoray.svg?branch=master
+    :target: https://travis-ci.org/jcmgray/autoray
+
 
 For example consider this function that orthogonalizes a matrix using the modified Gram-Schmidt algorithm:
 
