@@ -1,6 +1,6 @@
 .. raw:: html
 
-    <img src="https://github.com/jcmgray/quimb/blob/master/docs/images/autoray-header.png" width="500px">
+    <img src="https://github.com/jcmgray/autoray/blob/master/docs/images/autoray-header.png" width="500px">
 
 A lightweight python AUTOmatic-arRAY library. Write numeric code that works for:
 
@@ -61,7 +61,14 @@ Of course complete compatibility is not going to be possible for all functions, 
 * The ``__array_function__`` protocol has been `suggested <https://www.numpy.org/neps/nep-0018-array-function-protocol.html>`_ and now implemented in ``numpy``. Hopefully this will eventually negate the need for ``autoray``. On the other hand, third party libraries themselves need to implement the interface, which has not been done, for example, in ``tensorflow`` yet.
 * The `uarray <https://github.com/Quansight-Labs/uarray>`_ project aims to develop a generic array interface but comes with the warning *"This is experimental and very early research code. Don't use this."*.
 
+
 Installation
 ------------
 
 You can install ``autoray`` as standard with ``pip``. Alternatively, simply copy the monolithic ``autoray.py`` into your project internally (if dependencies aren't your thing).
+
+
+Contributing
+------------
+
+Pull requests such as extra translations are very welcome!
