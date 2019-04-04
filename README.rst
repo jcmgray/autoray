@@ -2,16 +2,6 @@
 
     <img src="https://github.com/jcmgray/autoray/blob/master/docs/images/autoray-header.png" width="500px">
 
-.. image:: https://travis-ci.org/jcmgray/autoray.svg?branch=master
-  :target: https://travis-ci.org/jcmgray/autoray
-  :alt: Travis-CI
-.. image:: https://codecov.io/gh/jcmgray/autoray/branch/master/graph/badge.svg
-  :target: https://codecov.io/gh/jcmgray/autoray
-  :alt: Code Coverage
-.. image:: https://img.shields.io/lgtm/grade/python/g/jcmgray/autoray.svg
-  :target: https://lgtm.com/projects/g/jcmgray/autoray/
-  :alt: Code Quality
-
 
 A lightweight python AUTOmatic-arRAY library. Write numeric code that works for:
 
@@ -23,6 +13,17 @@ A lightweight python AUTOmatic-arRAY library. Write numeric code that works for:
 * `jax <https://github.com/google/jax>`_
 * `mars <https://github.com/mars-project/mars>`_
 * ... and indeed **any** library that provides a numpy-*ish* api.
+
+
+.. image:: https://travis-ci.org/jcmgray/autoray.svg?branch=master
+  :target: https://travis-ci.org/jcmgray/autoray
+  :alt: Travis-CI
+.. image:: https://codecov.io/gh/jcmgray/autoray/branch/master/graph/badge.svg
+  :target: https://codecov.io/gh/jcmgray/autoray
+  :alt: Code Coverage
+.. image:: https://img.shields.io/lgtm/grade/python/g/jcmgray/autoray.svg
+  :target: https://lgtm.com/projects/g/jcmgray/autoray/
+  :alt: Code Quality
 
 For example consider this function that orthogonalizes a matrix using the modified Gram-Schmidt algorithm:
 
@@ -57,7 +58,7 @@ Which is now compatible with **all** of the above mentioned libraries! (N.B. thi
     >>> np.tensordot(x, x, [(2, 1), (2, 1)])
     <tf.Tensor 'Tensordot:0' shape=(2, 2) dtype=float32>
 
-    >>> np.eye(3, like=x)  # many functions obviously can't dispatch with the `like` keyword
+    >>> np.eye(3, like=x)  # many functions obviously can't dispatch without the `like` keyword
     <tf.Tensor 'eye/MatrixDiag:0' shape=(3, 3) dtype=float32>
 
 Of course complete compatibility is not going to be possible for all functions, operations and libraries, but ``autoray`` hopefully makes the job much easier.
