@@ -58,6 +58,7 @@ _func_aliases = {
     ('tensorflow', 'mean'): 'reduce_mean',
     ('tensorflow', 'prod'): 'reduce_prod',
     ('tensorflow', 'concatenate'): 'concat',
+    ('tensorflow', 'clip'): 'clip_by_value',
 }
 
 
