@@ -10,6 +10,9 @@ BACKENDS = ['numpy']
 for lib in ['cupy', 'dask', 'tensorflow']:
     if importlib.util.find_spec(lib):
         BACKENDS.append(lib)
+        if lib == 'tensorflow':
+            import tensorflow as tf
+            tf.enable_eager_execution()
 
 
 def gen_rand(shape, backend):
@@ -23,7 +26,6 @@ def gen_rand(shape, backend):
 
     if backend == 'tensorflow':
         import tensorflow as tf
-        tf.enable_eager_execution()
         return tf.random.uniform(shape=shape, dtype='float64')
 
     if backend == 'cupy':  # pragma: no cover
@@ -130,3 +132,28 @@ def test_linalg_svd_square(backend):
     y = U @ autoray.do('diag', s, like=x) @ V
     diff = autoray.do('sum', abs(y - x))
     assert to_numpy(diff, backend) < 1e-8
+
+
+@pytest.mark.parametrize('backend', BACKENDS)
+def test_translator_random_uniform(backend):
+    from autoray import numpy as apn
+
+    x = apn.random.uniform(low=-10, size=(4, 5), like=backend)
+    assert (to_numpy(x, backend) > -10).all()
+    assert (to_numpy(x, backend) < 1.0).all()
+
+
+@pytest.mark.parametrize('backend', BACKENDS)
+def test_translator_random_normal(backend):
+    from autoray import numpy as anp
+
+    x = anp.random.normal(100.0, 0.1, size=(4, 5), like=backend)
+    assert (to_numpy(x, backend) > 90.0).all()
+    assert (to_numpy(x, backend) < 110.0).all()
+
+    if backend == 'tensorflow':
+        x32 = autoray.do('random.normal', 100.0, 0.1, dtype='float32',
+                         size=(4, 5), like=backend)
+        assert x32.dtype == 'float32'
+        assert (to_numpy(x32, backend) > 90.0).all()
+        assert (to_numpy(x32, backend) < 110.0).all()

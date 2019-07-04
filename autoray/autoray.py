@@ -19,6 +19,8 @@ limitations under the License.
 
 import importlib
 import functools
+from collections import OrderedDict
+
 import numpy as _numpy
 
 
@@ -90,6 +92,58 @@ _custom_wrappers = {
     ('cupy', 'linalg.svd'): svd_not_full_matrices_wrapper,
     ('tensorflow', 'linalg.svd'): svd_sUV_to_UsVH_wrapper,
 }
+
+
+def translate_wrapper(fn, translator):
+    """Wrap a function to match the api of another according to a translation.
+    The ``translator`` entries in the form of an ordered dict should have
+    entries like:
+
+        (desired_kwarg: (backend_kwarg, default_value))
+
+    with the order defining the args of the function.
+    """
+
+    @functools.wraps(fn)
+    def translated_function(*args, **kwargs):
+        new_kwargs = {}
+        translation = translator.copy()
+
+        # convert args
+        for arg_value in args:
+            new_arg_name = translation.popitem(last=False)[1][0]
+            new_kwargs[new_arg_name] = arg_value
+
+        # convert kwargs -  but only those in the translation
+        for key, value in kwargs.items():
+            try:
+                new_kwargs[translation.pop(key)[0]] = value
+            except KeyError:
+                new_kwargs[key] = value
+
+        # set remaining default kwargs
+        for key, value in translation.items():
+            new_kwargs[value[0]] = value[1]
+
+        return fn(**new_kwargs)
+
+    return translated_function
+
+
+def make_translator(t):
+    return functools.partial(translate_wrapper, translator=OrderedDict(t))
+
+
+_custom_wrappers['tensorflow', 'random.uniform'] = make_translator([
+    ('low', ('minval', 0.0)),
+    ('high', ('maxval', 1.0)),
+    ('size', ('shape', None)),
+])
+_custom_wrappers['tensorflow', 'random.normal'] = make_translator([
+    ('loc', ('mean', 0.0)),
+    ('scale', ('stddev', 1.0)),
+    ('size', ('shape', None)),
+])
 
 
 # actual cache of funtions to use - this is populated lazily
@@ -195,6 +249,8 @@ def do(fn, *args, like=None, **kwargs):
     """
     if like is None:
         backend = infer_backend(args[0])
+    elif isinstance(like, str):
+        backend = like
     else:
         backend = infer_backend(like)
 
@@ -259,9 +315,11 @@ class NumpyMimic:
 
     def __getattribute__(self, fn):
 
-        # know that linalg is a submodule rather than a function
+        # look out for certain submodules which are not functions
         if fn == 'linalg':
             return numpy_linalg
+        if fn == 'random':
+            return numpy_random
 
         # if this is the e.g. linalg mimic, preprend 'linalg.'
         submod = object.__getattribute__(self, 'submodule')
@@ -283,3 +341,4 @@ class NumpyMimic:
 
 numpy = NumpyMimic()
 numpy_linalg = NumpyMimic('linalg')
+numpy_random = NumpyMimic('random')
