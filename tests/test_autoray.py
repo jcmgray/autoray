@@ -33,7 +33,11 @@ def gen_rand(shape, backend):
         return cp.random.uniform(size=shape, dtype='float64')
 
 
-def to_numpy(array, backend):
+def to_numpy(array, backend=None):
+
+    if backend is None:
+        backend = autoray.infer_backend(array)
+
     if backend == 'dask':
         return array.compute()
 
@@ -157,3 +161,39 @@ def test_translator_random_normal(backend):
         assert x32.dtype == 'float32'
         assert (to_numpy(x32, backend) > 90.0).all()
         assert (to_numpy(x32, backend) < 110.0).all()
+
+
+@pytest.mark.parametrize('backend', BACKENDS)
+def test_tril(backend):
+    x = autoray.do('random.uniform', size=(4, 4), like=backend)
+    xl = autoray.do('tril', x)
+    xln = to_numpy(xl)
+    assert xln[0, 1] == 0.0
+    assert (xln > 0.0).sum() == 10
+    xl = autoray.do('tril', x, k=1)
+    xln = to_numpy(xl)
+    assert xln[0, 1] != 0.0
+    assert xln[0, 2] == 0.0
+    assert (xln > 0.0).sum() == 13
+
+    if backend == 'tensorflow':
+        with pytest.raises(ValueError):
+            autoray.do('tril', x, -1)
+
+
+@pytest.mark.parametrize('backend', BACKENDS)
+def test_triu(backend):
+    x = autoray.do('random.uniform', size=(4, 4), like=backend)
+    xl = autoray.do('triu', x)
+    xln = to_numpy(xl)
+    assert xln[1, 0] == 0.0
+    assert (xln > 0.0).sum() == 10
+    xl = autoray.do('triu', x, k=-1)
+    xln = to_numpy(xl)
+    assert xln[1, 0] != 0.0
+    assert xln[2, 0] == 0.0
+    assert (xln > 0.0).sum() == 13
+
+    if backend == 'tensorflow':
+        with pytest.raises(ValueError):
+            autoray.do('triu', x, 1)

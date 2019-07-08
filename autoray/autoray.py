@@ -61,8 +61,9 @@ _func_aliases = {
     ('tensorflow', 'prod'): 'reduce_prod',
     ('tensorflow', 'concatenate'): 'concat',
     ('tensorflow', 'clip'): 'clip_by_value',
-    ('numpy', 'range'): 'arange',
     ('tensorflow', 'arange'): 'range',
+    ('tensorflow', 'tril'): 'matrix_band_part',
+    ('tensorflow', 'triu'): 'matrix_band_part',
 }
 
 
@@ -86,11 +87,41 @@ def svd_sUV_to_UsVH_wrapper(fn):
     return numpy_like
 
 
+def tril_to_band_part(fn):
+
+    @functools.wraps(fn)
+    def numpy_like(x, k=0):
+
+        if k < 0:
+            raise ValueError("'k' must be positive to recreate 'numpy.tril' "
+                             "behaviour with 'tensorflow.matrix_band_part'.")
+
+        return fn(x, -1, k)
+
+    return numpy_like
+
+
+def triu_to_band_part(fn):
+
+    @functools.wraps(fn)
+    def numpy_like(x, k=0):
+
+        if k > 0:
+            raise ValueError("'k' must be negative to recreate 'numpy.triu' "
+                             "behaviour with 'tensorflow.matrix_band_part'.")
+
+        return fn(x, -k, -1)
+
+    return numpy_like
+
+
 # custom wrapper for when functions don't just have different location or name
 _custom_wrappers = {
     ('numpy', 'linalg.svd'): svd_not_full_matrices_wrapper,
     ('cupy', 'linalg.svd'): svd_not_full_matrices_wrapper,
     ('tensorflow', 'linalg.svd'): svd_sUV_to_UsVH_wrapper,
+    ('tensorflow', 'tril'): tril_to_band_part,
+    ('tensorflow', 'triu'): triu_to_band_part,
 }
 
 
