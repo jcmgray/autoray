@@ -48,6 +48,9 @@ _module_aliases = {
 # lookup for when functions are elsewhere than the expected location
 _submodule_aliases = {
     ('numpy', 'linalg.expm'): 'scipy',
+    ('tensorflow', 'log'): 'tensorflow.math',
+    ('tensorflow', 'conj'): 'tensorflow.math',
+    ('tensorflow', 'real'): 'tensorflow.math',
     ('tensorflow', 'trace'): 'tensorflow.linalg',
 }
 
