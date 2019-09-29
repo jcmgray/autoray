@@ -197,3 +197,9 @@ def test_triu(backend):
     if backend == 'tensorflow':
         with pytest.raises(ValueError):
             autoray.do('triu', x, 1)
+
+
+def test_pseudo_submodules():
+    x = gen_rand((2, 3), 'numpy')
+    xT = autoray.do('numpy.transpose', x, like='autoray')
+    assert xT.shape == (3, 2)
