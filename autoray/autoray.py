@@ -221,7 +221,12 @@ def get_lib_fn(backend, fn):
         fn_name = _func_aliases.get((backend, fn), only_fn)
 
         # import the function into the cache
-        lib = importlib.import_module(submodule_name)
+        try:
+            lib = importlib.import_module(submodule_name)
+        except ImportError:
+            # sometimes libraries hack an attribute to look like submodule
+            mod, submod = submodule_name.split('.')
+            lib = getattr(importlib.import_module(mod), submod)
 
         # check for a custom wrapper but default to identity
         wrapper = _custom_wrappers.get((backend, fn), lambda fn: fn)
