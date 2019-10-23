@@ -5,6 +5,7 @@ dependencies:
   - numpy
   - tensorflow
   - dask
+  - pytorch
   - pytest
   - pytest-cov
   - coverage

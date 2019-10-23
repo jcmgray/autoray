@@ -47,11 +47,17 @@ _module_aliases = {
 
 # lookup for when functions are elsewhere than the expected location
 _submodule_aliases = {
-    ('numpy', 'linalg.expm'): 'scipy',
+    ('numpy', 'linalg.expm'): 'scipy.linalg',
     ('tensorflow', 'log'): 'tensorflow.math',
     ('tensorflow', 'conj'): 'tensorflow.math',
     ('tensorflow', 'real'): 'tensorflow.math',
+    ('tensorflow', 'imag'): 'tensorflow.math',
+    ('tensorflow', 'diag'): 'tensorflow.linalg',
     ('tensorflow', 'trace'): 'tensorflow.linalg',
+    ('torch', 'linalg.svd'): 'torch',
+    ('torch', 'linalg.norm'): 'torch',
+    ('torch', 'random.normal'): 'torch',
+    ('torch', 'random.uniform'): 'torch',
 }
 
 
@@ -67,6 +73,12 @@ _func_aliases = {
     ('tensorflow', 'arange'): 'range',
     ('tensorflow', 'tril'): 'matrix_band_part',
     ('tensorflow', 'triu'): 'matrix_band_part',
+    ('tensorflow', 'diag'): 'tensor_diag',
+    ('tensorflow', 'array'): 'convert_to_tensor',
+    ('torch', 'array'): 'tensor',
+    ('torch', 'arange'): 'range',
+    ('torch', 'random.normal'): 'randn',
+    ('torch', 'random.uniform'): 'rand',
 }
 
 
@@ -86,6 +98,26 @@ def svd_sUV_to_UsVH_wrapper(fn):
     def numpy_like(*args, **kwargs):
         s, U, V = fn(*args, **kwargs)
         return U, s, dag(V)
+
+    return numpy_like
+
+
+def svd_UsV_to_UsVH_wrapper(fn):
+
+    @functools.wraps(fn)
+    def numpy_like(*args, **kwargs):
+        U, s, V = fn(*args, **kwargs)
+        return U, s, dag(V)
+
+    return numpy_like
+
+
+def svd_UsV_full_to_eco(fn):
+
+    @functools.wraps(fn)
+    def numpy_like(*args, **kwargs):
+        U, s, VH = fn(*args, **kwargs)
+        return U, s, VH[:s.size, :]
 
     return numpy_like
 
@@ -118,13 +150,51 @@ def triu_to_band_part(fn):
     return numpy_like
 
 
+def scale_random_uniform_manually(fn):
+
+    @functools.wraps(fn)
+    def numpy_like(low=0.0, high=1.0, size=None):
+        if size is None:
+            size = ()
+
+        x = fn(size=size)
+
+        if (low != 0.0) or (high != 1.0):
+            x = (high - low) * x + low
+
+        return x
+
+    return numpy_like
+
+
+def scale_random_normal_manually(fn):
+
+    @functools.wraps(fn)
+    def numpy_like(loc=0.0, scale=1.0, size=None):
+        if size is None:
+            size = ()
+
+        x = fn(size=size)
+
+        if (loc != 0.0) or (scale != 1.0):
+            x = scale * x + loc
+
+        return x
+
+    return numpy_like
+
+
 # custom wrapper for when functions don't just have different location or name
 _custom_wrappers = {
     ('numpy', 'linalg.svd'): svd_not_full_matrices_wrapper,
     ('cupy', 'linalg.svd'): svd_not_full_matrices_wrapper,
+    ('dask', 'linalg.svd'): svd_UsV_full_to_eco,
     ('tensorflow', 'linalg.svd'): svd_sUV_to_UsVH_wrapper,
     ('tensorflow', 'tril'): tril_to_band_part,
     ('tensorflow', 'triu'): triu_to_band_part,
+    ('torch', 'linalg.svd'): svd_UsV_to_UsVH_wrapper,
+    ('torch', 'random.normal'): scale_random_normal_manually,
+    ('torch', 'random.uniform'): scale_random_uniform_manually,
 }
 
 
@@ -171,12 +241,24 @@ def make_translator(t):
 _custom_wrappers['tensorflow', 'random.uniform'] = make_translator([
     ('low', ('minval', 0.0)),
     ('high', ('maxval', 1.0)),
-    ('size', ('shape', None)),
+    ('size', ('shape', ())),
 ])
 _custom_wrappers['tensorflow', 'random.normal'] = make_translator([
     ('loc', ('mean', 0.0)),
     ('scale', ('stddev', 1.0)),
-    ('size', ('shape', None)),
+    ('size', ('shape', ())),
+])
+_custom_wrappers['torch', 'stack'] = make_translator([
+    ('arrays', ('tensors',)),
+    ('axis', ('dim', 0)),
+])
+_custom_wrappers['torch', 'tril'] = make_translator([
+    ('m', ('input',)),
+    ('k', ('diagonal', 0)),
+])
+_custom_wrappers['torch', 'triu'] = make_translator([
+    ('m', ('input',)),
+    ('k', ('diagonal', 0)),
 ])
 
 
@@ -208,13 +290,21 @@ def get_lib_fn(backend, fn):
 
         # submodule where function is found for backend,
         #     e.g. ['tensorflow', trace'] -> 'tensorflow.linalg'
-        submodule_name = _submodule_aliases.get((backend, fn), module)
+        try:
+            full_location = _submodule_aliases[backend, fn]
 
-        # parse out extra submodules
-        #     e.g. 'fn=linalg.eigh' -> ['linalg', 'eigh']
-        split_fn = fn.split('.')
-        submodule_name = '.'.join([submodule_name] + split_fn[:-1])
-        only_fn = split_fn[-1]
+            # if explicit submodule alias given, don't use prepended location
+            #     for example, ('torch', 'linalg.svd') -> torch.svd
+            only_fn = fn.split('.')[-1]
+
+        except KeyError:
+            full_location = module
+
+            # move any prepended location into the full module path
+            #     e.g. 'fn=linalg.eigh' -> ['linalg', 'eigh']
+            split_fn = fn.split('.')
+            full_location = '.'.join([full_location] + split_fn[:-1])
+            only_fn = split_fn[-1]
 
         # cached lookup of custom name function might take
         #     e.g. ['tensorflow', 'sum'] -> 'reduce_sum'
@@ -222,10 +312,10 @@ def get_lib_fn(backend, fn):
 
         # import the function into the cache
         try:
-            lib = importlib.import_module(submodule_name)
+            lib = importlib.import_module(full_location)
         except ImportError:
             # sometimes libraries hack an attribute to look like submodule
-            mod, submod = submodule_name.split('.')
+            mod, submod = full_location.split('.')
             lib = getattr(importlib.import_module(mod), submod)
 
         # check for a custom wrapper but default to identity
@@ -306,10 +396,7 @@ def conj(x):
 
 
 def transpose(x, *args):
-    try:
-        return x.transpose(*args)
-    except AttributeError:
-        return do('transpose', x, *args)
+    return do('transpose', x, *args)
 
 
 def dag(x):
@@ -338,6 +425,44 @@ def reshape(x, shape):
         return x.reshape(shape)
     except AttributeError:
         return do('reshape', x, shape)
+
+
+# --------------------- manually specify some functions --------------------- #
+
+def torch_conj(x):
+    import warnings
+    msg = ("Torch does not currently support complex data types, and has no "
+           "'conj' function, using the identity instead for now.")
+    warnings.warn(msg, FutureWarning)
+    return x
+
+
+def torch_real(x):
+    import warnings
+    msg = ("Torch does not currently support complex data types, and has no "
+           "'real' function, using the identity instead for now.")
+    warnings.warn(msg, FutureWarning)
+    return x
+
+
+def torch_imag(x):
+    import warnings
+    msg = ("Torch does not currently support complex data types, and has no "
+           "'imag' function, using zeros_like instead for now.")
+    warnings.warn(msg, FutureWarning)
+    return do('zeros_like', x)
+
+
+def torch_transpose(x, axes=None):
+    if axes is None:
+        axes = reversed(range(0, x.ndimension()))
+    return x.permute(*axes)
+
+
+_funcs['torch', 'conj'] = torch_conj
+_funcs['torch', 'real'] = torch_real
+_funcs['torch', 'imag'] = torch_imag
+_funcs['torch', 'transpose'] = torch_transpose
 
 
 # --------------- object to act as drop-in replace for numpy ---------------- #

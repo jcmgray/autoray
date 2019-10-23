@@ -7,7 +7,7 @@ import autoray
 
 # find backends to tests
 BACKENDS = ['numpy']
-for lib in ['cupy', 'dask', 'tensorflow']:
+for lib in ['cupy', 'dask', 'tensorflow', 'torch']:
     if importlib.util.find_spec(lib):
         BACKENDS.append(lib)
         if lib == 'tensorflow':
@@ -32,6 +32,10 @@ def gen_rand(shape, backend):
         import cupy as cp
         return cp.random.uniform(size=shape, dtype='float64')
 
+    if backend == 'torch':
+        import torch
+        return torch.rand(*shape, dtype=torch.float64)
+
 
 def to_numpy(array, backend=None):
 
@@ -46,6 +50,9 @@ def to_numpy(array, backend=None):
 
     if backend == 'cupy':  # pragma: no cover
         return array.get()
+
+    if backend == 'torch':
+        return array.numpy()
 
     return array
 
@@ -140,11 +147,15 @@ def test_linalg_svd_square(backend):
 
 @pytest.mark.parametrize('backend', BACKENDS)
 def test_translator_random_uniform(backend):
-    from autoray import numpy as apn
+    from autoray import numpy as anp
 
-    x = apn.random.uniform(low=-10, size=(4, 5), like=backend)
+    x = anp.random.uniform(low=-10, size=(4, 5), like=backend)
     assert (to_numpy(x, backend) > -10).all()
     assert (to_numpy(x, backend) < 1.0).all()
+
+    # test default single scalar
+    x = anp.random.uniform(low=1000, high=2000, like=backend)
+    assert 1000 <= to_numpy(x) < 2000
 
 
 @pytest.mark.parametrize('backend', BACKENDS)
@@ -161,6 +172,10 @@ def test_translator_random_normal(backend):
         assert x32.dtype == 'float32'
         assert (to_numpy(x32, backend) > 90.0).all()
         assert (to_numpy(x32, backend) < 110.0).all()
+
+    # test default single scalar
+    x = anp.random.normal(loc=1500, scale=10, like=backend)
+    assert 1000 <= to_numpy(x) < 2000
 
 
 @pytest.mark.parametrize('backend', BACKENDS)
