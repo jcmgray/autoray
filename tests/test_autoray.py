@@ -11,7 +11,7 @@ for lib in ['cupy', 'dask', 'tensorflow', 'torch']:
     if importlib.util.find_spec(lib):
         BACKENDS.append(lib)
         if lib == 'tensorflow':
-            import tensorflow as tf
+            import tensorflow.compat.v1 as tf
             tf.enable_eager_execution()
 
 
