@@ -58,6 +58,7 @@ _submodule_aliases = {
     ('torch', 'linalg.norm'): 'torch',
     ('torch', 'random.normal'): 'torch',
     ('torch', 'random.uniform'): 'torch',
+    ('ctf', 'linalg.svd'): 'ctf',
 }
 
 
@@ -112,12 +113,16 @@ def svd_UsV_to_UsVH_wrapper(fn):
     return numpy_like
 
 
-def svd_UsV_full_to_eco(fn):
+def svd_manual_full_matrices_kwarg(fn):
 
     @functools.wraps(fn)
-    def numpy_like(*args, **kwargs):
+    def numpy_like(*args, full_matrices=False, **kwargs):
         U, s, VH = fn(*args, **kwargs)
-        return U, s, VH[:s.size, :]
+
+        if not full_matrices:
+            U, VH = U[:, :s.size], VH[:s.size, :]
+
+        return U, s, VH
 
     return numpy_like
 
@@ -188,7 +193,8 @@ def scale_random_normal_manually(fn):
 _custom_wrappers = {
     ('numpy', 'linalg.svd'): svd_not_full_matrices_wrapper,
     ('cupy', 'linalg.svd'): svd_not_full_matrices_wrapper,
-    ('dask', 'linalg.svd'): svd_UsV_full_to_eco,
+    ('jax', 'linalg.svd'): svd_not_full_matrices_wrapper,
+    ('dask', 'linalg.svd'): svd_manual_full_matrices_kwarg,
     ('tensorflow', 'linalg.svd'): svd_sUV_to_UsVH_wrapper,
     ('tensorflow', 'tril'): tril_to_band_part,
     ('tensorflow', 'triu'): triu_to_band_part,
