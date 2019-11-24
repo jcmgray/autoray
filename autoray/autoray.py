@@ -61,6 +61,8 @@ _submodule_aliases = {
     ('torch', 'random.normal'): 'torch',
     ('torch', 'random.uniform'): 'torch',
     ('ctf', 'linalg.svd'): 'ctf',
+    ('ctf', 'linalg.eigh'): 'ctf',
+    ('ctf', 'linalg.qr'): 'ctf',
 }
 
 
