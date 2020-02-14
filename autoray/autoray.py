@@ -56,6 +56,7 @@ _submodule_aliases = {
     ('tensorflow', 'trace'): 'tensorflow.linalg',
     ('tensorflow', 'tril'): 'tensorflow.linalg',
     ('tensorflow', 'triu'): 'tensorflow.linalg',
+    ('torch', 'linalg.qr'): 'torch',
     ('torch', 'linalg.svd'): 'torch',
     ('torch', 'linalg.norm'): 'torch',
     ('torch', 'random.normal'): 'torch',
