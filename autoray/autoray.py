@@ -461,7 +461,7 @@ def torch_imag(x):
     msg = ("Torch does not currently support complex data types, and has no "
            "'imag' function, using zeros_like instead for now.")
     warnings.warn(msg, FutureWarning)
-    return do('zeros_like', x)
+    return do('zeros_like', x, like='torch')
 
 
 def torch_transpose(x, axes=None):
@@ -470,10 +470,15 @@ def torch_transpose(x, axes=None):
     return x.permute(*axes)
 
 
+def torch_count_nonzero(x):
+    return do('sum', x != 0, like='torch')
+
+
 _funcs['torch', 'conj'] = torch_conj
 _funcs['torch', 'real'] = torch_real
 _funcs['torch', 'imag'] = torch_imag
 _funcs['torch', 'transpose'] = torch_transpose
+_funcs['torch', 'count_nonzero'] = torch_count_nonzero
 
 
 # --------------- object to act as drop-in replace for numpy ---------------- #
