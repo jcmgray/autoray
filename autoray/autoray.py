@@ -199,6 +199,7 @@ _custom_wrappers = {
     ('numpy', 'linalg.svd'): svd_not_full_matrices_wrapper,
     ('cupy', 'linalg.svd'): svd_not_full_matrices_wrapper,
     ('jax', 'linalg.svd'): svd_not_full_matrices_wrapper,
+    ('autograd', 'linalg.svd'): svd_not_full_matrices_wrapper,
     ('dask', 'linalg.svd'): svd_manual_full_matrices_kwarg,
     ('tensorflow', 'linalg.svd'): svd_sUV_to_UsVH_wrapper,
     ('tensorflow', 'tril'): tril_to_band_part,
