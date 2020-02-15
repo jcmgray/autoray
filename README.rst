@@ -52,8 +52,7 @@ Which is now compatible with **all** of the above mentioned libraries! (N.B. thi
 
     >>> from autoray import numpy as np
 
-    >>> import tensorflow as tf
-    >>> x = tf.random.uniform(shape=(2, 3, 4))
+    >>> x = np.random.uniform(size=(2, 3, 4), like='tensorflow')
 
     >>> np.tensordot(x, x, [(2, 1), (2, 1)])
     <tf.Tensor 'Tensordot:0' shape=(2, 2) dtype=float32>
@@ -63,22 +62,44 @@ Which is now compatible with **all** of the above mentioned libraries! (N.B. thi
 
 Of course complete compatibility is not going to be possible for all functions, operations and libraries, but ``autoray`` hopefully makes the job much easier.
 
-
 **How does it work?**
 
 ``autoray`` works using essentially a single dispatch mechanism on the first  argument for ``do``, or the ``like`` keyword argument if specified, fetching functions from the whichever module defined that supplied array. Additionally, it caches a few custom translations and lookups so as to handle libraries like ``tensorflow`` that don't exactly replicate the ``numpy`` api (for example ``sum`` gets translated to ``tensorflow.reduce_sum``).
 
-**Alternatives**
+Special Functions
+-----------------
 
-* The ``__array_function__`` protocol has been `suggested <https://www.numpy.org/neps/nep-0018-array-function-protocol.html>`_ and now implemented in ``numpy``. Hopefully this will eventually negate the need for ``autoray``. On the other hand, third party libraries themselves need to implement the interface, which has not been done, for example, in ``tensorflow`` yet.
-* The `uarray <https://github.com/Quansight-Labs/uarray>`_ project aims to develop a generic array interface but comes with the warning *"This is experimental and very early research code. Don't use this."*.
+The main function is ``do``, but the following special (i.e. not in ``numpy``) functions are also implemented that may be useful:
 
+* `autoray.infer_backend` - check what library is being infered for a given array
+* `autoray.to_backend_dtype` - convert a string specified dtype like `'float32'` to `torch.float32` for example
+* `autoray.get_dtype_name` - convert a backend dtype back into the equivalent string specifier like `'complex64'`
+* `autoray.astype` - backend agnostic dtype conversion of arrays
+* `autoray.to_numpy` - convert any array to numpy
+
+Deviations from `numpy`
+=======================
+
+`autoray` doesn't have an API as such, since it is essentially just a fancy single dispatch mechanism.
+On the other hand, where translations *are* in place, they generally use the numpy API. So
+``autoray.do('stack', arrays=pytorch_tensors, axis=0)``
+gets automatically translated into
+``torch.stack(tensors=pytorch_tensors, dims=0)``
+and so forth.
+
+Currently the one place this isn't true is ``autoray.do('linalg.svd', x)`` where instead ``full_matrices=False``
+is used as the default since this generally makes more sense and many libraries don't even implement the other case.
+Autoray also dispatches ``'linalg.expm'`` for ``numpy`` arrays to ``scipy``, and may well do with other scipy-only functions at some point.
 
 Installation
 ------------
 
 You can install ``autoray`` as standard with ``pip``. Alternatively, simply copy the monolithic ``autoray.py`` into your project internally (if dependencies aren't your thing).
 
+**Alternatives**
+
+* The ``__array_function__`` protocol has been `suggested <https://www.numpy.org/neps/nep-0018-array-function-protocol.html>`_ and now implemented in ``numpy``. Hopefully this will eventually negate the need for ``autoray``. On the other hand, third party libraries themselves need to implement the interface, which has not been done, for example, in ``tensorflow`` yet.
+* The `uarray <https://github.com/Quansight-Labs/uarray>`_ project aims to develop a generic array interface but comes with the warning *"This is experimental and very early research code. Don't use this."*.
 
 Contributing
 ------------

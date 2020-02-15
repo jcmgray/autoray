@@ -8,20 +8,30 @@ from .autoray import (
     real,
     imag,
     reshape,
+    to_backend_dtype,
+    astype,
+    get_dtype_name,
+    to_numpy,
+    # the numpy mimic submodule
     numpy,
 )
 
 
 __all__ = (
+    'do',
     'infer_backend',
     'get_lib_fn',
-    'do',
     'conj',
     'transpose',
     'dag',
     'real',
     'imag',
     'reshape',
+    'to_backend_dtype',
+    'get_dtype_name',
+    'astype',
+    'to_numpy',
+    # the numpy mimic submodule
     'numpy',
 )
 
