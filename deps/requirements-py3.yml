@@ -1,12 +1,12 @@
 channels:
+  - pytorch
   - defaults
   - conda-forge
-  - pytorch
 dependencies:
   - numpy
   - tensorflow<2
   - dask
-  - pytorch
+  - pytorch>=1.4
   - cpuonly
   - pytest
   - pytest-cov
