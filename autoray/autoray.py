@@ -481,11 +481,56 @@ _CUSTOM_WRAPPERS['cupy', 'linalg.svd'] = svd_not_full_matrices_wrapper
 
 # ----------------------------------- jax ----------------------------------- #
 
+
+_JAX_RANDOM_KEY = None
+
+
+def jax_random_seed(seed=None):
+    from jax.random import PRNGKey
+    global _JAX_RANDOM_KEY
+    if seed is None:
+        from random import SystemRandom
+        seed = SystemRandom().randint(-2**63, 2**63 - 1)  # inclusive high
+    _JAX_RANDOM_KEY = PRNGKey(seed)
+
+
+def jax_random_get_key():
+    from jax.random import split
+    global _JAX_RANDOM_KEY
+    if _JAX_RANDOM_KEY is None:
+        jax_random_seed()
+    _JAX_RANDOM_KEY, subkey = split(_JAX_RANDOM_KEY)
+    return subkey
+
+
+def jax_random_uniform(low=0.0, high=1.0, size=None, **kwargs):
+    from jax.random import uniform
+    if size is None:
+        size = ()
+    return uniform(jax_random_get_key(), shape=size,
+                   minval=low, maxval=high, **kwargs)
+
+
+def jax_random_normal(loc=0.0, scale=1.0, size=None, **kwargs):
+    from jax.random import normal
+    if size is None:
+        size = ()
+    x = normal(jax_random_get_key(), shape=size, **kwargs)
+    if scale != 1.0:
+        x *= scale
+    if loc != 0.0:
+        x += loc
+    return x
+
+
 def jax_to_numpy(x):
     return x.__array__()
 
 
 _FUNCS['jax', 'to_numpy'] = jax_to_numpy
+_FUNCS['jax', 'random.seed'] = jax_random_seed
+_FUNCS['jax', 'random.uniform'] = jax_random_uniform
+_FUNCS['jax', 'random.normal'] = jax_random_normal
 _MODULE_ALIASES['jax'] = 'jax.numpy'
 _CUSTOM_WRAPPERS['jax', 'linalg.svd'] = svd_not_full_matrices_wrapper
 

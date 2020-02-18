@@ -133,9 +133,6 @@ def test_linalg_svd_square(backend):
 def test_translator_random_uniform(backend):
     from autoray import numpy as anp
 
-    if backend == 'jax':
-        pytest.xfail('jax handles random numbers differently.')
-
     x = anp.random.uniform(low=-10, size=(4, 5), like=backend)
     assert (ar.to_numpy(x) > -10).all()
     assert (ar.to_numpy(x) < 1.0).all()
@@ -148,9 +145,6 @@ def test_translator_random_uniform(backend):
 @pytest.mark.parametrize('backend', BACKENDS)
 def test_translator_random_normal(backend):
     from autoray import numpy as anp
-
-    if backend == 'jax':
-        pytest.xfail('jax handles random numbers differently.')
 
     x = anp.random.normal(100.0, 0.1, size=(4, 5), like=backend)
     assert (ar.to_numpy(x) > 90.0).all()
