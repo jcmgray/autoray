@@ -8,12 +8,14 @@ A lightweight python AUTOmatic-arRAY library. Write numeric code that works for:
 * `numpy <https://github.com/numpy/numpy>`_
 * `cupy <https://github.com/cupy/cupy>`_
 * `dask <https://github.com/dask/dask>`_
-* `tensorflow <https://github.com/tensorflow/tensorflow>`_
 * `autograd <https://github.com/HIPS/autograd>`_
 * `jax <https://github.com/google/jax>`_
 * `mars <https://github.com/mars-project/mars>`_
-* ... and indeed **any** library that provides a numpy-*ish* api.
+* `tensorflow <https://github.com/tensorflow/tensorflow>`_
+* `pytorch <https://pytorch.org/>`_
+* ... and indeed **any** library that provides a numpy-*ish* api. 
 
+Of the above, ``tensorflow`` has *quite* a different interface and ``pytorch`` probably the *most* different. Whilst for example not every function will work out-of-the-box for these two, ``autoray`` is also designed with the easy addition of new functions in mind.
 
 .. image:: https://travis-ci.org/jcmgray/autoray.svg?branch=master
   :target: https://travis-ci.org/jcmgray/autoray
@@ -25,7 +27,7 @@ A lightweight python AUTOmatic-arRAY library. Write numeric code that works for:
   :target: https://lgtm.com/projects/g/jcmgray/autoray/
   :alt: Code Quality
 
-For example consider this function that orthogonalizes a matrix using the modified Gram-Schmidt algorithm:
+As an example consider this function that orthogonalizes a matrix using the modified Gram-Schmidt algorithm:
 
 .. code:: python3
 
@@ -50,17 +52,16 @@ Which is now compatible with **all** of the above mentioned libraries! (N.B. thi
 
 .. code:: python3
 
-    >>> from autoray import numpy as np
+    from autoray import numpy as np
 
-    >>> x = np.random.uniform(size=(2, 3, 4), like='tensorflow')
+    x = np.random.uniform(size=(2, 3, 4), like='tensorflow')
+    np.tensordot(x, x, [(2, 1), (2, 1)])
+    # <tf.Tensor 'Tensordot:0' shape=(2, 2) dtype=float32>
 
-    >>> np.tensordot(x, x, [(2, 1), (2, 1)])
-    <tf.Tensor 'Tensordot:0' shape=(2, 2) dtype=float32>
+    np.eye(3, like=x)  # many functions obviously can't dispatch without the `like` keyword
+    # <tf.Tensor 'eye/MatrixDiag:0' shape=(3, 3) dtype=float32>
 
-    >>> np.eye(3, like=x)  # many functions obviously can't dispatch without the `like` keyword
-    <tf.Tensor 'eye/MatrixDiag:0' shape=(3, 3) dtype=float32>
-
-Of course complete compatibility is not going to be possible for all functions, operations and libraries, but ``autoray`` hopefully makes the job much easier.
+Of course complete compatibility is not going to be possible for all functions, operations and libraries, but ``autoray`` hopefully makes the job much easier (for example adding new translations is often a one-liner).
 
 **How does it work?**
 
@@ -76,6 +77,31 @@ The main function is ``do``, but the following special (i.e. not in ``numpy``) f
 * ``autoray.get_dtype_name`` - convert a backend dtype back into the equivalent string specifier like ``'complex64'``
 * ``autoray.astype`` - backend agnostic dtype conversion of arrays
 * ``autoray.to_numpy`` - convert any array to a ``numpy.ndarray``
+
+Here are all of those in action:
+
+.. code:: python3
+
+    import autoray as ar
+
+    backend = 'torch'
+    dtype = ar.to_backend_dtype('float64', like=backend)
+    dtype
+    # torch.float64
+    
+    x = ar.do('random.normal', size=(4,), dtype=dtype, like=backend)
+    x
+    # tensor([ 0.0461,  0.3028,  0.1790, -0.1494], dtype=torch.float64)
+
+    ar.infer_backend(x)
+    # 'torch'
+
+    ar.get_dtype_name(x)
+    # 'float64'
+
+    x32 = ar.astype(x, 'float32')
+    ar.to_numpy(x32)
+    # array([ 0.04605161,  0.30280888,  0.17903718, -0.14936243], dtype=float32)
 
 Deviations from `numpy`
 =======================
