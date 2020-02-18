@@ -71,11 +71,11 @@ Special Functions
 
 The main function is ``do``, but the following special (i.e. not in ``numpy``) functions are also implemented that may be useful:
 
-* `autoray.infer_backend` - check what library is being infered for a given array
-* `autoray.to_backend_dtype` - convert a string specified dtype like `'float32'` to `torch.float32` for example
-* `autoray.get_dtype_name` - convert a backend dtype back into the equivalent string specifier like `'complex64'`
-* `autoray.astype` - backend agnostic dtype conversion of arrays
-* `autoray.to_numpy` - convert any array to numpy
+* ``autoray.infer_backend`` - check what library is being inferred for a given array
+* ``autoray.to_backend_dtype`` - convert a string specified dtype like ``'float32'`` to ``torch.float32`` for example
+* ``autoray.get_dtype_name`` - convert a backend dtype back into the equivalent string specifier like ``'complex64'``
+* ``autoray.astype`` - backend agnostic dtype conversion of arrays
+* ``autoray.to_numpy`` - convert any array to a ``numpy.ndarray``
 
 Deviations from `numpy`
 =======================
