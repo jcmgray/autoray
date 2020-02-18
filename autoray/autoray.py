@@ -509,6 +509,11 @@ _CUSTOM_WRAPPERS['dask', 'linalg.svd'] = svd_manual_full_matrices_kwarg
 
 # ---------------------------------- mars ----------------------------------- #
 
+def mars_to_numpy(x):
+    return x.execute()
+
+
+_FUNCS['mars', 'to_numpy'] = mars_to_numpy
 _MODULE_ALIASES['mars'] = 'mars.tensor'
 
 
@@ -563,6 +568,11 @@ _CUSTOM_WRAPPERS['tensorflow', 'random.normal'] = make_translator([
     ('scale', ('stddev', 1.0)),
     ('size', ('shape', ())),
 ])
+_CUSTOM_WRAPPERS['tensorflow', 'clip'] = make_translator([
+    ('a', ('t', 0.0)),
+    ('a_min', ('clip_value_min',)),
+    ('a_max', ('clip_value_max',)),
+])
 
 
 # ---------------------------------- torch ---------------------------------- #
@@ -574,7 +584,7 @@ def torch_transpose(x, axes=None):
 
 
 def torch_count_nonzero(x):
-    return do('sum', x != 0, like='torch')
+    return do('sum', x != 0, like=x)
 
 
 def torch_astype(x, dtype):
@@ -596,7 +606,7 @@ _FUNCS['torch', 'astype'] = torch_astype
 _FUNCS['torch', 'get_dtype_name'] = torch_get_dtype_name
 
 _FUNC_ALIASES['torch', 'array'] = 'tensor'
-_FUNC_ALIASES['torch', 'arange'] = 'range'
+_FUNC_ALIASES['torch', 'clip'] = 'clamp'
 _FUNC_ALIASES['torch', 'random.normal'] = 'randn'
 _FUNC_ALIASES['torch', 'random.uniform'] = 'rand'
 
@@ -620,4 +630,18 @@ _CUSTOM_WRAPPERS['torch', 'tril'] = make_translator([
 _CUSTOM_WRAPPERS['torch', 'triu'] = make_translator([
     ('m', ('input',)),
     ('k', ('diagonal', 0)),
+])
+_CUSTOM_WRAPPERS['torch', 'clip'] = make_translator([
+    ('a', ('input',)),
+    ('a_min', ('min',)),
+    ('a_max', ('max',)),
+])
+_CUSTOM_WRAPPERS['torch', 'ones'] = make_translator([
+    ('shape', ('size',)),
+])
+_CUSTOM_WRAPPERS['torch', 'zeros'] = make_translator([
+    ('shape', ('size',)),
+])
+_CUSTOM_WRAPPERS['torch', 'empty'] = make_translator([
+    ('shape', ('size',)),
 ])

@@ -7,15 +7,34 @@ import autoray as ar
 
 # find backends to tests
 BACKENDS = ['numpy']
-for lib in ['cupy', 'dask', 'tensorflow', 'torch']:
+for lib in ['cupy', 'dask', 'tensorflow', 'torch', 'mars', 'jax']:
     if importlib.util.find_spec(lib):
         BACKENDS.append(lib)
+
         if lib == 'tensorflow':
             import tensorflow.compat.v1 as tf
             tf.enable_eager_execution()
 
+        if lib == 'jax':
+            from jax.config import config
+            config.update("jax_enable_x64", True)
+
+
+JAX_RANDOM_KEY = None
+
 
 def gen_rand(shape, backend, dtype='float64'):
+    if backend == 'jax':
+        from jax import random as jrandom
+
+        global JAX_RANDOM_KEY
+
+        if JAX_RANDOM_KEY is None:
+            JAX_RANDOM_KEY = jrandom.PRNGKey(42)
+        JAX_RANDOM_KEY, subkey = jrandom.split(JAX_RANDOM_KEY)
+
+        return jrandom.uniform(subkey, shape=shape, dtype=dtype)
+
     x = ar.do('random.uniform', size=shape, like=backend)
     x = ar.astype(x, ar.to_backend_dtype(dtype, backend))
     assert ar.get_dtype_name(x) == dtype
@@ -114,6 +133,9 @@ def test_linalg_svd_square(backend):
 def test_translator_random_uniform(backend):
     from autoray import numpy as anp
 
+    if backend == 'jax':
+        pytest.xfail('jax handles random numbers differently.')
+
     x = anp.random.uniform(low=-10, size=(4, 5), like=backend)
     assert (ar.to_numpy(x) > -10).all()
     assert (ar.to_numpy(x) < 1.0).all()
@@ -126,6 +148,9 @@ def test_translator_random_uniform(backend):
 @pytest.mark.parametrize('backend', BACKENDS)
 def test_translator_random_normal(backend):
     from autoray import numpy as anp
+
+    if backend == 'jax':
+        pytest.xfail('jax handles random numbers differently.')
 
     x = anp.random.normal(100.0, 0.1, size=(4, 5), like=backend)
     assert (ar.to_numpy(x) > 90.0).all()
@@ -145,7 +170,7 @@ def test_translator_random_normal(backend):
 
 @pytest.mark.parametrize('backend', BACKENDS)
 def test_tril(backend):
-    x = ar.do('random.uniform', size=(4, 4), like=backend)
+    x = gen_rand((4, 4), backend)
     xl = ar.do('tril', x)
     xln = ar.to_numpy(xl)
     assert xln[0, 1] == 0.0
@@ -163,7 +188,7 @@ def test_tril(backend):
 
 @pytest.mark.parametrize('backend', BACKENDS)
 def test_triu(backend):
-    x = ar.do('random.uniform', size=(4, 4), like=backend)
+    x = gen_rand((4, 4), backend)
     xl = ar.do('triu', x)
     xln = ar.to_numpy(xl)
     assert xln[1, 0] == 0.0
@@ -181,6 +206,11 @@ def test_triu(backend):
 
 @pytest.mark.parametrize('backend', BACKENDS)
 def test_count_nonzero(backend):
+    if backend == 'mars':
+        import mars
+        if mars._version.version_info < (0, 4, 0, ''):
+            pytest.xfail('mars count_nonzero bug fixed in version 0.4.')
+
     x = ar.do('array', [0, 1, 2, 0, 3], like=backend)
     nz = ar.do('count_nonzero', x)
     assert ar.to_numpy(nz) == 3
@@ -198,3 +228,21 @@ def test_pseudo_submodules():
     x = gen_rand((2, 3), 'numpy')
     xT = ar.do('numpy.transpose', x, like='autoray')
     assert xT.shape == (3, 2)
+
+
+@pytest.mark.parametrize('backend', BACKENDS)
+@pytest.mark.parametrize('creation', ['ones', 'zeros'])
+@pytest.mark.parametrize('dtype', ['float32', 'float64',
+                                   'complex64', 'complex128'])
+def test_dtype_specials(backend, creation, dtype):
+    import numpy as np
+    x = ar.do(creation, shape=(2, 3), like=backend)
+
+    if backend == 'torch' and 'complex' in dtype:
+        pytest.xfail("Pytorch doesn't support complex numbers yet...")
+
+    x = ar.astype(x, dtype)
+    assert ar.get_dtype_name(x) == dtype
+    x = ar.to_numpy(x)
+    assert isinstance(x, np.ndarray)
+    assert ar.get_dtype_name(x) == dtype
