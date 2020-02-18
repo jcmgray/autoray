@@ -15,8 +15,6 @@ A lightweight python AUTOmatic-arRAY library. Write numeric code that works for:
 * `pytorch <https://pytorch.org/>`_
 * ... and indeed **any** library that provides a numpy-*ish* api. 
 
-Of the above, ``tensorflow`` has *quite* a different interface and ``pytorch`` probably the *most* different. Whilst for example not every function will work out-of-the-box for these two, ``autoray`` is also designed with the easy addition of new functions in mind.
-
 .. image:: https://travis-ci.org/jcmgray/autoray.svg?branch=master
   :target: https://travis-ci.org/jcmgray/autoray
   :alt: Travis-CI
@@ -26,7 +24,7 @@ Of the above, ``tensorflow`` has *quite* a different interface and ``pytorch`` p
 .. image:: https://img.shields.io/lgtm/grade/python/g/jcmgray/autoray.svg
   :target: https://lgtm.com/projects/g/jcmgray/autoray/
   :alt: Code Quality
-
+  
 As an example consider this function that orthogonalizes a matrix using the modified Gram-Schmidt algorithm:
 
 .. code:: python3
@@ -61,7 +59,7 @@ Which is now compatible with **all** of the above mentioned libraries! (N.B. thi
     np.eye(3, like=x)  # many functions obviously can't dispatch without the `like` keyword
     # <tf.Tensor 'eye/MatrixDiag:0' shape=(3, 3) dtype=float32>
 
-Of course complete compatibility is not going to be possible for all functions, operations and libraries, but ``autoray`` hopefully makes the job much easier (for example adding new translations is often a one-liner).
+Of course complete compatibility is not going to be possible for all functions, operations and libraries, but ``autoray`` hopefully makes the job much easier. Of the above, ``tensorflow`` has *quite* a different interface and ``pytorch`` probably the *most* different. Whilst for example not every function will work out-of-the-box for these two, ``autoray`` is also designed with the easy addition of new functions in mind (for example adding new translations is often a one-liner).
 
 **How does it work?**
 
