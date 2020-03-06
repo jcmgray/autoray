@@ -284,6 +284,25 @@ def svd_manual_full_matrices_kwarg(fn):
     return numpy_like
 
 
+def qr_allow_fat(fn):
+
+    @functools.wraps(fn)
+    def numpy_like(a, **kwargs):
+        m, n = a.shape
+
+        if m >= n:
+            # square or thin
+            return fn(a, **kwargs)
+
+        Q, R_sq = fn(a[:, :m])
+        R_r = dag(Q) @ a[:, m:]
+        R = do('concatenate', (R_sq, R_r), axis=1, like=a)
+
+        return Q, R
+
+    return numpy_like
+
+
 def tril_to_band_part(fn):
 
     @functools.wraps(fn)
@@ -533,6 +552,7 @@ _FUNCS['jax', 'random.uniform'] = jax_random_uniform
 _FUNCS['jax', 'random.normal'] = jax_random_normal
 _MODULE_ALIASES['jax'] = 'jax.numpy'
 _CUSTOM_WRAPPERS['jax', 'linalg.svd'] = svd_not_full_matrices_wrapper
+_CUSTOM_WRAPPERS['jax', 'linalg.qr'] = qr_allow_fat
 
 
 # -------------------------------- autograd --------------------------------- #
@@ -662,6 +682,7 @@ _SUBMODULE_ALIASES['torch', 'random.normal'] = 'torch'
 _SUBMODULE_ALIASES['torch', 'random.uniform'] = 'torch'
 
 _CUSTOM_WRAPPERS['torch', 'linalg.svd'] = svd_UsV_to_UsVH_wrapper
+_CUSTOM_WRAPPERS['torch', 'linalg.qr'] = qr_allow_fat
 _CUSTOM_WRAPPERS['torch', 'random.normal'] = scale_random_normal_manually
 _CUSTOM_WRAPPERS['torch', 'random.uniform'] = scale_random_uniform_manually
 _CUSTOM_WRAPPERS['torch', 'stack'] = make_translator([

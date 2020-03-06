@@ -199,6 +199,15 @@ def test_triu(backend):
 
 
 @pytest.mark.parametrize('backend', BACKENDS)
+@pytest.mark.parametrize('shape', [(4, 3), (4, 4), (3, 4)])
+def test_qr_thin_square_fat(backend, shape):
+    x = gen_rand(shape, backend)
+    Q, R = ar.do('linalg.qr', x)
+    xn, Qn, Rn = map(ar.to_numpy, (x, Q, R))
+    assert ar.do('allclose', xn, Qn @ Rn)
+
+
+@pytest.mark.parametrize('backend', BACKENDS)
 def test_count_nonzero(backend):
     if backend == 'mars':
         import mars
