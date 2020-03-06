@@ -4,6 +4,7 @@ python:
   - 3.5
   - 3.6
   - 3.7
+  - 3.8
 
 before_install:
   - travis_wait bash deps/travis-install-conda.sh
