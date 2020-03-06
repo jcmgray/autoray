@@ -670,8 +670,9 @@ _FUNCS['torch', 'count_nonzero'] = torch_count_nonzero
 _FUNCS['torch', 'astype'] = torch_astype
 _FUNCS['torch', 'get_dtype_name'] = torch_get_dtype_name
 
-_FUNC_ALIASES['torch', 'array'] = 'tensor'
 _FUNC_ALIASES['torch', 'clip'] = 'clamp'
+_FUNC_ALIASES['torch', 'array'] = 'tensor'
+_FUNC_ALIASES['torch', 'concatenate'] = 'cat'
 _FUNC_ALIASES['torch', 'random.normal'] = 'randn'
 _FUNC_ALIASES['torch', 'random.uniform'] = 'rand'
 
@@ -688,6 +689,10 @@ _CUSTOM_WRAPPERS['torch', 'random.uniform'] = scale_random_uniform_manually
 _CUSTOM_WRAPPERS['torch', 'stack'] = make_translator([
     ('arrays', ('tensors',)),
     ('axis', ('dim', 0)),
+])
+_CUSTOM_WRAPPERS['torch', 'concatenate'] = make_translator([
+    ('arrays', ('tensors',)),
+    ('axis', ('dim', 0))
 ])
 _CUSTOM_WRAPPERS['torch', 'tril'] = make_translator([
     ('m', ('input',)),
