@@ -13,7 +13,7 @@ A lightweight python AUTOmatic-arRAY library. Write numeric code that works for:
 * `mars <https://github.com/mars-project/mars>`_
 * `tensorflow <https://github.com/tensorflow/tensorflow>`_
 * `pytorch <https://pytorch.org/>`_
-* ... and indeed **any** library that provides a numpy-*ish* api. 
+* ... and indeed **any** library that provides a numpy-*ish* api.
 
 .. image:: https://travis-ci.org/jcmgray/autoray.svg?branch=master
   :target: https://travis-ci.org/jcmgray/autoray
@@ -24,7 +24,7 @@ A lightweight python AUTOmatic-arRAY library. Write numeric code that works for:
 .. image:: https://img.shields.io/lgtm/grade/python/g/jcmgray/autoray.svg
   :target: https://lgtm.com/projects/g/jcmgray/autoray/
   :alt: Code Quality
-  
+
 As an example consider this function that orthogonalizes a matrix using the modified Gram-Schmidt algorithm:
 
 .. code:: python3
@@ -86,7 +86,7 @@ Here are all of those in action:
     dtype = ar.to_backend_dtype('float64', like=backend)
     dtype
     # torch.float64
-    
+
     x = ar.do('random.normal', size=(4,), dtype=dtype, like=backend)
     x
     # tensor([ 0.0461,  0.3028,  0.1790, -0.1494], dtype=torch.float64)
@@ -118,7 +118,7 @@ Autoray also dispatches ``'linalg.expm'`` for ``numpy`` arrays to ``scipy``, and
 Installation
 ------------
 
-You can install ``autoray`` as standard with ``pip``. Alternatively, simply copy the monolithic ``autoray.py`` into your project internally (if dependencies aren't your thing).
+You can install ``autoray`` via `conda-forge <https://conda-forge.org/>`_ as well as with ``pip``. Alternatively, simply copy the monolithic ``autoray.py`` into your project internally (if dependencies aren't your thing).
 
 **Alternatives**
 
