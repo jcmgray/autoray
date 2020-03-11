@@ -621,6 +621,7 @@ _FUNC_ALIASES['tensorflow', 'array'] = 'convert_to_tensor'
 _FUNC_ALIASES['tensorflow', 'astype'] = 'cast'
 
 _CUSTOM_WRAPPERS['tensorflow', 'linalg.svd'] = svd_sUV_to_UsVH_wrapper
+_CUSTOM_WRAPPERS['tensorflow', 'linalg.qr'] = qr_allow_fat
 _CUSTOM_WRAPPERS['tensorflow', 'tril'] = tril_to_band_part
 _CUSTOM_WRAPPERS['tensorflow', 'triu'] = triu_to_band_part
 _CUSTOM_WRAPPERS['tensorflow', 'random.uniform'] = make_translator([
