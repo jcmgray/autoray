@@ -12,6 +12,7 @@ from .autoray import (
     astype,
     get_dtype_name,
     to_numpy,
+    register_function,
     # the numpy mimic submodule
     numpy,
 )
@@ -31,6 +32,7 @@ __all__ = (
     'get_dtype_name',
     'astype',
     'to_numpy',
+    'register_function',
     # the numpy mimic submodule
     'numpy',
 )

@@ -717,3 +717,27 @@ _CUSTOM_WRAPPERS['torch', 'zeros'] = make_translator([
 _CUSTOM_WRAPPERS['torch', 'empty'] = make_translator([
     ('shape', ('size',)),
 ])
+
+
+# --------------------------- register your own! ---------------------------- #
+
+def register_function(backend, name, fn, wrap=False):
+    """Directly provide your own function.
+
+    Parameters
+    ----------
+    backend : str
+        The name of the backend to register the function for.
+    name : str
+        Name of the function, e.g. `'sum'` or `'linalg.svd'`.
+    fn : callable
+        The function to register.
+    wrap : bool, optional
+        Whether to wrap the old function like ``fn(old_fn)`` rather than
+        directly supply the entire new function.
+    """
+    if wrap:
+        old = get_lib_fn(backend, name)
+        _FUNCS[backend, name] = fn(old)
+    else:
+        _FUNCS[backend, name] = fn

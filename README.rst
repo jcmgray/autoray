@@ -101,6 +101,55 @@ Here are all of those in action:
     ar.to_numpy(x32)
     # array([ 0.04605161,  0.30280888,  0.17903718, -0.14936243], dtype=float32)
 
+Registering Your Own functions
+------------------------------
+
+If you want to directly provide a missing or alternative implementation of some function for a particular backend you can do so with ``autoray.register_function``:
+
+.. code:: python3
+
+    def my_custom_torch_svd(x):
+        import torch
+
+        print('Hello SVD!')
+        u, s, v = torch.svd(x)
+
+        return u, s, v.T
+
+    ar.register_function('torch', 'linalg.svd', my_custom_torch_svd)
+
+    x = ar.do('random.uniform', size=(3, 4), like='torch')
+
+    ar.do('linalg.svd', x)
+    # Hello SVD!
+    # (tensor([[-0.5832,  0.6188, -0.5262],
+    #          [-0.5787, -0.7711, -0.2655],
+    #          [-0.5701,  0.1497,  0.8078]]),
+    #  tensor([2.0336, 0.8518, 0.4572]),
+    #  tensor([[-0.4568, -0.3166, -0.6835, -0.4732],
+    #          [-0.5477,  0.2825, -0.2756,  0.7377],
+    #          [ 0.2468, -0.8423, -0.0993,  0.4687]]))
+
+If you want to make use of the existing function you can supply ``wrap=True`` in which case the custom function supplied should act like a decorator:
+
+.. code:: python3
+
+    def my_custom_sum_wrapper(old_fn):
+
+        def new_fn(*args, **kwargs):
+            print('Hello sum!')
+            return old_fn(*args **kwargs)
+
+        return new_fn
+
+    ar.register_function('torch', 'sum', my_custom_sum_wrapper, wrap=True)
+
+    ar.do('sum', x)
+    # Hello sum!
+    # tensor(5.4099)
+
+Though be careful, if you call ``register_function`` again it will now wrap the *new* function!
+
 Deviations from `numpy`
 =======================
 

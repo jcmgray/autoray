@@ -249,3 +249,27 @@ def test_dtype_specials(backend, creation, dtype):
     x = ar.to_numpy(x)
     assert isinstance(x, np.ndarray)
     assert ar.get_dtype_name(x) == dtype
+
+
+@pytest.mark.parametrize('backend', BACKENDS)
+def test_register_function(backend):
+    x = ar.do('ones', shape=(2, 3), like=backend)
+
+    def direct_fn(x):
+        return 1
+
+    # first test we can provide the function directly
+    ar.register_function(backend, 'test_register', direct_fn)
+    assert ar.do('test_register', x) == 1
+
+    def wrap_fn(fn):
+
+        def new_fn(*args, **kwargs):
+            res = fn(*args, **kwargs)
+            return res + 1
+
+        return new_fn
+
+    # then check we can wrap the old (previous) function
+    ar.register_function(backend, 'test_register', wrap_fn, wrap=True)
+    assert ar.do('test_register', x) == 2
