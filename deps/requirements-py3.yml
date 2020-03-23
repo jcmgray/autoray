@@ -4,7 +4,7 @@ channels:
   - conda-forge
 dependencies:
   - numpy
-  - tensorflow<2
+  - tensorflow>=2
   - dask
   - pytorch>=1.4
   - cpuonly

@@ -11,10 +11,6 @@ for lib in ['cupy', 'dask', 'tensorflow', 'torch', 'mars', 'jax']:
     if importlib.util.find_spec(lib):
         BACKENDS.append(lib)
 
-        if lib == 'tensorflow':
-            import tensorflow.compat.v1 as tf
-            tf.enable_eager_execution()
-
         if lib == 'jax':
             from jax.config import config
             config.update("jax_enable_x64", True)
