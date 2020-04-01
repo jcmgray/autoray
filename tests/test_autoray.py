@@ -248,6 +248,23 @@ def test_dtype_specials(backend, creation, dtype):
 
 
 @pytest.mark.parametrize('backend', BACKENDS)
+@pytest.mark.parametrize('real_dtype', ['float32', 'float64'])
+def test_complex_creation(backend, real_dtype):
+    if backend == 'torch':
+        pytest.xfail("Pytorch doesn't support complex numbers yet...")
+
+    x = ar.do(
+        'complex',
+        ar.astype(ar.do('random.normal', size=(3, 4),
+                        like=backend), real_dtype),
+        ar.astype(ar.do('random.normal', size=(3, 4),
+                        like=backend), real_dtype)
+    )
+    assert ar.get_dtype_name(x) == {'float32': 'complex64',
+                                    'float64': 'complex128'}[real_dtype]
+
+
+@pytest.mark.parametrize('backend', BACKENDS)
 def test_register_function(backend):
     x = ar.do('ones', shape=(2, 3), like=backend)
 
