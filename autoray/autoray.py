@@ -611,6 +611,7 @@ _SUBMODULE_ALIASES['tensorflow', 'log'] = 'tensorflow.math'
 _SUBMODULE_ALIASES['tensorflow', 'conj'] = 'tensorflow.math'
 _SUBMODULE_ALIASES['tensorflow', 'real'] = 'tensorflow.math'
 _SUBMODULE_ALIASES['tensorflow', 'imag'] = 'tensorflow.math'
+_SUBMODULE_ALIASES['tensorflow', 'power'] = 'tensorflow.math'
 _SUBMODULE_ALIASES['tensorflow', 'count_nonzero'] = 'tensorflow.math'
 _SUBMODULE_ALIASES['tensorflow', 'diag'] = 'tensorflow.linalg'
 _SUBMODULE_ALIASES['tensorflow', 'trace'] = 'tensorflow.linalg'
@@ -630,6 +631,7 @@ _FUNC_ALIASES['tensorflow', 'triu'] = 'band_part'
 _FUNC_ALIASES['tensorflow', 'diag'] = 'tensor_diag'
 _FUNC_ALIASES['tensorflow', 'array'] = 'convert_to_tensor'
 _FUNC_ALIASES['tensorflow', 'astype'] = 'cast'
+_FUNC_ALIASES['tensorflow', 'power'] = 'pow'
 
 _CUSTOM_WRAPPERS['tensorflow', 'linalg.svd'] = svd_sUV_to_UsVH_wrapper
 _CUSTOM_WRAPPERS['tensorflow', 'linalg.qr'] = qr_allow_fat
@@ -683,6 +685,7 @@ _FUNCS['torch', 'astype'] = torch_astype
 _FUNCS['torch', 'get_dtype_name'] = torch_get_dtype_name
 
 _FUNC_ALIASES['torch', 'clip'] = 'clamp'
+_FUNC_ALIASES['torch', 'power'] = 'pow'
 _FUNC_ALIASES['torch', 'array'] = 'tensor'
 _FUNC_ALIASES['torch', 'concatenate'] = 'cat'
 _FUNC_ALIASES['torch', 'random.normal'] = 'randn'
