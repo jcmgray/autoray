@@ -405,6 +405,10 @@ def make_translator(t):
     return functools.partial(translate_wrapper, translator=OrderedDict(t))
 
 
+def complex_add_re_im(re, im):
+    return re + 1j * im
+
+
 # --------------- object to act as drop-in replace for numpy ---------------- #
 
 _partial_functions = {}
@@ -483,6 +487,7 @@ def numpy_to_numpy(x):
 
 
 _FUNCS['numpy', 'to_numpy'] = numpy_to_numpy
+_FUNCS['numpy', 'complex'] = complex_add_re_im
 _FUNCS['builtins', 'to_numpy'] = numpy_to_numpy
 _SUBMODULE_ALIASES['numpy', 'linalg.expm'] = 'scipy.linalg'
 _CUSTOM_WRAPPERS['numpy', 'linalg.svd'] = svd_not_full_matrices_wrapper
@@ -495,6 +500,7 @@ def cupy_to_numpy(x):  # pragma: no cover
 
 
 _FUNCS['cupy', 'to_numpy'] = cupy_to_numpy
+_FUNCS['cupy', 'complex'] = complex_add_re_im
 _CUSTOM_WRAPPERS['cupy', 'linalg.svd'] = svd_not_full_matrices_wrapper
 
 
@@ -550,6 +556,7 @@ _FUNCS['jax', 'to_numpy'] = jax_to_numpy
 _FUNCS['jax', 'random.seed'] = jax_random_seed
 _FUNCS['jax', 'random.uniform'] = jax_random_uniform
 _FUNCS['jax', 'random.normal'] = jax_random_normal
+_FUNCS['jax', 'complex'] = complex_add_re_im
 _MODULE_ALIASES['jax'] = 'jax.numpy'
 _CUSTOM_WRAPPERS['jax', 'linalg.svd'] = svd_not_full_matrices_wrapper
 _CUSTOM_WRAPPERS['jax', 'linalg.qr'] = qr_allow_fat
@@ -559,6 +566,7 @@ _CUSTOM_WRAPPERS['jax', 'linalg.qr'] = qr_allow_fat
 
 _MODULE_ALIASES['autograd'] = 'autograd.numpy'
 _CUSTOM_WRAPPERS['autograd', 'linalg.svd'] = svd_not_full_matrices_wrapper
+_FUNCS['autograd', 'complex'] = complex_add_re_im
 
 
 # ---------------------------------- dask ----------------------------------- #
@@ -568,6 +576,7 @@ def dask_to_numpy(x):
 
 
 _FUNCS['dask', 'to_numpy'] = dask_to_numpy
+_FUNCS['dask', 'complex'] = complex_add_re_im
 _MODULE_ALIASES['dask'] = 'dask.array'
 _CUSTOM_WRAPPERS['dask', 'linalg.svd'] = svd_manual_full_matrices_kwarg
 
@@ -579,6 +588,7 @@ def mars_to_numpy(x):
 
 
 _FUNCS['mars', 'to_numpy'] = mars_to_numpy
+_FUNCS['mars', 'complex'] = complex_add_re_im
 _MODULE_ALIASES['mars'] = 'mars.tensor'
 
 
