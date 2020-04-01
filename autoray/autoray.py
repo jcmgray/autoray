@@ -675,7 +675,7 @@ def torch_get_dtype_name(x):
 
 
 def torch_to_numpy(x):
-    return x.numpy()
+    return x.detach().cpu().numpy()
 
 
 _FUNCS['torch', 'to_numpy'] = torch_to_numpy
