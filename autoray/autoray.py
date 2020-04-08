@@ -556,10 +556,10 @@ _FUNCS['jax', 'to_numpy'] = jax_to_numpy
 _FUNCS['jax', 'random.seed'] = jax_random_seed
 _FUNCS['jax', 'random.uniform'] = jax_random_uniform
 _FUNCS['jax', 'random.normal'] = jax_random_normal
-_FUNCS['jax', 'complex'] = complex_add_re_im
 _MODULE_ALIASES['jax'] = 'jax.numpy'
-_CUSTOM_WRAPPERS['jax', 'linalg.svd'] = svd_not_full_matrices_wrapper
+_SUBMODULE_ALIASES['jax', 'complex'] = 'jax.lax'
 _CUSTOM_WRAPPERS['jax', 'linalg.qr'] = qr_allow_fat
+_CUSTOM_WRAPPERS['jax', 'linalg.svd'] = svd_not_full_matrices_wrapper
 
 
 # -------------------------------- autograd --------------------------------- #
