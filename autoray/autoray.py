@@ -159,10 +159,7 @@ def get_lib_fn(backend, fn):
 def conj(x):
     """Array conjugate.
     """
-    try:
-        return x.conj()
-    except AttributeError:
-        return do('conj', x)
+    return do('conj', x)
 
 
 def transpose(x, *args):
@@ -694,11 +691,31 @@ def torch_to_numpy(x):
     return x.detach().cpu().numpy()
 
 
+def torch_linalg_solve(a, b):
+    return do('solve', b, a)[0]
+
+
+def torch_linalg_lstsq(a, b):
+    return do('lstsq', b, a)[0]
+
+
+def torch_linalg_eigh(x):
+    return tuple(do('symeig', x, eigenvectors=True))
+
+
+def torch_linalg_eigvalsh(x):
+    return do('symeig', x, eigenvectors=False)[0]
+
+
+_FUNCS['torch', 'astype'] = torch_astype
 _FUNCS['torch', 'to_numpy'] = torch_to_numpy
 _FUNCS['torch', 'transpose'] = torch_transpose
 _FUNCS['torch', 'count_nonzero'] = torch_count_nonzero
-_FUNCS['torch', 'astype'] = torch_astype
 _FUNCS['torch', 'get_dtype_name'] = torch_get_dtype_name
+_FUNCS['torch', 'linalg.solve'] = torch_linalg_solve
+_FUNCS['torch', 'linalg.lstsq'] = torch_linalg_lstsq
+_FUNCS['torch', 'linalg.eigh'] = torch_linalg_eigh
+_FUNCS['torch', 'linalg.eigvalsh'] = torch_linalg_eigvalsh
 
 _FUNC_ALIASES['torch', 'clip'] = 'clamp'
 _FUNC_ALIASES['torch', 'power'] = 'pow'
