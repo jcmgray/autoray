@@ -594,6 +594,22 @@ _MODULE_ALIASES['mars'] = 'mars.tensor'
 
 # ----------------------------------- ctf ----------------------------------- #
 
+
+def ctf_array(x):
+    return do('astensor', x, like='ctf')
+
+
+def ctf_to_numpy(x):
+    return x.to_nparray()
+
+
+def ctf_get_dtype_name(x):
+    return x.dtype.__name__
+
+
+_FUNCS['ctf', 'array'] = ctf_array
+_FUNCS['ctf', 'to_numpy'] = ctf_to_numpy
+_FUNCS['ctf', 'get_dtype_name'] = ctf_get_dtype_name
 _SUBMODULE_ALIASES['ctf', 'linalg.svd'] = 'ctf'
 _SUBMODULE_ALIASES['ctf', 'linalg.eigh'] = 'ctf'
 _SUBMODULE_ALIASES['ctf', 'linalg.qr'] = 'ctf'
