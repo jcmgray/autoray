@@ -9,11 +9,17 @@ import autoray as ar
 BACKENDS = ['numpy']
 for lib in ['cupy', 'dask', 'tensorflow', 'torch', 'mars', 'jax']:
     if importlib.util.find_spec(lib):
-        BACKENDS.append(lib)
+        BACKENDS.append(pytest.param(lib))
 
         if lib == 'jax':
             from jax.config import config
             config.update("jax_enable_x64", True)
+
+    else:
+        BACKENDS.append(pytest.param(
+            lib,
+            marks=pytest.mark.skipif(True, reason=f"No {lib}.")
+        ))
 
 
 JAX_RANDOM_KEY = None
@@ -54,6 +60,9 @@ def test_basic(backend, fn):
     (ar.reshape, [(5, 3)]),
 ])
 def test_attribute_prefs(backend, fn, args):
+    if (backend is 'torch') and fn in (ar.real, ar.imag):
+        pytest.xfail("Pytorch doesn't support complex numbers yet...")
+
     x = gen_rand((3, 5), backend)
     y = fn(x, *args)
     assert ar.infer_backend(x) == ar.infer_backend(y) == backend
