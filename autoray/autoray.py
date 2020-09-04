@@ -581,7 +581,7 @@ _CUSTOM_WRAPPERS['dask', 'linalg.svd'] = svd_manual_full_matrices_kwarg
 # ---------------------------------- mars ----------------------------------- #
 
 def mars_to_numpy(x):
-    return x.execute()
+    return x.to_numpy()
 
 
 _FUNCS['mars', 'to_numpy'] = mars_to_numpy
