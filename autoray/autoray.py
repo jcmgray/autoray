@@ -613,6 +613,81 @@ _SUBMODULE_ALIASES['ctf', 'linalg.eigh'] = 'ctf'
 _SUBMODULE_ALIASES['ctf', 'linalg.qr'] = 'ctf'
 
 
+# ------------------------------- sparse------------------------------------- #
+
+def sparse_array(x):
+    import sparse
+    return sparse.COO.from_numpy(x)
+
+def sparse_to_numpy(x):
+    return x.todense()
+
+def sparse_complex(x, y):
+    return x + 1j * y
+
+def sparse_transpose(x, axes=None):
+    return x.transpose(axes)
+
+def sparse_sqrt(x):
+    import numpy as np
+    return np.sqrt(x)
+
+def sparse_log(x):
+    import numpy as np
+    return np.log(x)
+
+def sparse_exp(x):
+    import numpy as np
+    return np.log(x)
+
+def sparse_sum(x, axis=None, keepdims=False, dtype=None, out=None):
+    return x.sum(axis=axis, keepdims=keepdims, dtype=dtype, out=out)
+
+def sparse_prod(x, axis=None, keepdims=False, dtype=None, out=None):
+    return x.prod(axis=axis, keepdims=keepdims, dtype=dtype, out=out)
+
+def sparse_conj(x):
+    return x.conj()
+
+def sparse_real(x):
+    return x.real
+
+def sparse_imag(x):
+    return x.imag
+
+def sparse_count_nonzero(x):
+    return x.nnz
+
+def sparse_random_uniform(low=0.0, high=1.0, size=None, **kwargs):
+    import sparse
+    import numpy as np
+    rvs = lambda nnz: np.random.uniform(low, high, (nnz,))
+    return sparse.random(size, data_rvs=rvs, **kwargs)
+
+def sparse_random_normal(loc=0.0, scale=1.0, size=None, **kwargs):
+    import sparse
+    import numpy as np
+    rvs = lambda nnz: np.random.normal(loc, scale, (nnz,))
+    return sparse.random(size, data_rvs=rvs, **kwargs)
+
+
+_FUNCS['sparse', 'array'] = sparse_array
+_FUNCS['sparse', 'to_numpy'] = sparse_to_numpy
+_FUNCS['sparse', 'transpose'] = sparse_transpose
+_FUNCS['sparse', 'sqrt'] = sparse_sqrt
+_FUNCS['sparse', 'log'] = sparse_log
+_FUNCS['sparse', 'exp'] = sparse_exp
+_FUNCS['sparse', 'sum'] = sparse_sum
+_FUNCS['sparse', 'prod'] = sparse_prod
+_FUNCS['sparse', 'conj'] = sparse_conj
+_FUNCS['sparse', 'real'] = sparse_real
+_FUNCS['sparse', 'imag'] = sparse_imag
+_FUNCS['sparse', 'complex'] = sparse_complex
+_FUNCS['sparse', 'count_nonzero'] = sparse_count_nonzero
+_FUNCS['sparse', 'random.uniform'] = sparse_random_uniform
+_FUNCS['sparse', 'random.normal'] = sparse_random_normal
+
+
 # ------------------------------- tensorflow -------------------------------- #
 
 def tensorflow_to_numpy(x):
