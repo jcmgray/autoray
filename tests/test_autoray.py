@@ -12,8 +12,10 @@ for lib in ['cupy', 'dask', 'tensorflow', 'torch', 'mars', 'jax', 'sparse']:
         BACKENDS.append(pytest.param(lib))
 
         if lib == 'jax':
+            import os
             from jax.config import config
             config.update("jax_enable_x64", True)
+            os.environ['XLA_PYTHON_CLIENT_ALLOCATOR'] = 'platform'
 
     else:
         BACKENDS.append(pytest.param(
@@ -38,10 +40,8 @@ def gen_rand(shape, backend, dtype='float64'):
         return jrandom.uniform(subkey, shape=shape, dtype=dtype)
 
     elif backend == 'sparse':
-        import sparse
-        import numpy as np
-        return sparse.random(shape, density=0.1, data_rvs=np.random.uniform,
-            format='coo', fill_value=0)
+        return ar.do('random.uniform', size=shape, like=backend,
+                     density=0.5, format='coo', fill_value=0)
 
     x = ar.do('random.uniform', size=shape, like=backend)
     x = ar.astype(x, ar.to_backend_dtype(dtype, backend))
@@ -54,8 +54,8 @@ def gen_rand(shape, backend, dtype='float64'):
 def test_basic(backend, fn):
     x = gen_rand((2, 3, 4), backend)
     y = ar.do(fn, x)
-    if (backend is 'sparse') and (fn is 'sum'):
-        pytest.xfail("Sparse 'bug' that turns dense output into numpy automatically?")
+    if (backend == 'sparse') and (fn is 'sum'):
+        pytest.xfail("Sparse 'sum' outputs dense.")
     assert ar.infer_backend(x) == ar.infer_backend(y) == backend
 
 
@@ -94,7 +94,7 @@ def modified_gram_schmidt(X):
 
 @pytest.mark.parametrize('backend', BACKENDS)
 def test_mgs(backend):
-    if backend is 'sparse':
+    if backend == 'sparse':
         pytest.xfail("Sparse doesn't support linear algebra yet...")
     x = gen_rand((3, 5), backend)
     Ux = modified_gram_schmidt(x)
@@ -122,7 +122,7 @@ def modified_gram_schmidt_np_mimic(X):
 
 @pytest.mark.parametrize('backend', BACKENDS)
 def test_mgs_np_mimic(backend):
-    if backend is 'sparse':
+    if backend == 'sparse':
         pytest.xfail("Sparse doesn't support linear algebra yet...")
     x = gen_rand((3, 5), backend)
     Ux = modified_gram_schmidt_np_mimic(x)
@@ -132,7 +132,7 @@ def test_mgs_np_mimic(backend):
 
 @pytest.mark.parametrize('backend', BACKENDS)
 def test_linalg_svd_square(backend):
-    if backend is 'sparse':
+    if backend == 'sparse':
         pytest.xfail("Sparse doesn't support linear algebra yet...")
     x = gen_rand((5, 4), backend)
     U, s, V = ar.do('linalg.svd', x)
@@ -152,7 +152,7 @@ def test_linalg_svd_square(backend):
 def test_translator_random_uniform(backend):
     from autoray import numpy as anp
 
-    if backend is 'sparse':
+    if backend == 'sparse':
         pytest.xfail("Sparse will have zeros")
 
     x = anp.random.uniform(low=-10, size=(4, 5), like=backend)
@@ -167,11 +167,13 @@ def test_translator_random_uniform(backend):
 @pytest.mark.parametrize('backend', BACKENDS)
 def test_translator_random_normal(backend):
     from autoray import numpy as anp
-
-    if backend is 'sparse':
-        pytest.xfail("Sparse will have zeros")
-
     x = anp.random.normal(100.0, 0.1, size=(4, 5), like=backend)
+
+    if backend == 'sparse':
+        assert (x.data > 90.0).all()
+        assert (x.data < 110.0).all()
+        return
+
     assert (ar.to_numpy(x) > 90.0).all()
     assert (ar.to_numpy(x) < 110.0).all()
 
@@ -238,7 +240,7 @@ def test_triu(backend):
 @pytest.mark.parametrize('backend', BACKENDS)
 @pytest.mark.parametrize('shape', [(4, 3), (4, 4), (3, 4)])
 def test_qr_thin_square_fat(backend, shape):
-    if backend is 'sparse':
+    if backend == 'sparse':
         pytest.xfail("Sparse doesn't support linear algebra yet...")
     x = gen_rand(shape, backend)
     Q, R = ar.do('linalg.qr', x)
@@ -295,8 +297,9 @@ def test_dtype_specials(backend, creation, dtype):
 def test_complex_creation(backend, real_dtype):
     if backend == 'torch':
         pytest.xfail("Pytorch doesn't support complex numbers yet...")
-    if backend == 'sparse':
-        pytest.xfail("Think there's a bug in sparse where dtypes aren't promoted...")
+    if (backend == 'sparse') and (real_dtype == 'float32'):
+        pytest.xfail("Bug in sparse where single precision isn't maintained "
+                     "after scalar multiplication.")
 
     x = ar.do(
         'complex',
