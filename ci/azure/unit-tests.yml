@@ -1,0 +1,21 @@
+steps:
+
+- template: install.yml
+
+- bash: |
+    source activate autoray-tests
+    python -c "import autoray"
+  displayName: "Import autoray"
+
+- bash: |
+    source activate autoray-tests
+    pytest \
+    --cov=autoray tests/ \
+    --cov-report=xml \
+    tests
+  condition: eq(variables['which_tests'], 'all')
+  displayName: "Run all tests"
+
+- bash: |
+    bash <(curl -s https://codecov.io/bash)
+  displayName: "Upload coverage to codecov.io"

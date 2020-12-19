@@ -1,0 +1,22 @@
+parameters:
+  env_file: ci/requirements/$CONDA_ENV.yml
+
+steps:
+
+- template: add-conda-to-path.yml
+
+- bash: |
+    conda update -y conda
+    conda env create -n autoray-tests --file ${{ parameters.env_file }}
+  displayName: Install conda dependencies
+
+- bash: |
+    source activate autoray-tests
+    python -m pip install --no-deps -e .
+  displayName: Install autoray
+
+- bash: |
+    source activate autoray-tests
+    conda info -a
+    conda list
+  displayName: Version info

@@ -3,6 +3,7 @@ channels:
   - defaults
   - conda-forge
 dependencies:
+  - python=3.6
   - numpy
   - tensorflow>=2
   - dask

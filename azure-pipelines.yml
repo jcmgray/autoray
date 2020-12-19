@@ -1,0 +1,40 @@
+variables:
+  which_tests: 'all'
+
+jobs:
+
+- job: Linux
+  strategy:
+    matrix:
+      py36:
+        conda_env: py36
+      py37:
+        conda_env: py37
+      py38:
+        conda_env: py38
+  pool:
+    vmImage: 'ubuntu-latest'
+  steps:
+  - template: ci/azure/unit-tests.yml
+
+
+- job: Windows
+  strategy:
+    matrix:
+      py38:
+        conda_env: py38
+  pool:
+    vmImage: 'windows-latest'
+  steps:
+  - template: ci/azure/unit-tests.yml
+
+
+- job: MaxOSX
+  strategy:
+    matrix:
+      py38:
+        conda_env: py38
+  pool:
+    vmImage: 'macOS-latest'
+  steps:
+  - template: ci/azure/unit-tests.yml
