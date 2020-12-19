@@ -3,9 +3,7 @@ channels:
   - defaults
   - conda-forge
 dependencies:
-  - python=3.8
   - numpy
-  - tensorflow>=2
   - dask
   - pytorch>=1.4
   - cpuonly
@@ -18,3 +16,5 @@ dependencies:
   - pip
   - pip:
     - pymars
+    - jax
+    - jaxlib

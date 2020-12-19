@@ -22,7 +22,7 @@ jobs:
   strategy:
     matrix:
       py38:
-        conda_env: py38-win
+        conda_env: py-win
   pool:
     vmImage: 'windows-latest'
   steps:
@@ -33,7 +33,7 @@ jobs:
   strategy:
     matrix:
       py38:
-        conda_env: py38
+        conda_env: py-mac
   pool:
     vmImage: 'macOS-latest'
   steps:
