@@ -15,9 +15,9 @@ A lightweight python AUTOmatic-arRAY library. Write numeric code that works for:
 * `pytorch <https://pytorch.org/>`_
 * ... and indeed **any** library that provides a numpy-*ish* api.
 
-.. image:: https://travis-ci.org/jcmgray/autoray.svg?branch=master
-  :target: https://travis-ci.org/jcmgray/autoray
-  :alt: Travis-CI
+.. image:: https://dev.azure.com/autoray-org/autoray/_apis/build/status/jcmgray.autoray?branchName=master
+  :target: https://dev.azure.com/autoray-org/autoray/_build/latest?definitionId=1&branchName=master
+  :alt: Azure Pipelines
 .. image:: https://codecov.io/gh/jcmgray/autoray/branch/master/graph/badge.svg
   :target: https://codecov.io/gh/jcmgray/autoray
   :alt: Code Coverage
