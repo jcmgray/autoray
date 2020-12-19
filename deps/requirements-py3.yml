@@ -8,6 +8,7 @@ dependencies:
   - dask
   - pytorch>=1.4
   - cpuonly
+  - sparse
   - pytest
   - pytest-cov
   - coverage
