@@ -249,21 +249,21 @@ def test_qr_thin_square_fat(backend, shape):
 
 
 @pytest.mark.parametrize('backend', BACKENDS)
-def test_count_nonzero(backend):
+@pytest.mark.parametrize('array_dtype', ['int', 'float', 'bool'])
+def test_count_nonzero(backend, array_dtype):
+
     if backend == 'mars':
         import mars
         if mars._version.version_info < (0, 4, 0, ''):
             pytest.xfail('mars count_nonzero bug fixed in version 0.4.')
 
-    x = ar.do('array', [0, 1, 2, 0, 3], like=backend)
-    nz = ar.do('count_nonzero', x)
-    assert ar.to_numpy(nz) == 3
 
-    x = ar.do('array', [0., 1., 2., 0., 3.], like=backend)
-    nz = ar.do('count_nonzero', x)
-    assert ar.to_numpy(nz) == 3
-
-    x = ar.do('array', [False, True, True, False, True], like=backend)
+    if array_dtype == 'int':
+        x = ar.do('array', [0, 1, 2, 0, 3], like=backend)
+    elif array_dtype == 'float':
+        x = ar.do('array', [0., 1., 2., 0., 3.], like=backend)
+    elif array_dtype == 'bool':
+        x = ar.do('array', [False, True, True, False, True], like=backend)
     nz = ar.do('count_nonzero', x)
     assert ar.to_numpy(nz) == 3
 

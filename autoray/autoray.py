@@ -19,6 +19,7 @@ limitations under the License.
 
 import importlib
 import functools
+import itertools
 from collections import OrderedDict
 
 import numpy as _numpy
@@ -223,10 +224,11 @@ def get_dtype_name(x):
 def astype(x, dtype_name, **kwargs):
     """Cast array as type ``dtype_name`` - tries ``x.astype`` first.
     """
+    dtype = to_backend_dtype(dtype_name, like=x)
     try:
-        return x.astype(dtype_name, **kwargs)
+        return x.astype(dtype, **kwargs)
     except AttributeError:
-        return do('astype', x, dtype_name, **kwargs)
+        return do('astype', x, dtype, **kwargs)
 
 
 def to_numpy(x):
@@ -480,7 +482,7 @@ _MODULE_ALIASES['builtins'] = 'numpy'
 # ---------------------------------- numpy ---------------------------------- #
 
 def numpy_to_numpy(x):
-    return do('array', x)
+    return do('array', x, like='numpy')
 
 
 _FUNCS['numpy', 'to_numpy'] = numpy_to_numpy
@@ -575,6 +577,7 @@ def dask_to_numpy(x):
 
 _FUNCS['dask', 'to_numpy'] = dask_to_numpy
 _FUNCS['dask', 'complex'] = complex_add_re_im
+_FUNC_ALIASES['dask', 'abs'] = 'absolute'
 _MODULE_ALIASES['dask'] = 'dask.array'
 _CUSTOM_WRAPPERS['dask', 'linalg.svd'] = svd_manual_full_matrices_kwarg
 
@@ -748,6 +751,10 @@ _CUSTOM_WRAPPERS['tensorflow', 'clip'] = make_translator([
 
 # ---------------------------------- torch ---------------------------------- #
 
+def torch_to_numpy(x):
+    return x.detach().cpu().numpy()
+
+
 def torch_transpose(x, axes=None):
     if axes is None:
         axes = reversed(range(0, x.ndimension()))
@@ -755,7 +762,7 @@ def torch_transpose(x, axes=None):
 
 
 def torch_count_nonzero(x):
-    return do('sum', x != 0, like=x)
+    return do('sum', x != 0, like='torch')
 
 
 def torch_astype(x, dtype):
@@ -766,28 +773,68 @@ def torch_get_dtype_name(x):
     return str(x.dtype).split('.')[-1]
 
 
-def torch_to_numpy(x):
-    return x.detach().cpu().numpy()
+def torch_real(x):
+    # torch doesn't support calling real on real arrays
+    try:
+        if x.is_complex():
+            return do('real', x, like='torch')
+    except AttributeError:
+        pass
+    return x
+
+
+def torch_imag(x):
+    # torch doesn't support calling imag on real arrays
+    try:
+        if x.is_complex():
+            return do('imag', x, like='torch')
+    except AttributeError:
+        pass
+    return do('zeros_like', x, like='torch')
 
 
 def torch_linalg_solve(a, b):
-    return do('solve', b, a)[0]
+    return do('solve', b, a, like='torch')[0]
 
 
 def torch_linalg_lstsq(a, b):
-    return do('lstsq', b, a)[0]
+    return do('lstsq', b, a, like='torch')[0]
 
 
 def torch_linalg_eigh(x):
-    return tuple(do('symeig', x, eigenvectors=True))
+    return tuple(do('symeig', x, eigenvectors=True, like='torch'))
 
 
 def torch_linalg_eigvalsh(x):
-    return do('symeig', x, eigenvectors=False)[0]
+    return do('symeig', x, eigenvectors=False, like='torch')[0]
 
 
+def torch_pad(array, pad_width, mode='constant', constant_values=0):
+    if mode != 'constant':
+        raise NotImplementedError
+
+    try:
+        # numpy takes pads like ((0, 0), (1, 1), ... (n-1, n-1))
+        # torch takes pads like (n-1, n-1, n-2, n-2, n-3, n-3, ...)
+        pad = tuple(itertools.chain.from_iterable(pad_width))[::-1]
+
+        if len(pad) == 1:
+            pad = pad * 2 * array.ndimension()
+
+    except TypeError:
+        # assume int
+        pad = (pad_width,) * 2 * array.ndimension()
+
+    return do('nn.functional.pad', array, pad=pad,
+              mode=mode, value=constant_values, like='torch')
+
+
+_FUNCS['torch', 'pad'] = torch_pad
+_FUNCS['torch', 'real'] = torch_real
+_FUNCS['torch', 'imag'] = torch_imag
 _FUNCS['torch', 'astype'] = torch_astype
 _FUNCS['torch', 'to_numpy'] = torch_to_numpy
+_FUNCS['torch', 'complex'] = complex_add_re_im
 _FUNCS['torch', 'transpose'] = torch_transpose
 _FUNCS['torch', 'count_nonzero'] = torch_count_nonzero
 _FUNCS['torch', 'get_dtype_name'] = torch_get_dtype_name
@@ -802,10 +849,11 @@ _FUNC_ALIASES['torch', 'array'] = 'tensor'
 _FUNC_ALIASES['torch', 'concatenate'] = 'cat'
 _FUNC_ALIASES['torch', 'random.normal'] = 'randn'
 _FUNC_ALIASES['torch', 'random.uniform'] = 'rand'
+_FUNC_ALIASES['torch', 'linalg.expm'] = 'matrix_exp'
 
 _SUBMODULE_ALIASES['torch', 'linalg.qr'] = 'torch'
 _SUBMODULE_ALIASES['torch', 'linalg.svd'] = 'torch'
-_SUBMODULE_ALIASES['torch', 'linalg.norm'] = 'torch'
+_SUBMODULE_ALIASES['torch', 'linalg.expm'] = 'torch'
 _SUBMODULE_ALIASES['torch', 'random.normal'] = 'torch'
 _SUBMODULE_ALIASES['torch', 'random.uniform'] = 'torch'
 
