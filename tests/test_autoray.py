@@ -370,6 +370,11 @@ def test_linalg_eigh(backend, dtype):
         pytest.xfail("dask doesn't support linalg.eigh yet.")
     if backend == 'mars':
         pytest.xfail("mars doesn't support linalg.eigh yet.")
+    if (backend == 'torch') and ('complex' in dtype):
+        import torch
+        vmaj, vmin = map(int, torch.__version__.split('.')[:2])
+        if (vmaj, vmin) < (1, 7):
+            pytest.xfail('Pytorch 1.7+ needed for complex support.')
 
     A = gen_rand((4, 4), backend, dtype)
     A = A + ar.dag(A)
