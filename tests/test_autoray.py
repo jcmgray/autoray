@@ -380,7 +380,7 @@ def test_linalg_eigh(backend, dtype):
     A = A + ar.dag(A)
     el, ev = ar.do('linalg.eigh', A)
     B = (ev * ar.reshape(el, (1, -1))) @ ar.dag(ev)
-    assert ar.do('allclose', ar.to_numpy(A), ar.to_numpy(B))
+    assert ar.do('allclose', ar.to_numpy(A), ar.to_numpy(B), rtol=1e-3)
 
 
 @pytest.mark.parametrize('backend', BACKENDS)
