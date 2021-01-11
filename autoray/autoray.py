@@ -84,14 +84,19 @@ def do(fn, *args, like=None, **kwargs):
     return get_lib_fn(backend, fn)(*args, **kwargs)
 
 
+@functools.lru_cache(128)
+def _infer_class_backend_cached(T):
+    if issubclass(T, _numpy.ndarray):
+        return 'numpy'
+    return T.__module__.split('.')[0]
+
+
 def infer_backend(array):
     """Get the name of the library that defined the class of ``array`` - unless
     ``array`` is directly a subclass of ``numpy.ndarray``, in which case assume
     ``numpy`` is the desired backend.
     """
-    if isinstance(array, _numpy.ndarray):
-        return 'numpy'
-    return array.__class__.__module__.split('.')[0]
+    return _infer_class_backend_cached(array.__class__)
 
 
 def get_lib_fn(backend, fn):
@@ -700,6 +705,24 @@ def tensorflow_to_numpy(x):
     return x.numpy()
 
 
+def tensorflow_pad_wrap(tf_pad):
+
+    def numpy_like(array, pad_width, mode='constant', constant_values=0):
+        if mode != 'constant':
+            raise NotImplementedError
+
+        try:
+            if len(pad_width) == 1:
+                pad_width = pad_width * len(array.shape)
+        except TypeError:
+            pad_width = ((pad_width, pad_width),) * len(array.shape)
+
+        return tf_pad(array, pad_width, mode='CONSTANT',
+                      constant_values=constant_values)
+
+    return numpy_like
+
+
 _FUNCS['tensorflow', 'to_numpy'] = tensorflow_to_numpy
 
 _SUBMODULE_ALIASES['tensorflow', 'log'] = 'tensorflow.math'
@@ -732,6 +755,7 @@ _CUSTOM_WRAPPERS['tensorflow', 'linalg.svd'] = svd_sUV_to_UsVH_wrapper
 _CUSTOM_WRAPPERS['tensorflow', 'linalg.qr'] = qr_allow_fat
 _CUSTOM_WRAPPERS['tensorflow', 'tril'] = tril_to_band_part
 _CUSTOM_WRAPPERS['tensorflow', 'triu'] = triu_to_band_part
+_CUSTOM_WRAPPERS['tensorflow', 'pad'] = tensorflow_pad_wrap
 _CUSTOM_WRAPPERS['tensorflow', 'random.uniform'] = make_translator([
     ('low', ('minval', 0.0)),
     ('high', ('maxval', 1.0)),
@@ -777,7 +801,7 @@ def torch_real(x):
     # torch doesn't support calling real on real arrays
     try:
         if x.is_complex():
-            return do('real', x, like='torch')
+            return x.real
     except AttributeError:
         pass
     return x
@@ -787,7 +811,7 @@ def torch_imag(x):
     # torch doesn't support calling imag on real arrays
     try:
         if x.is_complex():
-            return do('imag', x, like='torch')
+            return x.imag
     except AttributeError:
         pass
     return do('zeros_like', x, like='torch')
@@ -795,10 +819,6 @@ def torch_imag(x):
 
 def torch_linalg_solve(a, b):
     return do('solve', b, a, like='torch')[0]
-
-
-def torch_linalg_lstsq(a, b):
-    return do('lstsq', b, a, like='torch')[0]
 
 
 def torch_linalg_eigh(x):
@@ -818,8 +838,9 @@ def torch_pad(array, pad_width, mode='constant', constant_values=0):
         # torch takes pads like (n-1, n-1, n-2, n-2, n-3, n-3, ...)
         pad = tuple(itertools.chain.from_iterable(pad_width))[::-1]
 
-        if len(pad) == 1:
-            pad = pad * 2 * array.ndimension()
+        # a single tuple was specified ((a, b),) - use for all axes
+        if len(pad) == 2:
+            pad = pad * array.ndimension()
 
     except TypeError:
         # assume int
@@ -839,7 +860,6 @@ _FUNCS['torch', 'transpose'] = torch_transpose
 _FUNCS['torch', 'count_nonzero'] = torch_count_nonzero
 _FUNCS['torch', 'get_dtype_name'] = torch_get_dtype_name
 _FUNCS['torch', 'linalg.solve'] = torch_linalg_solve
-_FUNCS['torch', 'linalg.lstsq'] = torch_linalg_lstsq
 _FUNCS['torch', 'linalg.eigh'] = torch_linalg_eigh
 _FUNCS['torch', 'linalg.eigvalsh'] = torch_linalg_eigvalsh
 

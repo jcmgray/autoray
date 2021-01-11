@@ -28,6 +28,12 @@ JAX_RANDOM_KEY = None
 
 
 def gen_rand(shape, backend, dtype='float64'):
+
+    if 'complex' in dtype:
+        re = gen_rand(shape, backend)
+        im = gen_rand(shape, backend)
+        return ar.astype(ar.do('complex', re, im), dtype)
+
     if backend == 'jax':
         from jax import random as jrandom
 
@@ -40,10 +46,12 @@ def gen_rand(shape, backend, dtype='float64'):
         return jrandom.uniform(subkey, shape=shape, dtype=dtype)
 
     elif backend == 'sparse':
-        return ar.do('random.uniform', size=shape, like=backend,
-                     density=0.5, format='coo', fill_value=0)
+        x = ar.do('random.uniform', size=shape, like=backend,
+                  density=0.5, format='coo', fill_value=0)
 
-    x = ar.do('random.uniform', size=shape, like=backend)
+    else:
+        x = ar.do('random.uniform', size=shape, like=backend)
+
     x = ar.astype(x, ar.to_backend_dtype(dtype, backend))
     assert ar.get_dtype_name(x) == dtype
     return x
@@ -303,13 +311,96 @@ def test_complex_creation(backend, real_dtype):
 
     x = ar.do(
         'complex',
-        ar.astype(ar.do('random.normal', size=(3, 4),
+        ar.astype(ar.do('random.uniform', size=(3, 4),
                         like=backend), real_dtype),
-        ar.astype(ar.do('random.normal', size=(3, 4),
+        ar.astype(ar.do('random.uniform', size=(3, 4),
                         like=backend), real_dtype)
     )
     assert ar.get_dtype_name(x) == {'float32': 'complex64',
                                     'float64': 'complex128'}[real_dtype]
+
+
+@pytest.mark.parametrize('backend', BACKENDS)
+@pytest.mark.parametrize('dtype_in,dtype_out', [
+    ('float32', 'float32'),
+    ('float64', 'float64'),
+    ('complex64', 'float32'),
+    ('complex128', 'float64'),
+])
+def test_real_imag(backend, dtype_in, dtype_out):
+    x = gen_rand((3, 4), backend, dtype_in)
+
+    re = ar.do('real', x)
+    im = ar.do('imag', x)
+
+    assert ar.infer_backend(re) == backend
+    assert ar.infer_backend(im) == backend
+
+    assert ar.get_dtype_name(re) == dtype_out
+    assert ar.get_dtype_name(im) == dtype_out
+
+    assert ar.do('allclose', ar.to_numpy(x).real, ar.to_numpy(re))
+    assert ar.do('allclose', ar.to_numpy(x).imag, ar.to_numpy(im))
+
+
+@pytest.mark.parametrize('backend', BACKENDS)
+@pytest.mark.parametrize('dtype', [
+    'float32', 'float64',
+    'complex64', 'complex128',
+])
+def test_linalg_solve(backend, dtype):
+    if backend == 'sparse':
+        pytest.xfail("Sparse doesn't support linear algebra yet...")
+
+    A = gen_rand((4, 4), backend, dtype)
+    b = gen_rand((4, 1), backend, dtype)
+    x = ar.do('linalg.solve', A, b)
+    assert ar.do('allclose', ar.to_numpy(A @ x), ar.to_numpy(b), rtol=1e-4)
+
+
+@pytest.mark.parametrize('backend', BACKENDS)
+@pytest.mark.parametrize('dtype', [
+    'float32', 'float64',
+    'complex64', 'complex128',
+])
+def test_linalg_eigh(backend, dtype):
+    if backend == 'sparse':
+        pytest.xfail("sparse doesn't support linalg.eigh yet.")
+    if backend == 'dask':
+        pytest.xfail("dask doesn't support linalg.eigh yet.")
+    if backend == 'mars':
+        pytest.xfail("mars doesn't support linalg.eigh yet.")
+
+    A = gen_rand((4, 4), backend, dtype)
+    A = A + ar.dag(A)
+    el, ev = ar.do('linalg.eigh', A)
+    B = (ev * ar.reshape(el, (1, -1))) @ ar.dag(ev)
+    assert ar.do('allclose', ar.to_numpy(A), ar.to_numpy(B))
+
+
+@pytest.mark.parametrize('backend', BACKENDS)
+def test_pad(backend):
+    if backend == 'sparse':
+        pytest.xfail("sparse doesn't support linalg.eigh yet.")
+    if backend == 'mars':
+        pytest.xfail("mars doesn't support linalg.eigh yet.")
+
+    A = gen_rand((3, 4, 5), backend)
+
+    for pad_width, new_shape in [
+        # same pad before and after for every axis
+        (2, (7, 8, 9)),
+        # same pad for every axis
+        (((1, 2),), (6, 7, 8)),
+        # different pad for every axis
+        (((4, 3), (2, 4), (3, 2)), (10, 10, 10))
+    ]:
+        B = ar.do('pad', A, pad_width)
+        assert B.shape == new_shape
+        assert (
+            ar.to_numpy(ar.do("sum", A)) ==
+            pytest.approx(ar.to_numpy(ar.do("sum", B)))
+        )
 
 
 @pytest.mark.parametrize('backend', BACKENDS)
