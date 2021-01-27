@@ -803,8 +803,13 @@ def torch_astype(x, dtype):
     return x.to(dtype=to_backend_dtype(dtype, like=x))
 
 
+@functools.lru_cache(32)
+def _torch_get_dtype_name(dtype):
+    return str(dtype).split('.')[-1]
+
+
 def torch_get_dtype_name(x):
-    return str(x.dtype).split('.')[-1]
+    return _torch_get_dtype_name(x.dtype)
 
 
 def torch_real(x):
