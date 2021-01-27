@@ -88,7 +88,13 @@ def do(fn, *args, like=None, **kwargs):
 def _infer_class_backend_cached(T):
     if issubclass(T, _numpy.ndarray):
         return 'numpy'
-    return T.__module__.split('.')[0]
+
+    lib = T.__module__.split('.')[0]
+
+    # check if lib should mapped entirely to another lib
+    backend = _BACKEND_ALIASES.get(lib, lib)
+
+    return backend
 
 
 def infer_backend(array):
@@ -460,8 +466,11 @@ numpy_random = NumpyMimic('random')
 #                    storage & backend specific functions                     #
 # --------------------------------------------------------------------------- #
 
+# lookup for mapping entire lib to another
+_BACKEND_ALIASES = {}
+
 # global (non function specific) aliases
-_MODULE_ALIASES = {'decimal': 'math', 'builtins': 'numpy'}
+_MODULE_ALIASES = {}
 
 # lookup for when functions are elsewhere than the expected location
 _SUBMODULE_ALIASES = {}
@@ -556,15 +565,16 @@ def jax_to_numpy(x):
     return x.__array__()
 
 
-_FUNCS['jax', 'to_numpy'] = jax_to_numpy
-_FUNCS['jax', 'random.seed'] = jax_random_seed
-_FUNCS['jax', 'random.uniform'] = jax_random_uniform
-_FUNCS['jax', 'random.normal'] = jax_random_normal
+_BACKEND_ALIASES['jaxlib'] = 'jax'
 _MODULE_ALIASES['jax'] = 'jax.numpy'
 _SUBMODULE_ALIASES['jax', 'complex'] = 'jax.lax'
 _SUBMODULE_ALIASES['jax', 'linalg.expm'] = 'jax.scipy.linalg'
 _CUSTOM_WRAPPERS['jax', 'linalg.qr'] = qr_allow_fat
 _CUSTOM_WRAPPERS['jax', 'linalg.svd'] = svd_not_full_matrices_wrapper
+_FUNCS['jax', 'to_numpy'] = jax_to_numpy
+_FUNCS['jax', 'random.seed'] = jax_random_seed
+_FUNCS['jax', 'random.uniform'] = jax_random_uniform
+_FUNCS['jax', 'random.normal'] = jax_random_normal
 
 
 # -------------------------------- autograd --------------------------------- #
