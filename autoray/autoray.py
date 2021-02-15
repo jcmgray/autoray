@@ -75,9 +75,7 @@ def do(fn, *args, like=None, **kwargs):
         <tf.Tensor: id=91, shape=(3, 3), dtype=float32>
     """
     if like is None:
-        dispatch_arg = _DISPATCHERS.get(fn, default_dispatcher)(
-            *args, **kwargs
-        )
+        dispatch_arg = _DISPATCHERS[fn](*args, **kwargs)
         backend = infer_backend(dispatch_arg)
     elif isinstance(like, str):
         backend = like
@@ -413,27 +411,32 @@ def complex_add_re_im(re, im):
 
 
 def register_dispatch(fun, dispatcher):
+    """Register a new dispatcher.
+
+    This is useful in case the backend to be used by a function cannot be
+    inferred from the first argument.
+    """
     _DISPATCHERS[fun] = dispatcher
 
 
 def default_dispatcher(*args, **kwargs):
+    """Try to infer backend from first argument passed to function."""
     return args[0]
 
 
-# lookup of custom dispatcher methods, for cases when backend cannot be inferred
-#     accurately from first argument.
+# lookup of custom dispatcher methods, for cases when backend cannot be
+#     inferred accurately from first argument.
 _DISPATCHERS = defaultdict(lambda: default_dispatcher)
 
 
-# Numpy array joining operations always take a sequence of arrays as input.
-#     The backend is inferred from the first element of this sequence. Numpy
-#     always assumes that the argument is iterbale, so calling args[0][0]
-#     should be safe.
 def join_array_dispatcher(*args, **kwargs):
-    # NOTE: To be super safe, we could do a try / except, or
-    #       hasattr(args[0], '__getitem__'). hasattr is then probably better,
-    #       since there would be multiple types of errors to catch
-    return args[0][0]
+    """Dispatcher for functions where first argument is a sequence."""
+    try:
+        return args[0][0]
+    except (TypeError, ValueError):
+        # user passed an empty sequence, or something non-iterable
+        # try to infer backend from first argument as fallback
+        return args[0]
 
 
 # List of functions listed in numpy API as array joining operations
@@ -447,9 +450,13 @@ register_dispatch("column_stack", join_array_dispatcher)
 register_dispatch("row_stack", join_array_dispatcher)
 
 
-# einsum takes string as first argument a string, but backend should
-#      be inferred from second argument.
 def einsum_dispatcher(*args, **kwargs):
+    """Dispatcher for handling einsum.
+
+    einsum can either take string as first argument, in which case backend
+    should be inferred from second argument. Or it can take an array as first
+    argument, which should be used to infer backend.
+    """
     if isinstance(args[0], str):
         return args[1]
     return args[0]

@@ -70,7 +70,7 @@ def gen_rand(shape, backend, dtype="float64"):
 def test_basic(backend, fn):
     x = gen_rand((2, 3, 4), backend)
     y = ar.do(fn, x)
-    if (backend == "sparse") and (fn is "sum"):
+    if (backend == "sparse") and (fn == "sum"):
         pytest.xfail("Sparse 'sum' outputs dense.")
     assert ar.infer_backend(x) == ar.infer_backend(y) == backend
 
@@ -87,7 +87,7 @@ def test_basic(backend, fn):
     ],
 )
 def test_attribute_prefs(backend, fn, args):
-    if (backend is "torch") and fn in (ar.real, ar.imag):
+    if (backend == "torch") and fn in (ar.real, ar.imag):
         pytest.xfail("Pytorch doesn't support complex numbers yet...")
 
     x = gen_rand((3, 5), backend)
@@ -108,7 +108,7 @@ def modified_gram_schmidt(X):
         rjj = ar.do("linalg.norm", q, 2)
         Q.append(q / rjj)
 
-    return ar.do("stack", Q, axis=0, like=X)
+    return ar.do("stack", Q, axis=0)
 
 
 @pytest.mark.parametrize("backend", BACKENDS)
@@ -137,7 +137,7 @@ def modified_gram_schmidt_np_mimic(X):
         rjj = np.linalg.norm(q, 2)
         Q.append(q / rjj)
 
-    return np.stack(Q, axis=0, like=X)
+    return np.stack(Q, axis=0)
 
 
 @pytest.mark.parametrize("backend", BACKENDS)
@@ -528,13 +528,17 @@ def test_einsum(backend):
     B = gen_rand((3, 4, 2), backend)
     C1 = ar.do("einsum", "ijk,jkl->il", A, B, like=backend)
     C2 = ar.do("einsum", "ijk,jkl->il", A, B)
-    C3 = ar.do("reshape", A, (2, 12)) @ ar.do("reshape", B, (12, 2))
-    assert C1.shape == C2.shape == (2, 2)
-    assert ar.do("allclose", ar.to_numpy(C1), ar.to_numpy(C3))
-    assert ar.do("allclose", ar.to_numpy(C2), ar.to_numpy(C3))
+    C3 = ar.do("einsum", A, [0, 1, 2], B, [1, 2, 3], [1, 3])
+    C4 = ar.do("reshape", A, (2, 12)) @ ar.do("reshape", B, (12, 2))
+
+    assert C1.shape == C2.shape == C3.shape == (2, 2)
+    assert ar.do("allclose", ar.to_numpy(C1), ar.to_numpy(C4))
+    assert ar.do("allclose", ar.to_numpy(C2), ar.to_numpy(C4))
+    assert ar.do("allclose", ar.to_numpy(C3), ar.to_numpy(C4))
     assert (
         ar.infer_backend(C1)
         == ar.infer_backend(C2)
         == ar.infer_backend(C3)
+        == ar.infer_backend(C4)
         == backend
     )
