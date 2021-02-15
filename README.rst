@@ -44,7 +44,7 @@ As an example consider this function that orthogonalizes a matrix using the modi
             rjj = do('linalg.norm', q, 2)
             Q.append(q / rjj)
 
-        return do('stack', Q, axis=0, like=X)
+        return do('stack', Q, axis=0)
 
 Which is now compatible with **all** of the above mentioned libraries! (N.B. this particular example is also probably slow). If you don't like the explicit ``do`` syntax, then you can import the fake ``numpy`` object as a **drop-in replacement** instead:
 
