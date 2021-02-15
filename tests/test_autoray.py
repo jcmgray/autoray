@@ -528,7 +528,10 @@ def test_einsum(backend):
     B = gen_rand((3, 4, 2), backend)
     C1 = ar.do("einsum", "ijk,jkl->il", A, B, like=backend)
     C2 = ar.do("einsum", "ijk,jkl->il", A, B)
-    C3 = ar.do("einsum", A, [0, 1, 2], B, [1, 2, 3], [1, 3])
+    if backend not in ("torch", "tensorflow"):  # this syntax is not supported
+        C3 = ar.do("einsum", A, [0, 1, 2], B, [1, 2, 3], [0, 3])
+    else:
+        C3 = C1
     C4 = ar.do("reshape", A, (2, 12)) @ ar.do("reshape", B, (12, 2))
 
     assert C1.shape == C2.shape == C3.shape == (2, 2)
