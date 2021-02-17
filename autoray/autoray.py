@@ -805,6 +805,33 @@ def tensorflow_pad_wrap(tf_pad):
     return numpy_like
 
 
+def tensorflow_where_wrap(fn):
+    @functools.wraps(fn)
+    def numpy_like(condition, x=None, y=None, **kwargs):
+        return tuple(transpose(fn(condition, x, y, **kwargs)))
+
+    return numpy_like
+
+
+def tensorflow_split_wrap(fn):
+    @functools.wraps(fn)
+    def numpy_like(ary, indices_or_sections, axis=0, **kwargs):
+        if isinstance(indices_or_sections, int):
+            return fn(ary, indices_or_sections, axis=axis, **kwargs)
+        else:
+            diff = do(
+                "diff",
+                indices_or_sections,
+                prepend=0,
+                append=ary.shape[axis],
+                like="numpy",
+            )
+            diff = list(diff)
+            return fn(ary, diff, axis=axis)
+
+    return numpy_like
+
+
 _FUNCS["tensorflow", "to_numpy"] = tensorflow_to_numpy
 
 _SUBMODULE_ALIASES["tensorflow", "log"] = "tensorflow.math"
@@ -839,6 +866,8 @@ _CUSTOM_WRAPPERS["tensorflow", "linalg.qr"] = qr_allow_fat
 _CUSTOM_WRAPPERS["tensorflow", "tril"] = tril_to_band_part
 _CUSTOM_WRAPPERS["tensorflow", "triu"] = triu_to_band_part
 _CUSTOM_WRAPPERS["tensorflow", "pad"] = tensorflow_pad_wrap
+_CUSTOM_WRAPPERS["tensorflow", "where"] = tensorflow_where_wrap
+_CUSTOM_WRAPPERS["tensorflow", "split"] = tensorflow_split_wrap
 _CUSTOM_WRAPPERS["tensorflow", "random.uniform"] = make_translator(
     [
         ("low", ("minval", 0.0)),
@@ -951,6 +980,27 @@ def torch_pad(array, pad_width, mode="constant", constant_values=0):
     )
 
 
+def torch_split_wrap(fn):
+    # for torch >=1.8 we can use tensor_split instead, but in current stable
+    # release this function has not been added
+    @functools.wraps(fn)
+    def numpy_like(ary, indices_or_sections, axis=0, **kwargs):
+        if isinstance(indices_or_sections, int):
+            return fn(ary, indices_or_sections, dim=axis, **kwargs)
+        else:
+            diff = do(
+                "diff",
+                indices_or_sections,
+                prepend=0,
+                append=ary.shape[axis],
+                like="numpy",
+            )
+            diff = list(diff)
+            return fn(ary, diff, dim=axis)
+
+    return numpy_like
+
+
 _FUNCS["torch", "pad"] = torch_pad
 _FUNCS["torch", "real"] = torch_real
 _FUNCS["torch", "imag"] = torch_imag
@@ -975,6 +1025,7 @@ _FUNC_ALIASES["torch", "take"] = "index_select"
 
 _SUBMODULE_ALIASES["torch", "linalg.qr"] = "torch"
 _SUBMODULE_ALIASES["torch", "linalg.svd"] = "torch"
+_SUBMODULE_ALIASES["torch", "linalg.norm"] = "torch"
 _SUBMODULE_ALIASES["torch", "linalg.expm"] = "torch"
 _SUBMODULE_ALIASES["torch", "random.normal"] = "torch"
 _SUBMODULE_ALIASES["torch", "random.uniform"] = "torch"
@@ -983,6 +1034,7 @@ _CUSTOM_WRAPPERS["torch", "linalg.svd"] = svd_UsV_to_UsVH_wrapper
 _CUSTOM_WRAPPERS["torch", "linalg.qr"] = qr_allow_fat
 _CUSTOM_WRAPPERS["torch", "random.normal"] = scale_random_normal_manually
 _CUSTOM_WRAPPERS["torch", "random.uniform"] = scale_random_uniform_manually
+_CUSTOM_WRAPPERS["torch", "split"] = torch_split_wrap
 _CUSTOM_WRAPPERS["torch", "stack"] = make_translator(
     [
         ("arrays", ("tensors",)),
