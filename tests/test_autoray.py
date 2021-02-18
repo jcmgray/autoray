@@ -545,3 +545,37 @@ def test_einsum(backend):
         == ar.infer_backend(C4)
         == backend
     )
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("int_or_section", ["int", "section"])
+def test_split(backend, int_or_section):
+    if backend == "sparse":
+        pytest.xfail("sparse doesn't support split yet")
+    if backend == "dask":
+        pytest.xfail("dask doesn't support split yet")
+    A = ar.do("ones", (10, 20, 10), like=backend)
+    if int_or_section == 'section':
+        sections = [2, 4, 14]
+        splits = ar.do("split", A, sections, axis=1)
+        assert len(splits) == 4
+        assert splits[3].shape == (10, 6, 10)
+    else:
+        splits = ar.do("split", A, 5, axis=2)
+        assert len(splits) == 5
+        assert splits[2].shape == (10, 20, 2)
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_where(backend):
+    if backend == "sparse":
+        pytest.xfail("sparse doesn't support where yet")
+    A = ar.do("arange", 10, like=backend)
+    B = ar.do("arange", 10, like=backend) + 1
+    C = ar.do("stack", [A, B])
+    D = ar.do("where", C < 5)
+    if backend == "dask":
+        for x in D:
+            x.compute_chunk_sizes()
+    for x in D:
+        assert ar.to_numpy(x).shape == (9,)
