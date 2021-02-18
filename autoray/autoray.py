@@ -986,7 +986,8 @@ def torch_split_wrap(fn):
     @functools.wraps(fn)
     def numpy_like(ary, indices_or_sections, axis=0, **kwargs):
         if isinstance(indices_or_sections, int):
-            return fn(ary, indices_or_sections, dim=axis, **kwargs)
+            split_size = ary.shape[axis] // indices_or_sections
+            return fn(ary, split_size, dim=axis, **kwargs)
         else:
             diff = do(
                 "diff",

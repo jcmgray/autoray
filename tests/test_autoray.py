@@ -548,16 +548,22 @@ def test_einsum(backend):
 
 
 @pytest.mark.parametrize("backend", BACKENDS)
-def test_split(backend):
+@pytest.mark.parametrize("int_or_section", ["int", "section"])
+def test_split(backend, int_or_section):
     if backend == "sparse":
         pytest.xfail("sparse doesn't support split yet")
     if backend == "dask":
         pytest.xfail("dask doesn't support split yet")
     A = ar.do("ones", (10, 20, 10), like=backend)
-    sections = [2, 4, 14]
-    splits = ar.do("split", A, sections, axis=1)
-    assert len(splits) == 4
-    assert splits[3].shape == (10, 6, 10)
+    if int_or_section == 'section':
+        sections = [2, 4, 14]
+        splits = ar.do("split", A, sections, axis=1)
+        assert len(splits) == 4
+        assert splits[3].shape == (10, 6, 10)
+    else:
+        splits = ar.do("split", A, 5, axis=2)
+        assert len(splits) == 5
+        assert splits[2].shape == (10, 20, 2)
 
 
 @pytest.mark.parametrize("backend", BACKENDS)
