@@ -363,6 +363,23 @@ def scale_random_normal_manually(fn):
     return numpy_like
 
 
+def with_dtype_wrapper(fn, standard_type):
+    """Add ability to handle `dtype` keyword."""
+
+    @functools.wraps(fn)
+    def with_dtype(*args, dtype=None, **kwargs):
+        A = fn(*args, **kwargs)
+        if (dtype is not None) and (dtype != standard_type):
+            A = astype(A, dtype)
+        return A
+
+    return with_dtype
+
+
+def make_with_dtype(standard_type):
+    return functools.partial(with_dtype_wrapper, standard_type=standard_type)
+
+
 def translate_wrapper(fn, translator):
     """Wrap a function to match the api of another according to a translation.
     The ``translator`` entries in the form of an ordered dict should have
@@ -548,6 +565,8 @@ _FUNCS["numpy", "complex"] = complex_add_re_im
 _FUNCS["builtins", "to_numpy"] = numpy_to_numpy
 _SUBMODULE_ALIASES["numpy", "linalg.expm"] = "scipy.linalg"
 _CUSTOM_WRAPPERS["numpy", "linalg.svd"] = svd_not_full_matrices_wrapper
+_CUSTOM_WRAPPERS["numpy", "random.normal"] = make_with_dtype("float64")
+_CUSTOM_WRAPPERS["numpy", "random.uniform"] = make_with_dtype("float64")
 
 
 # ---------------------------------- cupy ----------------------------------- #
@@ -649,6 +668,8 @@ _FUNCS["dask", "complex"] = complex_add_re_im
 _FUNC_ALIASES["dask", "abs"] = "absolute"
 _MODULE_ALIASES["dask"] = "dask.array"
 _CUSTOM_WRAPPERS["dask", "linalg.svd"] = svd_manual_full_matrices_kwarg
+_CUSTOM_WRAPPERS["dask", "random.normal"] = make_with_dtype("float64")
+_CUSTOM_WRAPPERS["dask", "random.uniform"] = make_with_dtype("float64")
 
 
 # ---------------------------------- mars ----------------------------------- #
@@ -729,16 +750,20 @@ def sparse_count_nonzero(x):
     return x.nnz
 
 
-def sparse_random_uniform(low=0.0, high=1.0, size=None, **kwargs):
+def sparse_random_uniform(low=0.0, high=1.0, size=None, dtype=None, **kwargs):
     def rvs(nnz):
-        return do("random.uniform", low, high, (nnz,), like="numpy")
+        return do(
+            "random.uniform", low, high, (nnz,), dtype=dtype, like="numpy"
+        )
 
     return do("random", size, data_rvs=rvs, **kwargs, like="sparse")
 
 
-def sparse_random_normal(loc=0.0, scale=1.0, size=None, **kwargs):
+def sparse_random_normal(loc=0.0, scale=1.0, size=None, dtype=None, **kwargs):
     def rvs(nnz):
-        return do("random.normal", loc, scale, (nnz,), like="numpy")
+        return do(
+            "random.normal", loc, scale, (nnz,), dtype=dtype, like="numpy"
+        )
 
     return do("random", size, data_rvs=rvs, **kwargs, like="sparse")
 
