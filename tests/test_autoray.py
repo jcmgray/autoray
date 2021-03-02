@@ -582,16 +582,24 @@ def test_where(backend):
 
 
 @pytest.mark.parametrize("backend", BACKENDS)
-@pytest.mark.parametrize("dtype", ["float32", "float64"])
-def test_dtype_kwarg(backend, dtype):
-    dtype = ar.to_backend_dtype(dtype, backend)
-    A = ar.do("random.normal", size=(10, 10), dtype=dtype, like=backend)
-    assert A.dtype == dtype
-    A = ar.do("random.uniform", size=(10, 10), dtype=dtype, like=backend)
-    assert A.dtype == dtype
-    A = ar.do("zeros", shape=(10, 10), dtype=dtype, like=backend)
-    assert A.dtype == dtype
-    A = ar.do("ones", shape=(10, 10), dtype=dtype, like=backend)
-    assert A.dtype == dtype
-    A = ar.do("eye", 10, dtype=dtype, like=backend)
-    assert A.dtype == dtype
+@pytest.mark.parametrize("dtype_str", ["float32", "float64"])
+@pytest.mark.parametrize(
+    "fn", ["random.normal", "random.uniform", "zeros", "ones", "eye"]
+)
+@pytest.mark.parametrize("str_or_backend", ("str", "backend"))
+def test_dtype_kwarg(backend, dtype_str, fn, str_or_backend):
+    if str_or_backend == "str":
+        dtype = dtype_str
+    else:
+        dtype = ar.to_backend_dtype(dtype_str, like=backend)
+
+    if fn in ("random.normal", "random.uniform"):
+        A = ar.do(fn, size=(10, 5), dtype=dtype, like=backend)
+    elif fn in ("zeros", "ones"):
+        A = ar.do(fn, shape=(10, 5), dtype=dtype, like=backend)
+    else:  # fn = 'eye'
+        A = ar.do(fn, 10, dtype=dtype, like=backend)
+        assert A.shape == (10, 10)
+        A = ar.do(fn, 10, 5, dtype=dtype, like=backend)
+    assert A.shape == (10, 5)
+    assert ar.get_dtype_name(A) == dtype_str
