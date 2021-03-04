@@ -333,7 +333,7 @@ def triu_to_band_part(fn):
 
 def scale_random_uniform_manually(fn):
     @functools.wraps(fn)
-    def numpy_like(low=0.0, high=1.0, size=None, **kwargs):
+    def numpy_like(low=0.0, high=1.0, size=None, dtype=None, **kwargs):
         if size is None:
             size = ()
 
@@ -342,6 +342,8 @@ def scale_random_uniform_manually(fn):
         if (low != 0.0) or (high != 1.0):
             x = (high - low) * x + low
 
+        if (dtype is not None) and get_dtype_name(x) != dtype:
+            x = astype(x, dtype)
         return x
 
     return numpy_like
@@ -349,7 +351,7 @@ def scale_random_uniform_manually(fn):
 
 def scale_random_normal_manually(fn):
     @functools.wraps(fn)
-    def numpy_like(loc=0.0, scale=1.0, size=None, **kwargs):
+    def numpy_like(loc=0.0, scale=1.0, size=None, dtype=None, **kwargs):
         if size is None:
             size = ()
 
@@ -358,9 +360,27 @@ def scale_random_normal_manually(fn):
         if (loc != 0.0) or (scale != 1.0):
             x = scale * x + loc
 
+        if (dtype is not None) and get_dtype_name(x) != dtype:
+            x = astype(x, dtype)
         return x
 
     return numpy_like
+
+
+def with_dtype_wrapper(fn):
+    """Add ability to handle `dtype` keyword.
+    If not None, `dtype` should be specified as a string, otherwise conversion
+    will happen regardless.
+    """
+
+    @functools.wraps(fn)
+    def with_dtype(*args, dtype=None, **kwargs):
+        A = fn(*args, **kwargs)
+        if (dtype is not None) and (dtype != get_dtype_name(A)):
+            A = astype(A, dtype)
+        return A
+
+    return with_dtype
 
 
 def translate_wrapper(fn, translator):
@@ -548,7 +568,8 @@ _FUNCS["numpy", "complex"] = complex_add_re_im
 _FUNCS["builtins", "to_numpy"] = numpy_to_numpy
 _SUBMODULE_ALIASES["numpy", "linalg.expm"] = "scipy.linalg"
 _CUSTOM_WRAPPERS["numpy", "linalg.svd"] = svd_not_full_matrices_wrapper
-
+_CUSTOM_WRAPPERS["numpy", "random.normal"] = with_dtype_wrapper
+_CUSTOM_WRAPPERS["numpy", "random.uniform"] = with_dtype_wrapper
 
 # ---------------------------------- cupy ----------------------------------- #
 
@@ -644,12 +665,23 @@ def dask_to_numpy(x):
     return x.compute()
 
 
+def dask_eye_wrapper(fn):
+    # Make M work as positional argument
+    @functools.wraps(fn)
+    def numpy_like(N, M=None, **kwargs):
+        return fn(N, M=M, **kwargs)
+
+    return numpy_like
+
+
 _FUNCS["dask", "to_numpy"] = dask_to_numpy
 _FUNCS["dask", "complex"] = complex_add_re_im
 _FUNC_ALIASES["dask", "abs"] = "absolute"
 _MODULE_ALIASES["dask"] = "dask.array"
 _CUSTOM_WRAPPERS["dask", "linalg.svd"] = svd_manual_full_matrices_kwarg
-
+_CUSTOM_WRAPPERS["dask", "random.normal"] = with_dtype_wrapper
+_CUSTOM_WRAPPERS["dask", "random.uniform"] = with_dtype_wrapper
+_CUSTOM_WRAPPERS["dask", "eye"] = dask_eye_wrapper
 
 # ---------------------------------- mars ----------------------------------- #
 
@@ -729,16 +761,20 @@ def sparse_count_nonzero(x):
     return x.nnz
 
 
-def sparse_random_uniform(low=0.0, high=1.0, size=None, **kwargs):
+def sparse_random_uniform(low=0.0, high=1.0, size=None, dtype=None, **kwargs):
     def rvs(nnz):
-        return do("random.uniform", low, high, (nnz,), like="numpy")
+        return do(
+            "random.uniform", low, high, (nnz,), dtype=dtype, like="numpy"
+        )
 
     return do("random", size, data_rvs=rvs, **kwargs, like="sparse")
 
 
-def sparse_random_normal(loc=0.0, scale=1.0, size=None, **kwargs):
+def sparse_random_normal(loc=0.0, scale=1.0, size=None, dtype=None, **kwargs):
     def rvs(nnz):
-        return do("random.normal", loc, scale, (nnz,), like="numpy")
+        return do(
+            "random.normal", loc, scale, (nnz,), dtype=dtype, like="numpy"
+        )
 
     return do("random", size, data_rvs=rvs, **kwargs, like="sparse")
 
@@ -1002,6 +1038,29 @@ def torch_split_wrap(fn):
     return numpy_like
 
 
+def torch_zeros_ones_wrap(fn):
+    @functools.wraps(fn)
+    def numpy_like(shape, dtype=None, **kwargs):
+        if dtype is not None:
+            dtype = to_backend_dtype(dtype, like="torch")
+        return fn(shape, dtype=dtype)
+
+    return numpy_like
+
+
+def torch_eye_wrap(fn):
+    @functools.wraps(fn)
+    def numpy_like(N, M=None, dtype=None, **kwargs):
+        if dtype is not None:
+            dtype = to_backend_dtype(dtype, like="torch")
+        if M is not None:
+            return fn(N, m=M, dtype=dtype)
+        else:
+            return fn(N, dtype=dtype)
+
+    return numpy_like
+
+
 _FUNCS["torch", "pad"] = torch_pad
 _FUNCS["torch", "real"] = torch_real
 _FUNCS["torch", "imag"] = torch_imag
@@ -1064,16 +1123,9 @@ _CUSTOM_WRAPPERS["torch", "clip"] = make_translator(
         ("a_max", ("max",)),
     ]
 )
-_CUSTOM_WRAPPERS["torch", "ones"] = make_translator(
-    [
-        ("shape", ("size",)),
-    ]
-)
-_CUSTOM_WRAPPERS["torch", "zeros"] = make_translator(
-    [
-        ("shape", ("size",)),
-    ]
-)
+_CUSTOM_WRAPPERS["torch", "ones"] = torch_zeros_ones_wrap
+_CUSTOM_WRAPPERS["torch", "zeros"] = torch_zeros_ones_wrap
+_CUSTOM_WRAPPERS["torch", "eye"] = torch_eye_wrap
 _CUSTOM_WRAPPERS["torch", "empty"] = make_translator(
     [
         ("shape", ("size",)),

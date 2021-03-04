@@ -555,7 +555,7 @@ def test_split(backend, int_or_section):
     if backend == "dask":
         pytest.xfail("dask doesn't support split yet")
     A = ar.do("ones", (10, 20, 10), like=backend)
-    if int_or_section == 'section':
+    if int_or_section == "section":
         sections = [2, 4, 14]
         splits = ar.do("split", A, sections, axis=1)
         assert len(splits) == 4
@@ -579,3 +579,27 @@ def test_where(backend):
             x.compute_chunk_sizes()
     for x in D:
         assert ar.to_numpy(x).shape == (9,)
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("dtype_str", ["float32", "float64"])
+@pytest.mark.parametrize(
+    "fn", ["random.normal", "random.uniform", "zeros", "ones", "eye"]
+)
+@pytest.mark.parametrize("str_or_backend", ("str", "backend"))
+def test_dtype_kwarg(backend, dtype_str, fn, str_or_backend):
+    if str_or_backend == "str":
+        dtype = dtype_str
+    else:
+        dtype = ar.to_backend_dtype(dtype_str, like=backend)
+
+    if fn in ("random.normal", "random.uniform"):
+        A = ar.do(fn, size=(10, 5), dtype=dtype, like=backend)
+    elif fn in ("zeros", "ones"):
+        A = ar.do(fn, shape=(10, 5), dtype=dtype, like=backend)
+    else:  # fn = 'eye'
+        A = ar.do(fn, 10, dtype=dtype, like=backend)
+        assert A.shape == (10, 10)
+        A = ar.do(fn, 10, 5, dtype=dtype, like=backend)
+    assert A.shape == (10, 5)
+    assert ar.get_dtype_name(A) == dtype_str
