@@ -989,6 +989,13 @@ def torch_linalg_eigvalsh(x):
     return do("symeig", x, eigenvectors=False, like="torch")[0]
 
 
+def torch_tensordot_wrap(fn):
+    @functools.wraps(fn)
+    def numpy_like(a, b, axes=2):
+        return fn(a, b, dims=axes)
+    return numpy_like
+
+
 def torch_pad(array, pad_width, mode="constant", constant_values=0):
     if mode != "constant":
         raise NotImplementedError
@@ -1095,6 +1102,7 @@ _CUSTOM_WRAPPERS["torch", "linalg.qr"] = qr_allow_fat
 _CUSTOM_WRAPPERS["torch", "random.normal"] = scale_random_normal_manually
 _CUSTOM_WRAPPERS["torch", "random.uniform"] = scale_random_uniform_manually
 _CUSTOM_WRAPPERS["torch", "split"] = torch_split_wrap
+_CUSTOM_WRAPPERS["torch", "tensordot"] = torch_tensordot_wrap
 _CUSTOM_WRAPPERS["torch", "stack"] = make_translator(
     [
         ("arrays", ("tensors",)),
