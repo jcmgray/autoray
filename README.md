@@ -54,7 +54,6 @@ Which is now compatible with **all** of the above mentioned libraries! Abstracti
     * [Lazy Computation](#Lazy-Computation)
     * [Compilation](#Compilation)
 * [Details](#Details)
-    * [Performance](#Performance)
     * [Special Functions](#Special-Functions)
     * [Deviations from `numpy`](#Deviations-from-numpy)
 * [Installation](#Installation)

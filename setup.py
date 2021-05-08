@@ -3,7 +3,7 @@ import versioneer
 
 
 def readme():
-    with open('README.rst') as f:
+    with open('README.md') as f:
         import re
         long_desc = f.read()
         # strip out the raw html images
