@@ -452,6 +452,10 @@ def complex_add_re_im(re, im):
     return re + 1j * im
 
 
+def allclose(x, y, rtol=1e-05, atol=1e-08):
+    return do("all", do("abs", x - y) <= atol + rtol * do("abs", y))
+
+
 # ----------------------------- Custom dispatchers -------------------------- #
 
 
