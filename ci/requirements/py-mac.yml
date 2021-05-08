@@ -9,6 +9,7 @@ dependencies:
   - cpuonly
   - sparse
   - matplotlib
+  - networkx
   - pytest
   - pytest-cov
   - coverage
