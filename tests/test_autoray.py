@@ -6,7 +6,7 @@ import autoray as ar
 
 
 # find backends to tests
-BACKENDS = ["numpy"]
+BACKENDS = [pytest.param("numpy")]
 for lib in ["cupy", "dask", "tensorflow", "torch", "mars", "jax", "sparse"]:
     if importlib.util.find_spec(lib):
         BACKENDS.append(pytest.param(lib))
@@ -16,6 +16,7 @@ for lib in ["cupy", "dask", "tensorflow", "torch", "mars", "jax", "sparse"]:
             from jax.config import config
 
             config.update("jax_enable_x64", True)
+            config.update("jax_platform_name", "cpu")
             os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
     else:
@@ -68,6 +69,9 @@ def gen_rand(shape, backend, dtype="float64"):
 @pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize("fn", ["sqrt", "exp", "sum"])
 def test_basic(backend, fn):
+    if (backend == "ctf") and fn in ("sqrt", "sum"):
+        pytest.xfail("ctf doesn't have sqrt, and converts sum output to numpy")
+
     x = gen_rand((2, 3, 4), backend)
     y = ar.do(fn, x)
     if (backend == "sparse") and (fn == "sum"):
@@ -115,6 +119,8 @@ def modified_gram_schmidt(X):
 def test_mgs(backend):
     if backend == "sparse":
         pytest.xfail("Sparse doesn't support linear algebra yet...")
+    if backend == "ctf":
+        pytest.xfail("ctf does not have 'stack' function.")
     x = gen_rand((3, 5), backend)
     Ux = modified_gram_schmidt(x)
     y = ar.do("sum", Ux @ ar.dag(Ux))
@@ -144,6 +150,8 @@ def modified_gram_schmidt_np_mimic(X):
 def test_mgs_np_mimic(backend):
     if backend == "sparse":
         pytest.xfail("Sparse doesn't support linear algebra yet...")
+    if backend == "ctf":
+        pytest.xfail("ctf does not have 'stack' function.")
     x = gen_rand((3, 5), backend)
     Ux = modified_gram_schmidt_np_mimic(x)
     y = ar.do("sum", Ux @ ar.dag(Ux))
@@ -186,6 +194,9 @@ def test_translator_random_uniform(backend):
 
 @pytest.mark.parametrize("backend", BACKENDS)
 def test_translator_random_normal(backend):
+    if backend == "ctf":
+        pytest.xfail()
+
     from autoray import numpy as anp
 
     x = anp.random.normal(100.0, 0.1, size=(4, 5), like=backend)
@@ -284,6 +295,8 @@ def test_count_nonzero(backend, array_dtype):
 
         if mars._version.version_info < (0, 4, 0, ""):
             pytest.xfail("mars count_nonzero bug fixed in version 0.4.")
+    if backend == "ctf" and array_dtype == "bool":
+        pytest.xfail("ctf doesn't support bool array dtype")
 
     if array_dtype == "int":
         x = ar.do("array", [0, 1, 2, 0, 3], like=backend)
@@ -332,6 +345,12 @@ def test_complex_creation(backend, real_dtype):
             "after scalar multiplication."
         )
 
+    if (backend == "ctf") and (real_dtype == "float32"):
+        pytest.xfail(
+            "ctf currently doesn't preserve single precision when "
+            "multiplying by python scalars."
+        )
+
     x = ar.do(
         "complex",
         ar.astype(
@@ -375,13 +394,7 @@ def test_real_imag(backend, dtype_in, dtype_out):
 
 @pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize(
-    "dtype",
-    [
-        "float32",
-        "float64",
-        "complex64",
-        "complex128",
-    ],
+    "dtype", ["float32", "float64", "complex64", "complex128",],
 )
 def test_linalg_solve(backend, dtype):
     if backend == "sparse":
@@ -395,13 +408,7 @@ def test_linalg_solve(backend, dtype):
 
 @pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize(
-    "dtype",
-    [
-        "float32",
-        "float64",
-        "complex64",
-        "complex128",
-    ],
+    "dtype", ["float32", "float64", "complex64", "complex128",],
 )
 def test_linalg_eigh(backend, dtype):
     if backend == "sparse":

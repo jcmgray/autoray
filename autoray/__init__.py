@@ -16,27 +16,34 @@ from .autoray import (
     # the numpy mimic submodule
     numpy,
 )
+from .compiler import autocompile
+from . import lazy
 
 
 __all__ = (
-    'do',
-    'infer_backend',
-    'get_lib_fn',
-    'conj',
-    'transpose',
-    'dag',
-    'real',
-    'imag',
-    'reshape',
-    'to_backend_dtype',
-    'get_dtype_name',
-    'astype',
-    'to_numpy',
-    'register_function',
+    "do",
+    "infer_backend",
+    "get_lib_fn",
+    "conj",
+    "transpose",
+    "dag",
+    "real",
+    "imag",
+    "reshape",
+    "to_backend_dtype",
+    "get_dtype_name",
+    "astype",
+    "to_numpy",
+    "register_function",
     # the numpy mimic submodule
-    'numpy',
+    "numpy",
+    # abstract function compilation
+    "autocompile",
+    # lazy array library
+    "lazy",
 )
 
 from ._version import get_versions
-__version__ = get_versions()['version']
+
+__version__ = get_versions()["version"]
 del get_versions

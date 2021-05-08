@@ -85,10 +85,13 @@ def do(fn, *args, like=None, **kwargs):
     return get_lib_fn(backend, fn)(*args, **kwargs)
 
 
-@functools.lru_cache(128)
+@functools.lru_cache(None)
 def _infer_class_backend_cached(T):
     if issubclass(T, _numpy.ndarray):
         return "numpy"
+
+    if (T.__module__, T.__name__) == ("autoray.lazy.core", "LazyArray"):
+        return "autoray.lazy"
 
     lib = T.__module__.split(".")[0]
 
@@ -331,13 +334,35 @@ def triu_to_band_part(fn):
     return numpy_like
 
 
+def cholesky_lower(fn):
+    @functools.wraps(fn)
+    def cholesky_numpy_like(a):
+        return fn(a, lower=True)
+
+    return cholesky_numpy_like
+
+
+def binary_allow_1d_rhs_wrap(fn):
+    @functools.wraps(fn)
+    def allow_1d_rhs(a, b):
+        need_to_convert = len(a.shape) != len(b.shape)
+        if need_to_convert:
+            b = reshape(b, (*b.shape, 1))
+        x = fn(a, b)
+        if need_to_convert:
+            x = reshape(x, x.shape[:-1])
+        return x
+
+    return allow_1d_rhs
+
+
 def scale_random_uniform_manually(fn):
     @functools.wraps(fn)
     def numpy_like(low=0.0, high=1.0, size=None, dtype=None, **kwargs):
         if size is None:
             size = ()
 
-        x = fn(size=size, **kwargs)
+        x = fn(size, **kwargs)
 
         if (low != 0.0) or (high != 1.0):
             x = (high - low) * x + low
@@ -560,7 +585,7 @@ _MODULE_ALIASES["builtins"] = "numpy"
 
 
 def numpy_to_numpy(x):
-    return do("array", x, like="numpy")
+    return do("asarray", x, like="numpy")
 
 
 _FUNCS["numpy", "to_numpy"] = numpy_to_numpy
@@ -636,7 +661,7 @@ def jax_random_normal(loc=0.0, scale=1.0, size=None, **kwargs):
 
 
 def jax_to_numpy(x):
-    return x.__array__()
+    return do("asarray", x, like="numpy")
 
 
 _BACKEND_ALIASES["jaxlib"] = "jax"
@@ -679,6 +704,7 @@ _FUNCS["dask", "complex"] = complex_add_re_im
 _FUNC_ALIASES["dask", "abs"] = "absolute"
 _MODULE_ALIASES["dask"] = "dask.array"
 _CUSTOM_WRAPPERS["dask", "linalg.svd"] = svd_manual_full_matrices_kwarg
+_CUSTOM_WRAPPERS["dask", "linalg.cholesky"] = cholesky_lower
 _CUSTOM_WRAPPERS["dask", "random.normal"] = with_dtype_wrapper
 _CUSTOM_WRAPPERS["dask", "random.uniform"] = with_dtype_wrapper
 _CUSTOM_WRAPPERS["dask", "eye"] = dask_eye_wrapper
@@ -693,6 +719,7 @@ def mars_to_numpy(x):
 _FUNCS["mars", "to_numpy"] = mars_to_numpy
 _FUNCS["mars", "complex"] = complex_add_re_im
 _MODULE_ALIASES["mars"] = "mars.tensor"
+_CUSTOM_WRAPPERS["mars", "linalg.cholesky"] = cholesky_lower
 
 
 # ----------------------------------- ctf ----------------------------------- #
@@ -706,16 +733,33 @@ def ctf_to_numpy(x):
     return x.to_nparray()
 
 
+def ctf_count_nonzero(x):
+    return (x != 0).astype(int).sum()
+
+
 def ctf_get_dtype_name(x):
     return x.dtype.__name__
 
 
 _FUNCS["ctf", "array"] = ctf_array
+_FUNCS["ctf", "complex"] = complex_add_re_im
+_FUNCS["ctf", "allclose"] = allclose
 _FUNCS["ctf", "to_numpy"] = ctf_to_numpy
+_FUNCS["ctf", "count_nonzero"] = ctf_count_nonzero
 _FUNCS["ctf", "get_dtype_name"] = ctf_get_dtype_name
+
+_SUBMODULE_ALIASES["ctf", "float32"] = "numpy"
+_SUBMODULE_ALIASES["ctf", "float64"] = "numpy"
+_SUBMODULE_ALIASES["ctf", "complex64"] = "numpy"
+_SUBMODULE_ALIASES["ctf", "complex128"] = "numpy"
 _SUBMODULE_ALIASES["ctf", "linalg.svd"] = "ctf"
 _SUBMODULE_ALIASES["ctf", "linalg.eigh"] = "ctf"
 _SUBMODULE_ALIASES["ctf", "linalg.qr"] = "ctf"
+_SUBMODULE_ALIASES["ctf", "linalg.norm"] = "ctf"
+
+_FUNC_ALIASES["ctf", "random.uniform"] = "random"
+
+_CUSTOM_WRAPPERS["ctf", "random.uniform"] = scale_random_uniform_manually
 
 
 # ------------------------------- sparse------------------------------------- #
@@ -735,6 +779,10 @@ def sparse_complex(x, y):
 
 def sparse_transpose(x, axes=None):
     return x.transpose(axes)
+
+
+def sparse_reshape(x, shape):
+    return x.reshape(shape)
 
 
 def sparse_sum(x, axis=None, keepdims=False, dtype=None, out=None):
@@ -782,6 +830,7 @@ def sparse_random_normal(loc=0.0, scale=1.0, size=None, dtype=None, **kwargs):
 _FUNCS["sparse", "array"] = sparse_array
 _FUNCS["sparse", "to_numpy"] = sparse_to_numpy
 _FUNCS["sparse", "transpose"] = sparse_transpose
+_FUNCS["sparse", "reshape"] = sparse_reshape
 _FUNCS["sparse", "sum"] = sparse_sum
 _FUNCS["sparse", "prod"] = sparse_prod
 _FUNCS["sparse", "conj"] = sparse_conj
@@ -899,6 +948,8 @@ _FUNC_ALIASES["tensorflow", "take"] = "gather"
 
 _CUSTOM_WRAPPERS["tensorflow", "linalg.svd"] = svd_sUV_to_UsVH_wrapper
 _CUSTOM_WRAPPERS["tensorflow", "linalg.qr"] = qr_allow_fat
+_CUSTOM_WRAPPERS["tensorflow", "linalg.solve"] = binary_allow_1d_rhs_wrap
+_CUSTOM_WRAPPERS["tensorflow", "matmul"] = binary_allow_1d_rhs_wrap
 _CUSTOM_WRAPPERS["tensorflow", "tril"] = tril_to_band_part
 _CUSTOM_WRAPPERS["tensorflow", "triu"] = triu_to_band_part
 _CUSTOM_WRAPPERS["tensorflow", "pad"] = tensorflow_pad_wrap
@@ -948,7 +999,7 @@ def torch_astype(x, dtype):
     return x.to(dtype=to_backend_dtype(dtype, like=x))
 
 
-@functools.lru_cache(32)
+@functools.lru_cache(None)
 def _torch_get_dtype_name(dtype):
     return str(dtype).split(".")[-1]
 
@@ -977,8 +1028,12 @@ def torch_imag(x):
     return do("zeros_like", x, like="torch")
 
 
-def torch_linalg_solve(a, b):
-    return do("solve", b, a, like="torch")[0]
+def torch_linalg_solve_wrap(fn):
+    @binary_allow_1d_rhs_wrap
+    def numpy_like(a, b):
+        return fn(b, a)[0]
+
+    return numpy_like
 
 
 def torch_linalg_eigh(x):
@@ -993,6 +1048,7 @@ def torch_tensordot_wrap(fn):
     @functools.wraps(fn)
     def numpy_like(a, b, axes=2):
         return fn(a, b, dims=axes)
+
     return numpy_like
 
 
@@ -1077,7 +1133,6 @@ _FUNCS["torch", "complex"] = complex_add_re_im
 _FUNCS["torch", "transpose"] = torch_transpose
 _FUNCS["torch", "count_nonzero"] = torch_count_nonzero
 _FUNCS["torch", "get_dtype_name"] = torch_get_dtype_name
-_FUNCS["torch", "linalg.solve"] = torch_linalg_solve
 _FUNCS["torch", "linalg.eigh"] = torch_linalg_eigh
 _FUNCS["torch", "linalg.eigvalsh"] = torch_linalg_eigvalsh
 
@@ -1094,57 +1149,38 @@ _SUBMODULE_ALIASES["torch", "linalg.qr"] = "torch"
 _SUBMODULE_ALIASES["torch", "linalg.svd"] = "torch"
 _SUBMODULE_ALIASES["torch", "linalg.norm"] = "torch"
 _SUBMODULE_ALIASES["torch", "linalg.expm"] = "torch"
+_SUBMODULE_ALIASES["torch", "linalg.solve"] = "torch"
 _SUBMODULE_ALIASES["torch", "random.normal"] = "torch"
 _SUBMODULE_ALIASES["torch", "random.uniform"] = "torch"
 
 _CUSTOM_WRAPPERS["torch", "linalg.svd"] = svd_UsV_to_UsVH_wrapper
 _CUSTOM_WRAPPERS["torch", "linalg.qr"] = qr_allow_fat
+_CUSTOM_WRAPPERS["torch", "linalg.solve"] = torch_linalg_solve_wrap
 _CUSTOM_WRAPPERS["torch", "random.normal"] = scale_random_normal_manually
 _CUSTOM_WRAPPERS["torch", "random.uniform"] = scale_random_uniform_manually
 _CUSTOM_WRAPPERS["torch", "split"] = torch_split_wrap
 _CUSTOM_WRAPPERS["torch", "tensordot"] = torch_tensordot_wrap
 _CUSTOM_WRAPPERS["torch", "stack"] = make_translator(
-    [
-        ("arrays", ("tensors",)),
-        ("axis", ("dim", 0)),
-    ]
+    [("arrays", ("tensors",)), ("axis", ("dim", 0))]
 )
 _CUSTOM_WRAPPERS["torch", "concatenate"] = make_translator(
     [("arrays", ("tensors",)), ("axis", ("dim", 0))]
 )
 _CUSTOM_WRAPPERS["torch", "tril"] = make_translator(
-    [
-        ("m", ("input",)),
-        ("k", ("diagonal", 0)),
-    ]
+    [("m", ("input",)), ("k", ("diagonal", 0))]
 )
 _CUSTOM_WRAPPERS["torch", "triu"] = make_translator(
-    [
-        ("m", ("input",)),
-        ("k", ("diagonal", 0)),
-    ]
+    [("m", ("input",)), ("k", ("diagonal", 0))]
 )
 _CUSTOM_WRAPPERS["torch", "clip"] = make_translator(
-    [
-        ("a", ("input",)),
-        ("a_min", ("min",)),
-        ("a_max", ("max",)),
-    ]
+    [("a", ("input",)), ("a_min", ("min",)), ("a_max", ("max",))]
 )
 _CUSTOM_WRAPPERS["torch", "ones"] = torch_zeros_ones_wrap
 _CUSTOM_WRAPPERS["torch", "zeros"] = torch_zeros_ones_wrap
 _CUSTOM_WRAPPERS["torch", "eye"] = torch_eye_wrap
-_CUSTOM_WRAPPERS["torch", "empty"] = make_translator(
-    [
-        ("shape", ("size",)),
-    ]
-)
+_CUSTOM_WRAPPERS["torch", "empty"] = make_translator([("shape", ("size",))])
 _CUSTOM_WRAPPERS["torch", "take"] = make_translator(
-    [
-        ("a", ("input",)),
-        ("indices", ("index",)),
-        ("axis", ("dim",)),
-    ]
+    [("a", ("input",)), ("indices", ("index",)), ("axis", ("dim",))]
 )
 
 
