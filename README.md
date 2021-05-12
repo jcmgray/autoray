@@ -274,7 +274,7 @@ from autoray import autocompile
 mgs = autocompile(modified_gram_schmidt)
 ```
 
-Currently ``autocompile`` only supports functions with the signature ``fn(*arrays) -> array``.
+Currently ``autocompile`` supports functions with the signature ``fn(*args, **kwargs) -> array`` where both ``args`` and ``kwargs`` can be any nested combination of ``tuple``, ``list`` and ``dict`` objects containings arrays.
 We can compare different compiled versions of this simply by changing the ``backend`` option:
 
 ```python

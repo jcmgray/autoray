@@ -75,7 +75,7 @@ def cholesky(a):
 def solve(a, b):
     backend = find_common_backend(a, b)
     fn_solve = get_lib_fn(backend, "linalg.solve")
-    dtype = find_common_dtype((a.dtype, b.dtype), ())
+    dtype = find_common_dtype(a, b)
     return b.to(
         backend=backend, fn=fn_solve, args=(a, b), dtype=dtype, deps=(a, b),
     )

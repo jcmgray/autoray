@@ -4,6 +4,59 @@ from .autoray import infer_backend, do
 from . import lazy
 
 
+def find_array(x, variables):
+    lx = lazy.array(x)
+    variables.append(lx)
+    return lx
+
+
+def find_tuple(x, variables):
+    return tuple(find_and_inject_variables(subx, variables) for subx in x)
+
+
+def find_list(x, variables):
+    return [find_and_inject_variables(subx, variables) for subx in x]
+
+
+def find_dict(x, variables):
+    return {k: find_and_inject_variables(v, variables) for k, v in x.items()}
+
+
+def find_identity(x, variables):
+    return x
+
+
+_find_dispatch = {
+    tuple: find_tuple,
+    list: find_list,
+    dict: find_dict,
+}
+
+
+def find_and_inject_variables(x, variables):
+    cls = x.__class__
+    try:
+        find_fn = _find_dispatch[cls]
+    except KeyError:
+        # cache array types based on whether they have a shape attribute
+        if hasattr(x, "shape"):
+            find_fn = _find_dispatch[cls] = find_array
+        else:
+            find_fn = _find_dispatch[cls] = find_identity
+    return find_fn(x, variables)
+
+
+def extract_arrays(x):
+    if hasattr(x, "shape"):
+        yield x
+    elif isinstance(x, (tuple, list)):
+        for subx in x:
+            yield from extract_arrays(subx)
+    elif isinstance(x, dict):
+        for subx in x.values():
+            yield from extract_arrays(subx)
+
+
 class CompilePython:
     """A simple compiler that unravels all autoray calls, optionally sharing
     intermediates and folding constants, converts this to a code object using
@@ -12,8 +65,11 @@ class CompilePython:
     Parameters
     ----------
     fn : callable
-        Function to compile - should have signature ``fn(*arrays)``, and
-        perform array operations on these using ``autoray.do`` syntax.
+        Function to compile - should have signature
+        ``fn(*args, **kwargs) -> array``, with ``args`` and ``kwargs`` any
+        nested combination of ``tuple``, ``list`` and ``dict`` objects
+        containing arrays (or other constant arguments), and perform array
+        operations on these using ``autoray.do``.
     fold_constants : bool, optional
         Whether to fold all constant operations into the graph, which might
         increase memory usage.
@@ -28,33 +84,40 @@ class CompilePython:
         self._share_intermediates = share_intermediates
         self._fn_compiled = None
 
-    def _trace(self, arrays):
+    def _trace(self, *args, **kwargs):
         """Convert the example arrays to lazy variables and trace them through
         the function.
         """
+        variables = []
+
+        def _run_lazy():
+            lz_args = find_tuple(args, variables)
+            lz_kwargs = find_dict(kwargs, variables)
+            return self._fn(*lz_args, **lz_kwargs)
+
         if self._share_intermediates:
             with lazy.shared_intermediates():
-                variables = tuple(map(lazy.array, arrays))
-                out = self._fn(*variables)
+                out = _run_lazy()
         else:
-            variables = tuple(map(lazy.array, arrays))
-            out = self._fn(*variables)
+            out = _run_lazy()
 
         return out, variables
 
-    def _setup(self, arrays):
+    def _setup(self, *args, **kwargs):
         """Based on example ``arrays``, compile the function.
         """
-        out, variables = self._trace(arrays)
+        out, variables = self._trace(*args, **kwargs)
         self._fn_compiled = out.get_function(
             variables, fold_constants=self._fold_constants
         )
+        self._fn = None
 
-    def __call__(self, *arrays):
+    def __call__(self, *args, **kwargs):
         """If necessary, build, then call the compiled function.
         """
         if self._fn_compiled is None:
-            self._setup(arrays)
+            self._setup(*args, **kwargs)
+        arrays = (*extract_arrays(args), *extract_arrays(kwargs))
         return self._fn_compiled(arrays)
 
 
@@ -63,7 +126,7 @@ class CompileJax:
     """
 
     def __init__(self, fn, enable_x64=None, platform_name=None, **kwargs):
-        self.fn = fn
+        self._fn = fn
         self._enable_x64 = enable_x64
         self._platform_name = platform_name
         self._jit_fn = None
@@ -82,7 +145,8 @@ class CompileJax:
 
             config.update("jax_platform_name", self._platform_name)
 
-        self._jit_fn = jax.jit(self.fn, **self._jit_kwargs)
+        self._jit_fn = jax.jit(self._fn, **self._jit_kwargs)
+        self._fn = None
 
     def __call__(self, *arrays):
         array_backend = infer_backend(arrays[0])
@@ -99,7 +163,7 @@ class CompileTensorFlow:
     """
 
     def __init__(self, fn, **kwargs):
-        self.fn = fn
+        self._fn = fn
         kwargs.setdefault("autograph", False)
         kwargs.setdefault("experimental_compile", False)
         self._jit_fn = None
@@ -107,8 +171,8 @@ class CompileTensorFlow:
 
     def setup(self):
         import tensorflow as tf
-
-        self._jit_fn = tf.function(**self._jit_kwargs)(self.fn)
+        self._jit_fn = tf.function(**self._jit_kwargs)(self._fn)
+        self._fn = None
 
     def __call__(self, *arrays):
         array_backend = infer_backend(arrays[0])
@@ -128,17 +192,18 @@ class CompileTorch:
         import torch
 
         self.torch = torch
-        self.fn = fn
+        self._fn = fn
         self.script = script
         self._jit_fn = None
         self._jit_kwargs = kwargs
 
     def setup(self, arrays):
         self._jit_fn = self.torch.jit.trace(
-            self.fn, arrays, **self._jit_kwargs
+            self._fn, arrays, **self._jit_kwargs
         )
         if self.script:
             self._jit_fn = self.torch.jit.script(self._jit_fn)
+        self._fn = None
 
     def __call__(self, *arrays):
         array_backend = infer_backend(arrays[0])
@@ -152,15 +217,9 @@ class CompileTorch:
         return out
 
 
-_backend_lookup = {
-    "jax": "jax",
-    "tensorflow": "tensorflow",
-    "torch": "torch",
-}
-
+_backend_lookup = {}
 
 _compiler_lookup = {
-    "python": CompilePython,
     "jax": CompileJax,
     "tensorflow": CompileTensorFlow,
     "torch": CompileTorch,
@@ -181,23 +240,34 @@ class AutoCompiled:
         else:
             self._compiler_kwargs = compiler_opts
 
-    def __call__(self, *arrays, backend=None):
+    def __call__(self, *args, backend=None, **kwargs):
+        array_backend = infer_backend(next(extract_arrays((args, kwargs))))
         if backend is None:
             if self._backend is None:
-                backend = infer_backend(arrays[0])
+                backend = array_backend
             else:
                 backend = self._backend
-        backend = _backend_lookup.get(backend, 'python')
 
         try:
-            fn_compiled = self._compiled_fns[backend]
+            key = _backend_lookup[backend, array_backend]
         except KeyError:
-            backend_compiler = _compiler_lookup.get(backend, CompilePython)
-            kwargs = self._compiler_kwargs.get(backend, {})
-            fn_compiled = backend_compiler(self._fn, **kwargs)
-            self._compiled_fns[backend] = fn_compiled
+            if backend in _compiler_lookup:
+                key = backend
+            else:
+                key = f"python-{array_backend}"
+            _backend_lookup[backend, array_backend] = key
 
-        return fn_compiled(*arrays)
+        try:
+            fn_compiled = self._compiled_fns[key]
+        except KeyError:
+            if "python" in key:
+                backend = "python"
+            backend_compiler = _compiler_lookup.get(backend, CompilePython)
+            compiler_kwargs = self._compiler_kwargs.get(backend, {})
+            fn_compiled = backend_compiler(self._fn, **compiler_kwargs)
+            self._compiled_fns[key] = fn_compiled
+
+        return fn_compiled(*args, **kwargs)
 
 
 def autocompile(fn, *, backend=None, compiler_opts=None):

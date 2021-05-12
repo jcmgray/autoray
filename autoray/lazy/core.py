@@ -601,18 +601,18 @@ def materialize_dict(x):
     return {k: maybe_materialize(v) for k, v in x.items()}
 
 
-_materialize_dispatch = {
+_materialize_dispatch = collections.defaultdict(lambda: _identity, {
     LazyArray: materialize_larray,
     tuple: materialize_tuple,
     list: materialize_list,
     dict: materialize_dict,
-}
+})
 
 
 def maybe_materialize(x):
     """Recursively evaluate LazyArray instances in tuples, lists and dicts.
     """
-    return _materialize_dispatch.get(x.__class__, _identity)(x)
+    return _materialize_dispatch[x.__class__](x)
 
 
 # -------------------- recusively stringifying 'pytrees' -------------------- #
@@ -626,6 +626,8 @@ def stringify_larray(x, params):
 
 
 def stringify_tuple(x, params):
+    if not x:
+        return "()"
     return f"({', '.join(stringify(xi, params) for xi in x)},)"
 
 
@@ -639,27 +641,27 @@ def stringify_dict(x, params):
 
 
 def stringify_identity(x, params):
-    if isinstance(x, (int, float, complex, bool, slice)):
-        return str(x)
+    if isinstance(x, (int, float, complex, bool, slice, range)):
+        return f"{x}"
     if isinstance(x, str):
-        return x
+        return f"'{x}'"
     name = f"c{id(x)}"
     params.setdefault(name, x)
     return name
 
 
-stringify_dispatch = {
+_stringify_dispatch = collections.defaultdict(lambda: stringify_identity, {
     LazyArray: stringify_larray,
     tuple: stringify_tuple,
     list: stringify_list,
     dict: stringify_dict,
-}
+})
 
 
 def stringify(x, params):
     """Recursively stringify LazyArray instances in tuples, lists and dicts.
     """
-    return stringify_dispatch.get(x.__class__, stringify_identity)(x, params)
+    return _stringify_dispatch[x.__class__](x, params)
 
 
 def _code_exec_fn(params, code, out_name):
@@ -790,8 +792,12 @@ def dtype_complex_equiv(dtype_name):
 
 
 @functools.lru_cache(None)
-def find_common_dtype(array_types, scalar_types):
+def _find_common_dtype(array_types, scalar_types):
     return np.find_common_type(array_types, scalar_types).name
+
+
+def find_common_dtype(*arrays):
+    return _find_common_dtype(tuple(map(get_dtype_name, arrays)), ())
 
 
 def find_common_backend(*xs):
@@ -853,7 +859,7 @@ def find_full_reshape(newshape, size):
     try:
         expand = newshape.index(-1)
         before = newshape[:expand]
-        after = newshape[expand + 1 :]
+        after = newshape[expand + 1:]
         d = size // functools.reduce(
             operator.mul, itertools.chain(before, after), 1
         )
@@ -889,7 +895,7 @@ def getitem(a, key):
         # expand ellipsis
         expand = key.index(...)
         ndiff = a.ndim - len(key) + 1
-        key = key[:expand] + (slice(None),) * ndiff + key[expand + 1 :]
+        key = key[:expand] + (slice(None),) * ndiff + key[expand + 1:]
     except ValueError:
         # else pad trailing slices if necessary
         ndiff = a.ndim - len(key)
@@ -925,7 +931,7 @@ def tensordot(a, b, axes=2):
         d for i, d in enumerate(a.shape) if i not in axes[0]
     ) + tuple(d for i, d in enumerate(b.shape) if i not in axes[1])
 
-    newdtype = find_common_dtype((a.dtype, b.dtype), ())
+    newdtype = find_common_dtype(a, b)
     backend = find_common_backend(a, b)
     fn_tensordot = get_lib_fn(backend, "tensordot")
 
@@ -954,7 +960,7 @@ def einsum(*operands):
     newshape = tuple(size_dict[char] for char in output)
 
     backend = find_common_backend(*larrays)
-    newdtype = find_common_dtype(tuple(lz.dtype for lz in larrays), ())
+    newdtype = find_common_dtype(*larrays)
     fn_einsum = get_lib_fn(backend, "einsum")
 
     return LazyArray(
@@ -976,7 +982,7 @@ def trace(a):
 @lazy_cache("matmul")
 def matmul(x1, x2):
     backend = find_common_backend(x1, x2)
-    newdtype = find_common_dtype((x1.dtype, x2.dtype), ())
+    newdtype = find_common_dtype(x1, x2)
     newshape = (*x1.shape[:-1], *x2.shape[1:])
     return LazyArray(
         backend=backend,
