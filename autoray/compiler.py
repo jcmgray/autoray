@@ -1,6 +1,6 @@
 import functools
 
-from .autoray import infer_backend, do
+from .autoray import infer_backend, do, backend_like
 from . import lazy
 
 
@@ -96,10 +96,11 @@ class CompilePython:
             return self._fn(*lz_args, **lz_kwargs)
 
         if self._share_intermediates:
-            with lazy.shared_intermediates():
+            with backend_like("autoray.lazy"), lazy.shared_intermediates():
                 out = _run_lazy()
         else:
-            out = _run_lazy()
+            with backend_like("autoray.lazy"):
+                out = _run_lazy()
 
         return out, variables
 
@@ -270,7 +271,7 @@ class AutoCompiled:
         return fn_compiled(*args, **kwargs)
 
 
-def autocompile(fn, *, backend=None, compiler_opts=None):
+def autocompile(fn=None, *, backend=None, compiler_opts=None):
     """Just-in-time compile an ``autoray`` function, which should have
     signature:
 

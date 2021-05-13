@@ -2,6 +2,7 @@ from .autoray import (
     infer_backend,
     get_lib_fn,
     do,
+    backend_like,
     conj,
     transpose,
     dag,
@@ -22,6 +23,7 @@ from . import lazy
 
 __all__ = (
     "do",
+    "backend_like",
     "infer_backend",
     "get_lib_fn",
     "conj",

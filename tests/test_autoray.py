@@ -403,7 +403,8 @@ def test_linalg_solve(backend, dtype):
     A = gen_rand((4, 4), backend, dtype)
     b = gen_rand((4, 1), backend, dtype)
     x = ar.do("linalg.solve", A, b)
-    assert ar.do("allclose", ar.to_numpy(A @ x), ar.to_numpy(b), rtol=1e-4)
+    assert ar.do("allclose", ar.to_numpy(A @ x), ar.to_numpy(b),
+                 rtol=1e-3, atol=1e-6)
 
 
 @pytest.mark.parametrize("backend", BACKENDS)

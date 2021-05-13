@@ -231,7 +231,7 @@ class LazyArray:
         # reverse (ascend) into source code
         return "\n".join(reversed(s))
 
-    def get_compiled(self, optimize=1, get=None):
+    def get_compiled(self, optimize=1):
         """Compile the function into a  code object using ``compile``,
         returning a  wrapper that executes it using ``exec`` and the 'locals'
         dict specifiying inputs which can be modified. It should be called
@@ -275,7 +275,7 @@ class LazyArray:
             Function with signature ``fn(arrays)``.
         """
         if fold_constants:
-            self.compute_constants(variables)
+            self.compute_constants(variables=variables)
 
         var_names = tuple(f"x{id(v)}" for v in variables)
         fn, params = self.get_compiled()
@@ -288,6 +288,12 @@ class LazyArray:
         """Get the largest tensor size appearing in this computation.
         """
         return max(node.size for node in self)
+
+    def history_total_size(self):
+        """The the total size of all unique arrays in the computational graph,
+        possibly relevant e.g. for back-propagation algorithms.
+        """
+        return sum(node.size for node in self)
 
     def to_nx_digraph(
         self,
@@ -486,6 +492,9 @@ class LazyArray:
     def __getitem__(self, key):
         return getitem(self, key)
 
+    # this makes numpy operations delegate to __rmatmul__ etc.
+    __array_ufunc__ = None
+
     def __mul__(self, other):
         return multiply(self, other)
 
@@ -509,9 +518,6 @@ class LazyArray:
 
     def __rfloordiv__(self, other):
         return floordivide(other, self)
-
-    def __idiv__(self, other):
-        return truedivide(self, other)
 
     def __truediv__(self, other):
         return truedivide(self, other)
@@ -578,10 +584,6 @@ def find_lazy(x):
         return
 
 
-def _identity(x):
-    return x
-
-
 # --------------------- recusively evaluating 'pytrees' --------------------- #
 
 
@@ -601,7 +603,11 @@ def materialize_dict(x):
     return {k: maybe_materialize(v) for k, v in x.items()}
 
 
-_materialize_dispatch = collections.defaultdict(lambda: _identity, {
+def materialize_identity(x):
+    return x
+
+
+_materialize_dispatch = collections.defaultdict(lambda: materialize_identity, {
     LazyArray: materialize_larray,
     tuple: materialize_tuple,
     list: materialize_list,
@@ -796,12 +802,31 @@ def _find_common_dtype(array_types, scalar_types):
     return np.find_common_type(array_types, scalar_types).name
 
 
-def find_common_dtype(*arrays):
-    return _find_common_dtype(tuple(map(get_dtype_name, arrays)), ())
+def find_common_dtype(*xs):
+    return _find_common_dtype(tuple(map(get_dtype_name, xs)), ())
 
 
 def find_common_backend(*xs):
-    return next(iter(x.backend for x in xs if hasattr(x, "backend")))
+    backend = None
+
+    # prefer inferring from LazyArray
+    for x in xs:
+        b = getattr(x, "backend", None)
+        if b == "autoray.lazy":
+            # check if any LazyArray is *itself* backed by LazyArray
+            return b
+
+        # else default to first backen seen
+        elif (backend is None) and (b is not None):
+            backend = b
+
+    # if no LazyArray args, check raw arrays
+    if backend is None:
+        backend = next(iter(
+            infer_backend(x) for x in xs if hasattr(x, "shape")
+        ), None)
+
+    return backend
 
 
 @functools.lru_cache(1024)
@@ -1022,7 +1047,7 @@ def argsort(a, axis=-1):
 @lazy_cache("stack")
 def stack(arrays, axis=0):
     arrays = tuple(arrays)
-    newdtype = np.result_type(*(getattr(x, "dtype", x) for x in arrays)).name
+    newdtype = find_common_dtype(*arrays)
     newshape = list(arrays[0].shape)
     newshape.insert(axis if axis >= 0 else axis + 1, len(arrays))
 
@@ -1042,9 +1067,7 @@ def stack(arrays, axis=0):
 def make_binary_func(name, fn):
     @lazy_cache(name)
     def binary_func(x1, x2):
-        newdtype = np.result_type(
-            getattr(x1, "dtype", x1), getattr(x2, "dtype", x2)
-        ).name
+        newdtype = find_common_dtype(x1, x2)
         x1shape = getattr(x1, "shape", ())
         x2shape = getattr(x2, "shape", ())
         newshape = find_broadcast_shape(x1shape, x2shape)

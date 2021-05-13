@@ -67,9 +67,9 @@ Which is now compatible with **all** of the above mentioned libraries! Abstracti
 
 ``autoray`` works using essentially a single dispatch mechanism on the first  argument for ``do``, or the ``like`` keyword argument if specified, fetching functions from the whichever module defined that supplied array. Additionally, it caches a few custom translations and lookups so as to handle libraries like ``tensorflow`` that don't exactly replicate the ``numpy`` api (for example ``sum`` gets translated to ``tensorflow.reduce_sum``). Due to the caching, each ``do`` call only adds 1 or 2 dict look-ups as overhead - much less than using ``functools.singledispatch`` for example.
 
-Essentially you call your numpy-style array functions in one of three ways:
+Essentially you call your numpy-style array functions in one of four ways:
 
-**Automatic backend:**
+***1. Automatic backend:***
 
 ```python
 do('sqrt', x)
@@ -77,7 +77,7 @@ do('sqrt', x)
 
 Here the backend is inferred from ``x``. Usually dispatch happens on the first argument, but several functions (such as ``stack`` and ``einsum``) know to override this and look elsewhere.
 
-**Backend 'like' another array:**
+***2. Backend 'like' another array:***
 
 ```python
 do('random.normal', size=(2, 3, 4), like=x)
@@ -85,13 +85,25 @@ do('random.normal', size=(2, 3, 4), like=x)
 
 Here the backend is inferred from another array and can thus be implicitly propagated, even when functions take no array arguments.
 
-**Explicit backend:**
+***3. Explicit backend:***
 
 ```python
 do('einsum', eq, x, y, like='customlib')
 ```
 
 Here one simply supplies the desired function backend explicitly.
+
+***4. Context manager***
+
+```python
+with backend_like('autoray.lazy'):
+    xy = do('tensordot', x, y, 1)
+    z = do('trace', xy)
+```
+
+Here you set a default backend for a whole block of code. This default overrides method 1. above but 2. and 3. still take precedence.
+
+
 
 If you don't like the explicit ``do`` syntax, then you can import the fake ``numpy`` object as a **drop-in replacement** instead:
 

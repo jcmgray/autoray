@@ -20,6 +20,7 @@ limitations under the License.
 import importlib
 import functools
 import itertools
+import contextlib
 from collections import OrderedDict, defaultdict
 
 import numpy as _numpy
@@ -75,14 +76,47 @@ def do(fn, *args, like=None, **kwargs):
         <tf.Tensor: id=91, shape=(3, 3), dtype=float32>
     """
     if like is None:
-        dispatch_arg = _DISPATCHERS[fn](*args, **kwargs)
-        backend = infer_backend(dispatch_arg)
+        backend = _infer_auto(fn, *args, **kwargs)
     elif isinstance(like, str):
         backend = like
     else:
         backend = infer_backend(like)
 
     return get_lib_fn(backend, fn)(*args, **kwargs)
+
+
+# ------------------------- efficiently dispatching ------------------------- #
+
+
+def _default_infer_from_sig(fn, *args, **kwargs):
+    dispatch_arg = _DISPATCHERS[fn](*args, **kwargs)
+    return infer_backend(dispatch_arg)
+
+
+_infer_auto = _default_infer_from_sig
+
+
+def _always_the_same(*args, x, **kwargs):
+    return x
+
+
+@contextlib.contextmanager
+def backend_like(like):
+    """Context manager for setting a default backend. Currently not thread
+    safe. The argument ``like`` can be an explicit backend or an ``array``.
+    """
+    if isinstance(like, str):
+        backend = like
+    else:
+        backend = infer_backend(like)
+
+    try:
+        global _infer_auto
+        _old_infer_auto = _infer_auto
+        _infer_auto = functools.partial(_always_the_same, x=backend)
+        yield
+    finally:
+        _infer_auto = _old_infer_auto
 
 
 @functools.lru_cache(None)
@@ -107,6 +141,9 @@ def infer_backend(array):
     ``numpy`` is the desired backend.
     """
     return _infer_class_backend_cached(array.__class__)
+
+
+# ------------------- importing and caching the function -------------------- #
 
 
 def get_lib_fn(backend, fn):
@@ -226,7 +263,7 @@ def get_dtype_name(x):
         return x.dtype.name
     except AttributeError:
         # let modules provide their own
-        return do("get_dtype_name", x)
+        return do("get_dtype_name", x, like=x)
 
 
 def astype(x, dtype_name, **kwargs):
@@ -583,6 +620,20 @@ _FUNCS = {}
 
 _MODULE_ALIASES["decimal"] = "math"
 _MODULE_ALIASES["builtins"] = "numpy"
+
+
+_builtin_dtype_lookup = {
+    int: 'int64',
+    float: 'float64',
+    complex: 'complex128',
+}
+
+
+def builtins_get_dtype_name(x):
+    return _builtin_dtype_lookup[x.__class__]
+
+
+_FUNCS["builtins", "get_dtype_name"] = builtins_get_dtype_name
 
 
 # ---------------------------------- numpy ---------------------------------- #

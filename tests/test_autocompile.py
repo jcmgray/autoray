@@ -31,12 +31,13 @@ def mgs_case():
 
 
 @pytest.mark.parametrize("share_intermediates", [False, True])
-def test_compile_python(mgs_case, share_intermediates):
+@pytest.mark.parametrize("nested", [False, True])
+def test_compile_python(mgs_case, share_intermediates, nested):
     x, y = mgs_case
-    mgs = autocompile(
-        modified_gram_schmidt,
-        compiler_opts={"python": {"share_intermediates": share_intermediates}},
-    )
+    compiler_opts = {"python": {"share_intermediates": share_intermediates}}
+    mgs = autocompile(modified_gram_schmidt, compiler_opts=compiler_opts)
+    if nested:
+        mgs = autocompile(mgs, compiler_opts=compiler_opts)
     y2 = mgs(x)
     assert_allclose(y, y2)
 
@@ -58,3 +59,17 @@ def test_autodispatch(backend, mgs_case):
     y2 = mgs(x, backend=backend)
     assert infer_backend(y2) == backend
     assert_allclose(y, to_numpy(y2))
+
+
+def test_complicated_signature():
+
+    @autocompile
+    def foo(a, b, c):
+        a1, a2 = a
+        b1 = b['1']
+        c1, c2 = c['sub']
+        return do('sum', do('stack', (a1, a2, b1, c1, c2)), axis=0)
+
+    x = do('random.uniform', size=(5, 7), like='numpy')
+    y = foo((x[0, :], x[1, :]), {'1': x[2, :]}, c={'sub': (x[3, :], x[4, :])})
+    assert_allclose(y, x.sum(0))
