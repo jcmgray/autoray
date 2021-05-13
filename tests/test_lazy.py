@@ -220,7 +220,11 @@ def test_qr(backend):
 def test_eig_inv(backend, dtype):
     if backend in ("cupy", "dask", "torch", "mars", "sparse"):
         pytest.xfail(f"{backend} doesn't support 'linalg.eig' yet...")
-    x = lazy.array(gen_rand((5, 5), backend, dtype))
+
+    # N.B. the prob that a real gaussian matrix has all real eigenvalues is
+    # ``2**(-d * (d - 1) / 4)`` - see Edelman 1997, need d >> 5
+
+    x = lazy.array(gen_rand((20, 20), backend, dtype))
     el, ev = do("linalg.eig", x)
     assert el.shape == (5,)
     assert ev.shape == (5, 5)
