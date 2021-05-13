@@ -222,12 +222,12 @@ def test_eig_inv(backend, dtype):
         pytest.xfail(f"{backend} doesn't support 'linalg.eig' yet...")
 
     # N.B. the prob that a real gaussian matrix has all real eigenvalues is
-    # ``2**(-d * (d - 1) / 4)`` - see Edelman 1997, need d >> 5
-
-    x = lazy.array(gen_rand((20, 20), backend, dtype))
+    # ``2**(-d * (d - 1) / 4)`` - see Edelman 1997 - so need ``d >> 5``
+    d = 20
+    x = lazy.array(gen_rand((d, d), backend, dtype))
     el, ev = do("linalg.eig", x)
-    assert el.shape == (5,)
-    assert ev.shape == (5, 5)
+    assert el.shape == (d,)
+    assert ev.shape == (d, d)
     ly = ev @ (do("reshape", el, (-1, 1)) * do("linalg.inv", ev))
     make_strict(ly)
     assert_allclose(

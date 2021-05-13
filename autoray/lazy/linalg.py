@@ -6,6 +6,7 @@ import operator
 from ..autoray import get_lib_fn
 
 from .core import (
+    ensure_lazy,
     lazy_cache,
     dtype_real_equiv,
     dtype_complex_equiv,
@@ -16,6 +17,7 @@ from .core import (
 
 @lazy_cache("linalg.svd")
 def svd(a):
+    a = ensure_lazy(a)
     fn_svd = get_lib_fn(a.backend, "linalg.svd")
     lsvd = a.to(fn_svd, (a,), shape=(3,))
     m, n = a.shape
@@ -29,6 +31,7 @@ def svd(a):
 
 @lazy_cache("linalg.qr")
 def qr(a):
+    a = ensure_lazy(a)
     lQR = a.to(get_lib_fn(a.backend, "linalg.qr"), (a,), shape=(2,))
     m, n = a.shape
     k = min(m, n)
@@ -39,6 +42,7 @@ def qr(a):
 
 @lazy_cache("linalg.eig")
 def eig(a):
+    a = ensure_lazy(a)
     fn_eig = get_lib_fn(a.backend, "linalg.eig")
     leig = a.to(fn_eig, (a,), shape=(2,))
     m = a.shape[0]
@@ -50,6 +54,7 @@ def eig(a):
 
 @lazy_cache("linalg.eigh")
 def eigh(a):
+    a = ensure_lazy(a)
     fn_eigh = get_lib_fn(a.backend, "linalg.eigh")
     leigh = a.to(fn_eigh, (a,), shape=(2,))
     m = a.shape[0]
@@ -61,18 +66,22 @@ def eigh(a):
 
 @lazy_cache("linalg.inv")
 def inv(a):
+    a = ensure_lazy(a)
     fn_inv = get_lib_fn(a.backend, "linalg.inv")
     return a.to(fn_inv, (a,))
 
 
 @lazy_cache("linalg.cholesky")
 def cholesky(a):
+    a = ensure_lazy(a)
     fn_inv = get_lib_fn(a.backend, "linalg.cholesky")
     return a.to(fn_inv, (a,))
 
 
 @lazy_cache("linalg.solve")
 def solve(a, b):
+    a = ensure_lazy(a)
+    b = ensure_lazy(b)
     backend = find_common_backend(a, b)
     fn_solve = get_lib_fn(backend, "linalg.solve")
     dtype = find_common_dtype(a, b)
@@ -83,6 +92,7 @@ def solve(a, b):
 
 @lazy_cache("linalg.norm")
 def norm(x, order=None):
+    x = ensure_lazy(x)
     fn_inv = get_lib_fn(x.backend, "linalg.norm")
     newshape = ()
     newdtype = dtype_real_equiv(x.dtype)

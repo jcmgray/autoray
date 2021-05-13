@@ -566,6 +566,12 @@ class LazyArray:
         )
 
 
+def ensure_lazy(array):
+    if not isinstance(array, LazyArray):
+        return LazyArray.from_data(array)
+    return array
+
+
 def find_lazy(x):
     """Recursively search for ``LazyArray`` instances in pytrees.
     """
@@ -850,10 +856,12 @@ def array(x):
 
 @lazy_cache("transpose")
 def transpose(a, axes=None):
+    a = ensure_lazy(a)
+    fn_transpose = get_lib_fn(a.backend, "transpose")
+
     if axes is None:
         axes = range(a.ndim)[::-1]
     newshape = tuple(a.shape[i] for i in axes)
-    fn_transpose = get_lib_fn(a.backend, "transpose")
 
     # check for chaining transpositions
     if a._fn is fn_transpose:
@@ -868,6 +876,7 @@ def transpose(a, axes=None):
 
 @lazy_cache("reshape")
 def _reshape_tuple(a, newshape):
+    a = ensure_lazy(a)
     fn_reshape = get_lib_fn(a.backend, "reshape")
 
     # check for redundant reshapes
@@ -910,6 +919,7 @@ def getitem_hasher(_, a, key):
 
 @lazy_cache("getitem", hasher=getitem_hasher)
 def getitem(a, key):
+    a = ensure_lazy(a)
 
     deps = (a,)
 
@@ -1001,6 +1011,7 @@ def einsum(*operands):
 
 @lazy_cache("trace")
 def trace(a):
+    a = ensure_lazy(a)
     return a.to(fn=get_lib_fn(a.backend, "trace"), args=(a,), shape=(),)
 
 
@@ -1022,23 +1033,27 @@ def matmul(x1, x2):
 
 @lazy_cache("clip")
 def clip(a, a_min, a_max):
+    a = ensure_lazy(a)
     fn_clip = get_lib_fn(a.backend, "clip")
     return a.to(fn_clip, (a, a_min, a_max))
 
 
 @lazy_cache("flip")
 def flip(a, axis=None):
+    a = ensure_lazy(a)
     fn_flip = get_lib_fn(a.backend, "flip")
     return a.to(fn_flip, (a, axis))
 
 
 @lazy_cache("sort")
 def sort(a, axis=-1):
+    a = ensure_lazy(a)
     return a.to(get_lib_fn(a.backend, "sort"), (a, axis))
 
 
 @lazy_cache("argsort")
 def argsort(a, axis=-1):
+    a = ensure_lazy(a)
     return a.to(
         fn=get_lib_fn(a.backend, "argsort"), args=(a, axis), dtype="int",
     )
@@ -1093,14 +1108,18 @@ pow_ = make_binary_func("pow", operator.pow)
 
 
 def make_unary_func(name, to_real=False):
+
+    if to_real:
+        def get_newdtype(x):
+            return dtype_real_equiv(x.dtype)
+    else:
+        def get_newdtype(x):
+            return None
+
     @lazy_cache(name)
     def unary_func(x):
-
-        if to_real:
-            newdtype = dtype_real_equiv(x.dtype)
-        else:
-            newdtype = None
-
+        x = ensure_lazy(x)
+        newdtype = get_newdtype(x)
         return x.to(fn=get_lib_fn(x.backend, name), args=(x,), dtype=newdtype,)
 
     return unary_func
@@ -1131,8 +1150,10 @@ imag = make_unary_func("imag", to_real=True)
 
 
 def make_reduction_func(name):
+
     @lazy_cache(name)
     def reduction_func(a, axis=None):
+        a = ensure_lazy(a)
         nd = a.ndim
         if axis is None:
             axis = tuple(range(nd))
@@ -1170,6 +1191,7 @@ def lazy_get_dtype_name(x):
 
 @lazy_cache("astype")
 def lazy_astype(x, dtype_name):
+    x = ensure_lazy(x)
     return x.to(fn=astype, args=(x, dtype_name), dtype=dtype_name,)
 
 
