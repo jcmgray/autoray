@@ -10,6 +10,8 @@ dependencies:
   - pytorch>=1.4
   - cpuonly
   - sparse
+  - matplotlib
+  - networkx
   - pytest
   - pytest-cov
   - coverage

@@ -3,11 +3,9 @@ import versioneer
 
 
 def readme():
-    with open('README.rst') as f:
-        import re
+    with open('README.md') as f:
         long_desc = f.read()
-        # strip out the raw html images
-        long_desc = re.sub('\.\. raw::[\S\s]*?>\n\n', "", long_desc)
+        # strip out the raw html images?
         return long_desc
 
 
@@ -35,15 +33,15 @@ setup(
             'pytest-cov',
         ],
     },
-    python_requires='>=3.5',
+    python_requires='>=3.6',
     classifiers=[
         'Development Status :: 3 - Alpha',
         'License :: OSI Approved :: Apache Software License',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
     ],
     keywords='array agnostic numeric numpy cupy dask tensorflow jax autograd',
 )
