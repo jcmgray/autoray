@@ -1,6 +1,6 @@
 import pytest
 
-from autoray import do, autocompile, infer_backend, to_numpy
+from autoray import do, autojit, infer_backend, to_numpy
 from .test_autoray import BACKENDS, gen_rand
 
 from numpy.testing import assert_allclose
@@ -35,9 +35,9 @@ def mgs_case():
 def test_compile_python(mgs_case, share_intermediates, nested):
     x, y = mgs_case
     compiler_opts = {"python": {"share_intermediates": share_intermediates}}
-    mgs = autocompile(modified_gram_schmidt, compiler_opts=compiler_opts)
+    mgs = autojit(modified_gram_schmidt, compiler_opts=compiler_opts)
     if nested:
-        mgs = autocompile(mgs, compiler_opts=compiler_opts)
+        mgs = autojit(mgs, compiler_opts=compiler_opts)
     y2 = mgs(x)
     assert_allclose(y, y2)
 
@@ -45,7 +45,7 @@ def test_compile_python(mgs_case, share_intermediates, nested):
 @pytest.mark.parametrize("backend", BACKENDS)
 def test_others_numpy(backend, mgs_case):
     x, y = mgs_case
-    mgs = autocompile(modified_gram_schmidt)
+    mgs = autojit(modified_gram_schmidt)
     y2 = mgs(x, backend=backend)
     assert infer_backend(y2) == "numpy"
     assert_allclose(y, y2)
@@ -55,7 +55,7 @@ def test_others_numpy(backend, mgs_case):
 def test_autodispatch(backend, mgs_case):
     x, y = mgs_case
     x = do("array", x, like=backend)
-    mgs = autocompile(modified_gram_schmidt)
+    mgs = autojit(modified_gram_schmidt)
     y2 = mgs(x, backend=backend)
     assert infer_backend(y2) == backend
     assert_allclose(y, to_numpy(y2))
@@ -63,7 +63,7 @@ def test_autodispatch(backend, mgs_case):
 
 def test_complicated_signature():
 
-    @autocompile
+    @autojit
     def foo(a, b, c):
         a1, a2 = a
         b1 = b['1']

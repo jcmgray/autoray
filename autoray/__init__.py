@@ -17,7 +17,7 @@ from .autoray import (
     # the numpy mimic submodule
     numpy,
 )
-from .compiler import autocompile
+from .compiler import autojit
 from . import lazy
 
 
@@ -40,7 +40,7 @@ __all__ = (
     # the numpy mimic submodule
     "numpy",
     # abstract function compilation
-    "autocompile",
+    "autojit",
     # lazy array library
     "lazy",
 )

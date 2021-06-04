@@ -229,7 +229,7 @@ _compiler_lookup = {
 
 class AutoCompiled:
     """Just in time compile a ``autoray.do`` using function. See the main
-    wrapper ``autocompile``.
+    wrapper ``autojit``.
     """
 
     def __init__(self, fn, backend=None, compiler_opts=None):
@@ -271,7 +271,7 @@ class AutoCompiled:
         return fn_compiled(*args, **kwargs)
 
 
-def autocompile(fn=None, *, backend=None, compiler_opts=None):
+def autojit(fn=None, *, backend=None, compiler_opts=None):
     """Just-in-time compile an ``autoray`` function, which should have
     signature:
 
@@ -281,7 +281,7 @@ def autocompile(fn=None, *, backend=None, compiler_opts=None):
 
         1. Automatically based on the arrays the function is called with,
            i.e. ``cfn(*torch_arrays)`` will use ``torch.jit.trace``.
-        2. In this wrapper, ``@autocompile(backend='jax')``, to provide a
+        2. In this wrapper, ``@autojit(backend='jax')``, to provide a
            specific default instead.
         3. When you call the function ``cfn(*arrays, backend='torch')`` to
            override on a per-call basis.
@@ -306,7 +306,7 @@ def autocompile(fn=None, *, backend=None, compiler_opts=None):
     compiler_opts : dict[dict], optional
         Dict of dicts when you can supply options for each compiler backend
         separately, e.g.:
-        ``@autocompile(compiler_opts={'torch': {'script': False}})``.
+        ``@autojit(compiler_opts={'torch': {'script': False}})``.
 
     Returns
     -------
@@ -315,5 +315,5 @@ def autocompile(fn=None, *, backend=None, compiler_opts=None):
     """
     kws = dict(backend=backend, compiler_opts=compiler_opts)
     if fn is None:
-        return functools.partial(autocompile, **kws)
+        return functools.partial(autojit, **kws)
     return functools.wraps(fn)(AutoCompiled(fn, **kws))

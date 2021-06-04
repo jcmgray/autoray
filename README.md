@@ -276,17 +276,17 @@ Various libraries provide tools for tracing numeric functions and turning the re
 
  ``autoray`` is obviously very well suited to these since it just dispatches functions to whichever library is doing the tracing - functions written using autoray should be immediately compatible with all of them.
 
-**The `autocompile` wrapper**
+**The `autojit` wrapper**
 
 Moreover, ``autoray`` also provides a *unified interface* for compiling functions so that the compilation backend can be easily switched or automatically identified:
 
 ```python
-from autoray import autocompile
+from autoray import autojit
 
-mgs = autocompile(modified_gram_schmidt)
+mgs = autojit(modified_gram_schmidt)
 ```
 
-Currently ``autocompile`` supports functions with the signature ``fn(*args, **kwargs) -> array`` where both ``args`` and ``kwargs`` can be any nested combination of ``tuple``, ``list`` and ``dict`` objects containings arrays.
+Currently ``autojit`` supports functions with the signature ``fn(*args, **kwargs) -> array`` where both ``args`` and ``kwargs`` can be any nested combination of ``tuple``, ``list`` and ``dict`` objects containings arrays.
 We can compare different compiled versions of this simply by changing the ``backend`` option:
 
 ```python
