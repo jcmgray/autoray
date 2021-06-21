@@ -73,3 +73,18 @@ def test_complicated_signature():
     x = do('random.uniform', size=(5, 7), like='numpy')
     y = foo((x[0, :], x[1, :]), {'1': x[2, :]}, c={'sub': (x[3, :], x[4, :])})
     assert_allclose(y, x.sum(0))
+
+
+def test_static_kwargs_change():
+
+    @autojit
+    def foo(a, b, c):
+        if c == 'sum':
+            return a + b
+        elif c == 'sub':
+            return a - b
+
+    assert foo(do('array', 100, like='numpy'),
+               do('array', 1, like='numpy'), 'sum') == 101
+    assert foo(do('array', 100, like='numpy'),
+               do('array', 1, like='numpy'), 'sub') == 99

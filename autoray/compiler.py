@@ -46,21 +46,25 @@ def find_and_inject_variables(x, variables):
     return find_fn(x, variables)
 
 
-def extract_arrays(x):
+def extract_arrays(x, constants=None):
     if hasattr(x, "shape"):
         yield x
     elif isinstance(x, (tuple, list)):
         for subx in x:
-            yield from extract_arrays(subx)
+            yield from extract_arrays(subx, constants)
     elif isinstance(x, dict):
         for subx in x.values():
-            yield from extract_arrays(subx)
+            yield from extract_arrays(subx, constants)
+    elif constants is not None:
+        constants.append(x)
 
 
 class CompilePython:
     """A simple compiler that unravels all autoray calls, optionally sharing
     intermediates and folding constants, converts this to a code object using
-    ``compile``, then executes this using ``exec``.
+    ``compile``, then executes this using ``exec``. Non-array function
+    arguments are treated as static, with a new function compiled for each
+    unique hash of their values.
 
     Parameters
     ----------
@@ -71,8 +75,8 @@ class CompilePython:
         containing arrays (or other constant arguments), and perform array
         operations on these using ``autoray.do``.
     fold_constants : bool, optional
-        Whether to fold all constant operations into the graph, which might
-        increase memory usage.
+        Whether to fold all constant array operations into the graph, which
+        might increase memory usage.
     share_intermediates : bool, optional
         Whether to cache all computational nodes during the trace, so that any
         shared intermediate results can be identified.
@@ -82,7 +86,7 @@ class CompilePython:
         self._fn = fn
         self._fold_constants = fold_constants
         self._share_intermediates = share_intermediates
-        self._fn_compiled = None
+        self._fns = {}
 
     def _trace(self, *args, **kwargs):
         """Convert the example arrays to lazy variables and trace them through
@@ -108,18 +112,24 @@ class CompilePython:
         """Based on example ``arrays``, compile the function.
         """
         out, variables = self._trace(*args, **kwargs)
-        self._fn_compiled = out.get_function(
-            variables, fold_constants=self._fold_constants
-        )
-        self._fn = None
+        return out.get_function(variables, fold_constants=self._fold_constants)
 
     def __call__(self, *args, **kwargs):
         """If necessary, build, then call the compiled function.
         """
-        if self._fn_compiled is None:
-            self._setup(*args, **kwargs)
-        arrays = (*extract_arrays(args), *extract_arrays(kwargs))
-        return self._fn_compiled(arrays)
+        # separate variable arrays from constant kwargs
+        constants = []
+        arrays = (
+            *extract_arrays(args, constants),
+            *extract_arrays(kwargs, constants),
+        )
+        key = hash(tuple(constants))
+
+        try:
+            return self._fns[key](arrays)
+        except KeyError:
+            fn = self._fns[key] = self._setup(*args, **kwargs)
+            return fn(arrays)
 
 
 class CompileJax:
