@@ -4,46 +4,47 @@ from .autoray import infer_backend, do, backend_like
 from . import lazy
 
 
-def find_array(x, variables):
-    lx = lazy.array(x)
-    variables.append(lx)
-    return lx
+def pytree_map_array(fn, x):
+    return fn(x)
 
 
-def find_tuple(x, variables):
-    return tuple(find_and_inject_variables(subx, variables) for subx in x)
+def pytree_map_tuple(fn, x):
+    return tuple(pytree_map(fn, subx) for subx in x)
 
 
-def find_list(x, variables):
-    return [find_and_inject_variables(subx, variables) for subx in x]
+def pytree_map_list(fn, x):
+    return [pytree_map(fn, subx) for subx in x]
 
 
-def find_dict(x, variables):
-    return {k: find_and_inject_variables(v, variables) for k, v in x.items()}
+def pytree_map_dict(fn, x):
+    return {k: pytree_map(fn, v) for k, v in x.items()}
 
 
-def find_identity(x, variables):
+def pytree_map_identity(fn, x):
     return x
 
 
-_find_dispatch = {
-    tuple: find_tuple,
-    list: find_list,
-    dict: find_dict,
+_pytree_map_dispatch = {
+    tuple: pytree_map_tuple,
+    list: pytree_map_list,
+    dict: pytree_map_dict,
 }
 
 
-def find_and_inject_variables(x, variables):
+def pytree_map(fn, x):
+    """Map ``fn`` over 'pytree' ``x``, but only applying on array-like objects.
+    """
     cls = x.__class__
     try:
-        find_fn = _find_dispatch[cls]
+        pytree_map_fn = _pytree_map_dispatch[cls]
     except KeyError:
-        # cache array types based on whether they have a shape attribute
         if hasattr(x, "shape"):
-            find_fn = _find_dispatch[cls] = find_array
+            # cache array types based on whether they have a shape attribute
+            pytree_map_fn = _pytree_map_dispatch[cls] = pytree_map_array
         else:
-            find_fn = _find_dispatch[cls] = find_identity
-    return find_fn(x, variables)
+            # ignore non array types
+            pytree_map_fn = _pytree_map_dispatch[cls] = pytree_map_identity
+    return pytree_map_fn(fn, x)
 
 
 def extract_arrays(x, constants=None):
@@ -94,9 +95,14 @@ class CompilePython:
         """
         variables = []
 
+        def _collect_variable(x):
+            lx = lazy.array(x)
+            variables.append(lx)
+            return lx
+
         def _run_lazy():
-            lz_args = find_tuple(args, variables)
-            lz_kwargs = find_dict(kwargs, variables)
+            lz_args = pytree_map_tuple(_collect_variable, args)
+            lz_kwargs = pytree_map_dict(_collect_variable, kwargs)
             return self._fn(*lz_args, **lz_kwargs)
 
         if self._share_intermediates:
@@ -114,7 +120,7 @@ class CompilePython:
         out, variables = self._trace(*args, **kwargs)
         return out.get_function(variables, fold_constants=self._fold_constants)
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args, array_backend=None, **kwargs):
         """If necessary, build, then call the compiled function.
         """
         # separate variable arrays from constant kwargs
@@ -159,11 +165,10 @@ class CompileJax:
         self._jit_fn = jax.jit(self._fn, **self._jit_kwargs)
         self._fn = None
 
-    def __call__(self, *arrays):
-        array_backend = infer_backend(arrays[0])
+    def __call__(self, *args, array_backend=None, **kwargs):
         if self._jit_fn is None:
             self.setup()
-        out = self._jit_fn(*arrays)
+        out = self._jit_fn(*args, *kwargs)
         if array_backend != "jax":
             out = do("asarray", out, like=array_backend)
         return out
@@ -185,11 +190,10 @@ class CompileTensorFlow:
         self._jit_fn = tf.function(**self._jit_kwargs)(self._fn)
         self._fn = None
 
-    def __call__(self, *arrays):
-        array_backend = infer_backend(arrays[0])
+    def __call__(self, *args, array_backend=None, **kwargs):
         if self._jit_fn is None:
             self.setup()
-        out = self._jit_fn(*arrays)
+        out = self._jit_fn(*args, **kwargs)
         if array_backend != "tensorflow":
             out = do("asarray", out, like=array_backend)
         return out
@@ -208,21 +212,19 @@ class CompileTorch:
         self._jit_fn = None
         self._jit_kwargs = kwargs
 
-    def setup(self, arrays):
-        self._jit_fn = self.torch.jit.trace(
-            self._fn, arrays, **self._jit_kwargs
-        )
+    def setup(self, args):
+        self._jit_fn = self.torch.jit.trace(self._fn, args, **self._jit_kwargs)
         if self.script:
             self._jit_fn = self.torch.jit.script(self._jit_fn)
         self._fn = None
 
-    def __call__(self, *arrays):
-        array_backend = infer_backend(arrays[0])
+    def __call__(self, *args, array_backend=None, **kwargs):
         if array_backend != "torch":
-            arrays = tuple(map(self.torch.as_tensor, arrays))
+            # torch doesn't handle numpy arrays itself
+            args = pytree_map_tuple(self.torch.as_tensor, args)
         if self._jit_fn is None:
-            self.setup(arrays)
-        out = self._jit_fn(*arrays)
+            self.setup(args)
+        out = self._jit_fn(*args, **kwargs)
         if array_backend != "torch":
             out = do("asarray", out, like=array_backend)
         return out
@@ -278,7 +280,7 @@ class AutoCompiled:
             fn_compiled = backend_compiler(self._fn, **compiler_kwargs)
             self._compiled_fns[key] = fn_compiled
 
-        return fn_compiled(*args, **kwargs)
+        return fn_compiled(*args, array_backend=array_backend, **kwargs)
 
 
 def autojit(fn=None, *, backend=None, compiler_opts=None):
