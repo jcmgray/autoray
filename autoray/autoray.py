@@ -2,7 +2,7 @@
 AUTORAY - backend agnostic array operations.
 
 
-Copyright 2019 Johnnie Gray
+Copyright 2019-2021 Johnnie Gray
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

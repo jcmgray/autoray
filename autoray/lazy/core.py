@@ -126,10 +126,11 @@ class LazyArray:
         seen_add = seen.add
         while queue:
             node = queue_pop()
-            if node not in seen:
+            nid = id(node)
+            if nid not in seen:
                 yield node
                 queue_extend(node._deps)
-                seen_add(node)
+                seen_add(nid)
 
     def ascend(self):
         """Generate each unique computational node, from leaves to root.
@@ -143,14 +144,16 @@ class LazyArray:
         seen_add = seen.add
         while queue:
             node = queue[-1]
-            need_to_visit = [c for c in node._deps if c not in ready]
+            need_to_visit = [c for c in node._deps if id(c) not in ready]
             if need_to_visit:
                 queue_extend(need_to_visit)
             else:
-                ready_add(queue_pop())
-                if node not in seen:
+                node = queue_pop()
+                nid = id(node)
+                ready_add(nid)
+                if nid not in seen:
                     yield node
-                    seen_add(node)
+                    seen_add(nid)
 
     def compute(self):
         """Compute the value of this lazy array.
