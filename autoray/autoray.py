@@ -146,24 +146,8 @@ def infer_backend(array):
 # ------------------- importing and caching the function -------------------- #
 
 
-def get_lib_fn(backend, fn):
-    """Cached retrieval of correct function for backend
-
-    Parameters
-    ----------
-    backend : str
-        The module defining the array class to dispatch on.
-    fn : str
-        The function to retrieve.
-
-    Returns
-    -------
-    callable
-    """
-
+def import_lib_fn(backend, fn):
     try:
-        lib_fn = _FUNCS[backend, fn]
-    except KeyError:
         # alias for global module,
         #     e.g. 'decimal' -> 'math'
         module = _MODULE_ALIASES.get(backend, backend)
@@ -194,9 +178,13 @@ def get_lib_fn(backend, fn):
         try:
             lib = importlib.import_module(full_location)
         except ImportError:
-            # sometimes libraries hack an attribute to look like submodule
-            mod, submod = full_location.split(".")
-            lib = getattr(importlib.import_module(mod), submod)
+            if "." in full_location:
+                # sometimes libraries hack an attribute to look like submodule
+                mod, submod = full_location.split(".")
+                lib = getattr(importlib.import_module(mod), submod)
+            else:
+                # failed to import library at all -> catch + raise ImportError
+                raise AttributeError
 
         # check for a custom wrapper but default to identity
         wrapper = _CUSTOM_WRAPPERS.get((backend, fn), lambda fn: fn)
@@ -204,6 +192,39 @@ def get_lib_fn(backend, fn):
         # store the function!
         lib_fn = _FUNCS[backend, fn] = wrapper(getattr(lib, fn_name))
 
+    except AttributeError:
+
+        # check if there is a backup function (e.g. for older library version)
+        backend_alt = backend + "[alt]"
+        if backend_alt in _MODULE_ALIASES:
+            return import_lib_fn(backend_alt, fn)
+
+        raise ImportError(
+            f"autoray couldn't find function '{fn}' for backend '{backend}'.")
+
+    return lib_fn
+
+
+def get_lib_fn(backend, fn):
+    """Cached retrieval of correct function for backend, all the logic for
+    finding the correct funtion only runs the first time.
+
+    Parameters
+    ----------
+    backend : str
+        The module defining the array class to dispatch on.
+    fn : str
+        The function to retrieve.
+
+    Returns
+    -------
+    callable
+    """
+
+    try:
+        lib_fn = _FUNCS[backend, fn]
+    except KeyError:
+        lib_fn = import_lib_fn(backend, fn)
     return lib_fn
 
 
@@ -253,7 +274,7 @@ def to_backend_dtype(dtype_name, like):
 
     try:
         return get_lib_fn(like, dtype_name)
-    except AttributeError:
+    except ImportError:
         return dtype_name
 
 
@@ -1188,8 +1209,6 @@ _FUNCS["torch", "complex"] = complex_add_re_im
 _FUNCS["torch", "transpose"] = torch_transpose
 _FUNCS["torch", "count_nonzero"] = torch_count_nonzero
 _FUNCS["torch", "get_dtype_name"] = torch_get_dtype_name
-_FUNCS["torch", "linalg.eigh"] = torch_linalg_eigh
-_FUNCS["torch", "linalg.eigvalsh"] = torch_linalg_eigvalsh
 
 _FUNC_ALIASES["torch", "clip"] = "clamp"
 _FUNC_ALIASES["torch", "power"] = "pow"
@@ -1197,20 +1216,14 @@ _FUNC_ALIASES["torch", "array"] = "tensor"
 _FUNC_ALIASES["torch", "concatenate"] = "cat"
 _FUNC_ALIASES["torch", "random.normal"] = "randn"
 _FUNC_ALIASES["torch", "random.uniform"] = "rand"
-_FUNC_ALIASES["torch", "linalg.expm"] = "matrix_exp"
 _FUNC_ALIASES["torch", "take"] = "index_select"
+_FUNC_ALIASES["torch", "linalg.expm"] = "matrix_exp"
 
-_SUBMODULE_ALIASES["torch", "linalg.qr"] = "torch"
-_SUBMODULE_ALIASES["torch", "linalg.svd"] = "torch"
-_SUBMODULE_ALIASES["torch", "linalg.norm"] = "torch"
 _SUBMODULE_ALIASES["torch", "linalg.expm"] = "torch"
-_SUBMODULE_ALIASES["torch", "linalg.solve"] = "torch"
 _SUBMODULE_ALIASES["torch", "random.normal"] = "torch"
 _SUBMODULE_ALIASES["torch", "random.uniform"] = "torch"
 
-_CUSTOM_WRAPPERS["torch", "linalg.svd"] = svd_UsV_to_UsVH_wrapper
-_CUSTOM_WRAPPERS["torch", "linalg.qr"] = qr_allow_fat
-_CUSTOM_WRAPPERS["torch", "linalg.solve"] = torch_linalg_solve_wrap
+_CUSTOM_WRAPPERS["torch", "linalg.svd"] = svd_not_full_matrices_wrapper
 _CUSTOM_WRAPPERS["torch", "random.normal"] = scale_random_normal_manually
 _CUSTOM_WRAPPERS["torch", "random.uniform"] = scale_random_uniform_manually
 _CUSTOM_WRAPPERS["torch", "split"] = torch_split_wrap
@@ -1238,6 +1251,20 @@ _CUSTOM_WRAPPERS["torch", "take"] = make_translator(
     [("a", ("input",)), ("indices", ("index",)), ("axis", ("dim",))]
 )
 
+# for torch < 1.9
+_MODULE_ALIASES['torch[alt]'] = 'torch'
+
+_FUNCS["torch[alt]", "linalg.eigh"] = torch_linalg_eigh
+_FUNCS["torch[alt]", "linalg.eigvalsh"] = torch_linalg_eigvalsh
+
+_SUBMODULE_ALIASES["torch[alt]", "linalg.qr"] = "torch"
+_SUBMODULE_ALIASES["torch[alt]", "linalg.svd"] = "torch"
+_SUBMODULE_ALIASES["torch[alt]", "linalg.norm"] = "torch"
+_SUBMODULE_ALIASES["torch[alt]", "linalg.solve"] = "torch"
+
+_CUSTOM_WRAPPERS["torch[alt]", "linalg.svd"] = svd_UsV_to_UsVH_wrapper
+_CUSTOM_WRAPPERS["torch[alt]", "linalg.qr"] = qr_allow_fat
+_CUSTOM_WRAPPERS["torch[alt]", "linalg.solve"] = torch_linalg_solve_wrap
 
 # --------------------------- register your own! ---------------------------- #
 
