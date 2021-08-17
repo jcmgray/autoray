@@ -362,6 +362,7 @@ class LazyArray:
         root_color=(1, 0, 0.5),
         node_scale=5,
         node_alpha=1.0,
+        show_labels=True,
         label_alpha=0.2,
         label_color=None,
         font_size=8,
@@ -429,19 +430,20 @@ class LazyArray:
             node_size=[G.nodes[x]["size"] for x in G.nodes],
             alpha=node_alpha,
         )
-        nx.draw_networkx_labels(
-            G,
-            pos=pos,
-            ax=ax,
-            labels={x: G.nodes[x]["fn"] for x in G.nodes},
-            font_color=label_color,
-            font_size=font_size,
-            alpha=label_alpha,
-            bbox={
-                "color": to_rgb(mpl.rcParams["figure.facecolor"]),
-                "alpha": label_alpha,
-            },
-        )
+        if show_labels:
+            nx.draw_networkx_labels(
+                G,
+                pos=pos,
+                ax=ax,
+                labels={x: G.nodes[x]["fn"] for x in G.nodes},
+                font_color=label_color,
+                font_size=font_size,
+                alpha=label_alpha,
+                bbox={
+                    "color": to_rgb(mpl.rcParams["figure.facecolor"]),
+                    "alpha": label_alpha,
+                },
+            )
 
         if not created_fig:
             return

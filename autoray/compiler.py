@@ -205,8 +205,12 @@ class CompileTorch:
 
     def __init__(self, fn, script=True, **kwargs):
         import torch
-
         self.torch = torch
+
+        if (not hasattr(fn, '__name__') and isinstance(fn, functools.partial)):
+            # torch jit.trace and jit.script require fn.__name__ and others
+            functools.update_wrapper(fn, fn.func)
+
         self._fn = fn
         self.script = script
         self._jit_fn = None
