@@ -289,7 +289,7 @@ class AutoCompiled:
 
 def autojit(fn=None, *, backend=None, compiler_opts=None):
     """Just-in-time compile an ``autoray`` function, which should have
-    signature:
+    signature::
 
         fn(*arrays) -> array
 

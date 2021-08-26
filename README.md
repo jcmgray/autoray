@@ -216,6 +216,13 @@ ly.plot()
 ```
 <p align="left"><img src="https://i.imgur.com/1WOngc9.png" width="600px"></p>
 
+Preview the memory footprint (in terms of number of array elements) throughout the computation:
+
+```python
+ly.plot_history_size_footprint()
+```
+<p align="left"><img src="https://i.imgur.com/iCcyxXI.png" width="600px"></p>
+
 Finally, if we want to compute the actual value we call:
 ```python
 ly.compute()

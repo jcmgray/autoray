@@ -87,8 +87,11 @@ def test_lazy_mgs(backend):
         f"dtype=float64, backend='{backend}')>"
     )
     assert isinstance(ly, lazy.LazyArray)
-    assert ly.history_max_size() == 25
-    assert ly.history_total_size() > 25
+    hmax = ly.history_max_size()
+    hpeak = ly.history_peak_size()
+    htot = ly.history_total_size()
+    assert hmax == 25
+    assert 25 < hpeak < htot
     assert len(tuple(ly)) == 57
     assert len({node.fn_name for node in ly}) == 9
     assert_allclose(to_numpy(ly.compute()), to_numpy(modified_gram_schmidt(x)))

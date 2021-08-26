@@ -288,15 +288,99 @@ class LazyArray:
         )
 
     def history_max_size(self):
-        """Get the largest tensor size appearing in this computation.
+        """Get the largest single tensor size appearing in this computation.
         """
         return max(node.size for node in self)
+
+    def history_size_footprint(self):
+        """Get the combined size of intermediates at each step of the
+        computation. Note this assumes that intermediates are immediately
+        garbage collected when they are no longer required.
+        """
+        delete_checked = set()
+        sizes = []
+        for node in reversed(tuple(self.ascend())):
+            for c in node._deps:
+                if c not in delete_checked:
+                    # last time a dependency is seen, subtract the size
+                    if c._deps:
+                        sizes.append(-c.size)
+                    delete_checked.add(c)
+
+            if node._data is None:
+                # this is a new intermediate, add the size
+                sizes.append(+node.size)
+
+        sizes.reverse()
+        return list(itertools.accumulate(sizes))
+
+    def history_peak_size(self):
+        """Get the peak combined intermediate size of this computation.
+        """
+        return max(self.history_size_footprint())
 
     def history_total_size(self):
         """The the total size of all unique arrays in the computational graph,
         possibly relevant e.g. for back-propagation algorithms.
         """
         return sum(node.size for node in self)
+
+    def plot_history_size_footprint(
+        self,
+        log=None,
+        figsize=(8, 2),
+        color='purple',
+        alpha=0.5,
+        ax=None,
+        return_fig=False,
+    ):
+        """Plot the memory footprint throughout this computation.
+
+        Parameters
+        ----------
+        log : None or int, optional
+            If not None, display the sizes in base ``log``.
+        figsize : tuple, optional
+            Size of the figure.
+        color : str, optional
+            Color of the line.
+        alpha : float, optional
+            Alpha of the line.
+        ax : matplotlib.axes.Axes, optional
+            Axes to plot on, will be created if not provided.
+        return_fig : bool, optional
+            If True, return the figure object, else just show and close it.
+        """
+        import matplotlib.pyplot as plt
+
+        y = np.array(self.history_size_footprint())
+        if log:
+            y = np.log2(y) / np.log2(log)
+            ylabel = f'$\\log_{log}[SIZE]$'
+        else:
+            ylabel = 'SIZE'
+
+        x = np.arange(y.size)
+
+        if ax is None:
+            fig, ax = plt.subplots(figsize=figsize)
+        else:
+            fig = None
+
+        ax.fill_between(x, 0, y, alpha=alpha, color=color)
+
+        if fig is not None:
+            ax.grid(True, c=(0.95, 0.95, 0.95), which='both')
+            ax.set_axisbelow(True)
+            ax.set_xlim(0, np.max(x))
+            ax.set_ylim(0, np.max(y))
+            ax.set_ylabel(ylabel)
+
+        if return_fig or fig is None:
+            return fig
+        else:
+            plt.show()
+            plt.close(fig)
 
     def to_nx_digraph(
         self,
