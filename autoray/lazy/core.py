@@ -72,6 +72,19 @@ class LazyArray:
         obj._deps = ()
         return obj
 
+    @classmethod
+    def from_shape(cls, shape, backend='numpy', dtype=None):
+        """Create a new ``LazyArray`` with a given shape.
+        """
+        obj = cls.__new__(cls)
+        obj._backend = backend
+        obj._fn = obj._args = obj._kwargs = None
+        obj._shape = tuple(map(int, shape))
+        obj._dtype = dtype
+        obj._data = '__PLACEHOLDER__'
+        obj._deps = ()
+        return obj
+
     def to(
         self,
         fn,
@@ -911,7 +924,7 @@ def find_common_backend(*xs):
             # check if any LazyArray is *itself* backed by LazyArray
             return b
 
-        # else default to first backen seen
+        # else default to first backend seen
         elif (backend is None) and (b is not None):
             backend = b
 
@@ -937,9 +950,18 @@ def find_broadcast_shape(xshape, yshape):
 
 # -------------------------------- interface -------------------------------- #
 
+def Variable(shape, backend=None, dtype=None):
+    """Create a ``LazyArray`` from a shape only, representing a leaf node
+    in the computational graph. It can only act as a placeholder for data.
+    """
+    return LazyArray.from_shape(shape, backend=backend, dtype=dtype)
+
 
 @lazy_cache("array")
 def array(x):
+    """Create a ``LazyArray`` from an input array, representing a leaf node
+    in the computational graph.
+    """
     return LazyArray.from_data(x)
 
 

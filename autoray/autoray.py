@@ -937,6 +937,10 @@ for f in (
     "arcsinh",
     "arccosh",
     "arctanh",
+    "tensordot",
+    # NB put tensordot here, as sparse.tensordot can produce dense (numpy)
+    # arrays but errors when both inputs are dense - we want nested calls to
+    # tensordot to handle this
 ):
     _SUBMODULE_ALIASES["sparse", f] = "numpy"
 

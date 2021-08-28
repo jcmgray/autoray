@@ -2,6 +2,7 @@ from . import linalg
 
 from .core import (
     LazyArray,
+    Variable,
     shared_intermediates,
     array,
     transpose,
@@ -51,6 +52,7 @@ from .core import max_ as max
 
 __all__ = (
     "LazyArray",
+    "Variable",
     "shared_intermediates",
     "linalg",
     "array",
