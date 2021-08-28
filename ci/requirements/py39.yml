@@ -3,6 +3,7 @@ channels:
   - defaults
   - conda-forge
 dependencies:
+  - python=3.9
   - numpy
   - tensorflow>=2
   - dask
@@ -17,3 +18,7 @@ dependencies:
   - coveralls
   - codecov
   - pip
+  - pip:
+    - pymars
+    - jax
+    - jaxlib
