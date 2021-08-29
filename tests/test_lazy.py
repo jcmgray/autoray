@@ -138,6 +138,7 @@ def test_plot():
     lf = do("sum", le)
     lf.plot()
     lf.plot(variables=[lc, ld])
+    lf.plot_history_size_footprint()
 
 
 def test_share_intermediates():
@@ -399,3 +400,13 @@ def test_tensordot():
     la, lb = map(lazy.array, (a, b))
     x2 = do('tensordot', la, lb, axes=[(1, 3), (2, 0)])
     assert_allclose(x1, x2.compute())
+
+def test_use_variable_to_trace_function():
+    a = lazy.Variable(shape=(2, 3), backend='numpy')
+    b = lazy.Variable(shape=(3, 4), backend='numpy')
+    c = do('tanh', a @ b)
+    f = c.get_function([a, b])
+    x = do('random.uniform', size=(2, 3), like='numpy')
+    y = do('random.uniform', size=(3, 4), like='numpy')
+    z = f([x, y])
+    assert z.shape == (2, 4)
