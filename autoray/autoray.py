@@ -109,8 +109,8 @@ def get_backend():
 
 
 def set_backend(like):
-    """Permanently set a default backend. Currently not thread
-    safe. The argument ``like`` can be an explicit backend or an ``array``.
+    """Set a default global backend. The argument ``like`` can be an explicit
+    backend name or an ``array``.
     """
     global _global_backend
     global _infer_auto
@@ -129,7 +129,8 @@ def set_backend(like):
 @contextlib.contextmanager
 def backend_like(like):
     """Context manager for setting a default backend. Currently not thread
-    safe. The argument ``like`` can be an explicit backend or an ``array``.
+    safe. The argument ``like`` can be an explicit backend name or an
+    ``array`` to infer it from.
     """
     old_backend = get_backend()
     try:
