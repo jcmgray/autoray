@@ -94,10 +94,36 @@ def _default_infer_from_sig(fn, *args, **kwargs):
 
 
 _infer_auto = _default_infer_from_sig
+_global_backend = None
 
 
 def _always_the_same(*args, x, **kwargs):
     return x
+
+
+def get_backend():
+    """Return the global backend if it has been set, otherwise ``None``.
+    """
+    global _global_backend
+    return _global_backend
+
+
+def set_backend(like):
+    """Permanently set a default backend. Currently not thread
+    safe. The argument ``like`` can be an explicit backend or an ``array``.
+    """
+    global _global_backend
+    global _infer_auto
+
+    if like is None:
+        _global_backend = None
+        _infer_auto = _default_infer_from_sig
+    elif isinstance(like, str):
+        _global_backend = like
+        _infer_auto = functools.partial(_always_the_same, x=_global_backend)
+    else:
+        _global_backend = infer_backend(like)
+        _infer_auto = functools.partial(_always_the_same, x=_global_backend)
 
 
 @contextlib.contextmanager
@@ -105,18 +131,12 @@ def backend_like(like):
     """Context manager for setting a default backend. Currently not thread
     safe. The argument ``like`` can be an explicit backend or an ``array``.
     """
-    if isinstance(like, str):
-        backend = like
-    else:
-        backend = infer_backend(like)
-
+    old_backend = get_backend()
     try:
-        global _infer_auto
-        _old_infer_auto = _infer_auto
-        _infer_auto = functools.partial(_always_the_same, x=backend)
+        set_backend(like)
         yield
     finally:
-        _infer_auto = _old_infer_auto
+        set_backend(old_backend)
 
 
 @functools.lru_cache(None)

@@ -401,6 +401,7 @@ def test_tensordot():
     x2 = do('tensordot', la, lb, axes=[(1, 3), (2, 0)])
     assert_allclose(x1, x2.compute())
 
+
 def test_use_variable_to_trace_function():
     a = lazy.Variable(shape=(2, 3), backend='numpy')
     b = lazy.Variable(shape=(3, 4), backend='numpy')

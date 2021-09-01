@@ -394,7 +394,7 @@ def test_real_imag(backend, dtype_in, dtype_out):
 
 @pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize(
-    "dtype", ["float32", "float64", "complex64", "complex128",],
+    "dtype", ["float32", "float64", "complex64", "complex128"],
 )
 def test_linalg_solve(backend, dtype):
     if backend == "sparse":
@@ -409,7 +409,7 @@ def test_linalg_solve(backend, dtype):
 
 @pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize(
-    "dtype", ["float32", "float64", "complex64", "complex128",],
+    "dtype", ["float32", "float64", "complex64", "complex128"],
 )
 def test_linalg_eigh(backend, dtype):
     if backend == "sparse":
@@ -611,3 +611,17 @@ def test_dtype_kwarg(backend, dtype_str, fn, str_or_backend):
         A = ar.do(fn, 10, 5, dtype=dtype, like=backend)
     assert A.shape == (10, 5)
     assert ar.get_dtype_name(A) == dtype_str
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_backend_like(backend):
+    assert ar.get_backend() is None
+    ar.set_backend('test')
+    assert ar.get_backend() == 'test'
+    ar.set_backend(None)
+    assert ar.get_backend() is None
+    with ar.backend_like(backend):
+        assert ar.get_backend() == backend
+        x = ar.do("ones", (2,), like=backend)
+        assert ar.infer_backend(x) == backend
+    assert ar.get_backend() is None
