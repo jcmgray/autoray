@@ -308,6 +308,25 @@ def get_dtype_name(x):
         return do("get_dtype_name", x, like=x)
 
 
+_COMPLEX_DTYPES = {'complex64', 'complex128'}
+_DOUBLE_DTYPES = {'float64', 'complex128'}
+_DTYPE_MAP = {
+    (False, False): 'float32',
+    (False, True): 'float64',
+    (True, False): 'complex64',
+    (True, True): 'complex128',
+}
+
+
+def get_common_dtype(*arrays):
+    """Compute the minimal dtype sufficient for ``arrays``.
+    """
+    dtypes = set(map(get_dtype_name, arrays))
+    has_complex = not _COMPLEX_DTYPES.isdisjoint(dtypes)
+    has_double = not _DOUBLE_DTYPES.isdisjoint(dtypes)
+    return _DTYPE_MAP[has_complex, has_double]
+
+
 def astype(x, dtype_name, **kwargs):
     """Cast array as type ``dtype_name`` - tries ``x.astype`` first."""
     dtype = to_backend_dtype(dtype_name, like=x)

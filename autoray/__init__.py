@@ -14,6 +14,7 @@ from .autoray import (
     to_backend_dtype,
     astype,
     get_dtype_name,
+    get_common_dtype,
     to_numpy,
     register_function,
     # the numpy mimic submodule

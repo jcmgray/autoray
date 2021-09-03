@@ -614,6 +614,13 @@ def test_dtype_kwarg(backend, dtype_str, fn, str_or_backend):
 
 
 @pytest.mark.parametrize("backend", BACKENDS)
+def test_get_common_dtype(backend):
+    x = ar.do("ones", (1,), like=backend, dtype='complex64')
+    y = ar.do("ones", (1,), like=backend, dtype='float64')
+    assert ar.get_common_dtype(x, y) == 'complex128'
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
 def test_backend_like(backend):
     assert ar.get_backend() is None
     ar.set_backend('test')
