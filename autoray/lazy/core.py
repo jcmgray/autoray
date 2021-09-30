@@ -1265,17 +1265,17 @@ def make_reduction_func(name):
     @lazy_cache(name)
     def reduction_func(a, axis=None):
         a = ensure_lazy(a)
+        fn = get_lib_fn(a.backend, name)
+
         nd = a.ndim
         if axis is None:
-            axis = tuple(range(nd))
+            return a.to(fn=fn, args=(a,), shape=(),)
         elif not hasattr(axis, "__len__"):
             axis = (axis,)
         axis = tuple(nd - i if i < 0 else i for i in axis)
 
         newshape = tuple(d for i, d in enumerate(a.shape) if i not in axis)
-        return a.to(
-            fn=get_lib_fn(a.backend, name), args=(a, axis), shape=newshape,
-        )
+        return a.to(fn=fn, args=(a, axis), shape=newshape)
 
     return reduction_func
 

@@ -39,6 +39,7 @@ __all__ = (
     "reshape",
     "to_backend_dtype",
     "get_dtype_name",
+    "get_common_dtype",
     "astype",
     "to_numpy",
     "register_function",
