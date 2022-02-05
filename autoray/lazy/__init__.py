@@ -40,6 +40,7 @@ from .core import (
     log10,
     conj,
     sign,
+    angle,
     real,
     imag,
     # reductions
@@ -93,6 +94,7 @@ __all__ = (
     "conj",
     "sign",
     "abs",
+    "angle",
     "real",
     "imag",
     # reductions
