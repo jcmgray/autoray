@@ -47,6 +47,19 @@ def pytree_map(fn, x):
     return pytree_map_fn(fn, x)
 
 
+def pytree_flat_gen(x):
+    """Generate the leaves of pytree ``x``.
+    """
+    if isinstance(x, (tuple, list)):
+        for el in x:
+            yield from pytree_flat_gen(el)
+    elif isinstance(x, dict):
+        for el in x.values():
+            yield from pytree_flat_gen(el)
+    else:
+        yield x
+
+
 def extract_arrays(x, constants=None):
     if hasattr(x, "shape"):
         yield x
@@ -258,7 +271,7 @@ class AutoCompiled:
             self._compiler_kwargs = compiler_opts
 
     def __call__(self, *args, backend=None, **kwargs):
-        array_backend = infer_backend(next(extract_arrays((args, kwargs))))
+        array_backend = infer_backend(next(pytree_flat_gen((args, kwargs))))
         if backend is None:
             if self._backend is None:
                 backend = array_backend

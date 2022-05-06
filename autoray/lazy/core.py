@@ -13,6 +13,7 @@ from ..autoray import (
     get_dtype_name,
     register_function,
     astype,
+    complex_add_re_im,
 )
 
 
@@ -88,7 +89,7 @@ class LazyArray:
     def to(
         self,
         fn,
-        args,
+        args=None,
         kwargs=None,
         backend=None,
         shape=None,
@@ -100,7 +101,7 @@ class LazyArray:
         """
         return LazyArray(
             fn=fn,
-            args=args,
+            args=args if args is not None else (self,),
             kwargs=kwargs,
             backend=backend if backend is not None else self._backend,
             shape=shape if shape is not None else self.shape,
@@ -642,6 +643,9 @@ class LazyArray:
     def __abs__(self):
         return abs_(self)
 
+    def __neg__(self):
+        return self.to(operator.neg)
+
     @property
     def T(self):
         return transpose(self)
@@ -649,6 +653,12 @@ class LazyArray:
     @property
     def H(self):
         return conj(transpose(self))
+
+    def reshape(self, shape):
+        return reshape(self, shape)
+
+    def astype(self, dtype_name):
+        return lazy_astype(self, dtype_name)
 
     @property
     def real(self):
@@ -999,7 +1009,7 @@ def _reshape_tuple(a, newshape):
     return a.to(fn_reshape, (a, newshape), shape=newshape)
 
 
-@functools.lru_cache(1024)
+@functools.lru_cache(2**14)
 def find_full_reshape(newshape, size):
     try:
         expand = newshape.index(-1)
@@ -1014,7 +1024,8 @@ def find_full_reshape(newshape, size):
 
 
 def reshape(a, newshape):
-    newshape = find_full_reshape(tuple(newshape), a.size)
+    newshape = (newshape,) if isinstance(newshape, int) else tuple(newshape)
+    newshape = find_full_reshape(newshape, a.size)
     return _reshape_tuple(a, newshape)
 
 
@@ -1142,6 +1153,23 @@ def matmul(x1, x2):
     )
 
 
+@lazy_cache("kron")
+def kron(x1, x2):
+    backend = find_common_backend(x1, x2)
+    newdtype = find_common_dtype(x1, x2)
+    newshape = tuple(d1 * d2 for d1, d2 in zip(x1.shape, x2.shape))
+    fn_kron = get_lib_fn(backend, "kron")
+    return LazyArray(
+        backend=backend,
+        fn=fn_kron,
+        args=(x1, x2),
+        kwargs=None,
+        shape=newshape,
+        dtype=newdtype,
+        deps=tuple(x for x in (x1, x2) if isinstance(x, LazyArray)),
+    )
+
+
 @lazy_cache("clip")
 def clip(a, a_min, a_max):
     a = ensure_lazy(a)
@@ -1218,6 +1246,22 @@ truedivide = make_binary_func("truedivide", operator.truediv)
 pow_ = make_binary_func("pow", operator.pow)
 
 
+def complex_(re, im):
+    newdtype = dtype_complex_equiv(find_common_dtype(re, im))
+    newshape = find_broadcast_shape(re.shape, im.shape)
+    backend = find_common_backend(re, im)
+    fn_complex = get_lib_fn(backend, "complex")
+    return LazyArray(
+        backend=backend,
+        fn=fn_complex,
+        args=(re, im),
+        kwargs=None,
+        shape=newshape,
+        dtype=newdtype,
+        deps=tuple(x for x in (re, im) if isinstance(x, LazyArray)),
+    )
+
+
 def make_unary_func(name, to_real=False):
 
     if to_real:
@@ -1231,7 +1275,7 @@ def make_unary_func(name, to_real=False):
     def unary_func(x):
         x = ensure_lazy(x)
         newdtype = get_newdtype(x)
-        return x.to(fn=get_lib_fn(x.backend, name), args=(x,), dtype=newdtype,)
+        return x.to(fn=get_lib_fn(x.backend, name), dtype=newdtype,)
 
     return unary_func
 
@@ -1269,7 +1313,7 @@ def make_reduction_func(name):
 
         nd = a.ndim
         if axis is None:
-            return a.to(fn=fn, args=(a,), shape=(),)
+            return a.to(fn=fn, shape=(),)
         elif not hasattr(axis, "__len__"):
             axis = (axis,)
         axis = tuple(nd - i if i < 0 else i for i in axis)

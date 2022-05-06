@@ -11,6 +11,7 @@ from .core import (
     einsum,
     trace,
     matmul,
+    kron,
     clip,
     flip,
     sort,
@@ -50,6 +51,7 @@ from .core import abs_ as abs
 from .core import sum_ as sum
 from .core import min_ as min
 from .core import max_ as max
+from .core import complex_ as complex
 
 __all__ = (
     "LazyArray",
@@ -64,6 +66,7 @@ __all__ = (
     "conj",
     "trace",
     "matmul",
+    "kron",
     "clip",
     "flip",
     "sort",
@@ -102,6 +105,7 @@ __all__ = (
     "prod",
     "min",
     "max",
+    "complex",
 )
 
 
