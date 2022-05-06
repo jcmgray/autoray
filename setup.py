@@ -44,4 +44,5 @@ setup(
         'Programming Language :: Python :: 3.9',
     ],
     keywords='array agnostic numeric numpy cupy dask tensorflow jax autograd',
+    long_description_content_type='text/markdown',
 )
