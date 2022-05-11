@@ -292,8 +292,7 @@ def test_count_nonzero(backend, array_dtype):
 
     if backend == "mars":
         import mars
-
-        if mars._version.version_info < (0, 4, 0, ""):
+        if tuple(map(int, mars.__version__.split('.'))) < (0, 4, 0):
             pytest.xfail("mars count_nonzero bug fixed in version 0.4.")
     if backend == "ctf" and array_dtype == "bool":
         pytest.xfail("ctf doesn't support bool array dtype")
