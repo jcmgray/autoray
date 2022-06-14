@@ -9,15 +9,15 @@ def pytree_map_array(fn, x):
 
 
 def pytree_map_tuple(fn, x):
-    return tuple(pytree_map(fn, subx) for subx in x)
+    return tuple(pytree_array_map(fn, subx) for subx in x)
 
 
 def pytree_map_list(fn, x):
-    return [pytree_map(fn, subx) for subx in x]
+    return [pytree_array_map(fn, subx) for subx in x]
 
 
 def pytree_map_dict(fn, x):
-    return {k: pytree_map(fn, v) for k, v in x.items()}
+    return {k: pytree_array_map(fn, v) for k, v in x.items()}
 
 
 def pytree_map_identity(fn, x):
@@ -31,7 +31,7 @@ _pytree_map_dispatch = {
 }
 
 
-def pytree_map(fn, x):
+def pytree_array_map(fn, x):
     """Map ``fn`` over 'pytree' ``x``, but only applying on array-like objects.
     """
     cls = x.__class__
@@ -194,7 +194,6 @@ class CompileTensorFlow:
     def __init__(self, fn, **kwargs):
         self._fn = fn
         kwargs.setdefault("autograph", False)
-        kwargs.setdefault("experimental_compile", False)
         self._jit_fn = None
         self._jit_kwargs = kwargs
 
@@ -216,23 +215,20 @@ class CompileTorch:
     """
     """
 
-    def __init__(self, fn, script=True, **kwargs):
+    def __init__(self, fn, **kwargs):
         import torch
         self.torch = torch
 
         if (not hasattr(fn, '__name__') and isinstance(fn, functools.partial)):
-            # torch jit.trace and jit.script require fn.__name__ and others
+            # torch jit.trace requires fn.__name__ and others
             functools.update_wrapper(fn, fn.func)
 
         self._fn = fn
-        self.script = script
         self._jit_fn = None
         self._jit_kwargs = kwargs
 
     def setup(self, args):
         self._jit_fn = self.torch.jit.trace(self._fn, args, **self._jit_kwargs)
-        if self.script:
-            self._jit_fn = self.torch.jit.script(self._jit_fn)
         self._fn = None
 
     def __call__(self, *args, array_backend=None, **kwargs):
@@ -335,7 +331,7 @@ def autojit(fn=None, *, backend=None, compiler_opts=None):
     compiler_opts : dict[dict], optional
         Dict of dicts when you can supply options for each compiler backend
         separately, e.g.:
-        ``@autojit(compiler_opts={'torch': {'script': False}})``.
+        ``@autojit(compiler_opts={'tensorflow': {'jit_compile': True}})``.
 
     Returns
     -------
