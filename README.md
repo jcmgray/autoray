@@ -121,6 +121,14 @@ np.eye(3, like=x)  # many functions obviously can't dispatch without the `like` 
 
 ## Customizing functions
 
+If the functions relevant for a particular array type are not defined in the
+array's top level module, you can explicitly register the correct location with
+``autoray.register_backend``:
+
+```python
+ar.register_backend(MyArrayType, 'mymod.mysubmod')
+```
+
 If you want to directly provide a missing or alternative implementation of some function for a particular backend you can swap one in with ``autoray.register_function``:
 
 ```python
@@ -166,7 +174,8 @@ ar.do('sum', x)
 ```
 
 Though be careful, if you call ``register_function`` again it will now wrap the *new* function!
-
+Note you can combine ``register_backend`` and ``register_function`` to
+dynamically define array types and functions from anywhere.
 
 ## Lazy Computation
 

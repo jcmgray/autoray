@@ -140,13 +140,27 @@ def backend_like(like):
         set_backend(old_backend)
 
 
+_CUSTOM_BACKENDS = {}
+
+
+def register_backend(cls, name):
+    """Register the name (and by default the module or submodule) of a custom
+    array class.
+    """
+    if not isinstance(cls, type):
+        raise TypeError("The array class itself should be supplied.")
+
+    global _CUSTOM_BACKENDS
+    _CUSTOM_BACKENDS[cls] = name
+
+
 @functools.lru_cache(None)
 def _infer_class_backend_cached(T):
     if issubclass(T, _numpy.ndarray):
         return "numpy"
 
-    if (T.__module__, T.__name__) == ("autoray.lazy.core", "LazyArray"):
-        return "autoray.lazy"
+    if T in _CUSTOM_BACKENDS:
+        return _CUSTOM_BACKENDS[T]
 
     lib = T.__module__.split(".")[0]
 

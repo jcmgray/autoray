@@ -10,6 +10,7 @@ import numpy as np
 from ..autoray import (
     get_lib_fn,
     infer_backend,
+    register_backend,
     get_dtype_name,
     register_function,
     astype,
@@ -676,6 +677,9 @@ class LazyArray:
             f"dtype={self.dtype}, "
             f"backend='{self.backend}')>"
         )
+
+
+register_backend(LazyArray, "autoray.lazy")
 
 
 def ensure_lazy(array):
