@@ -644,5 +644,5 @@ def test_compose():
     x = ar.do('ones', (2,), like='numpy')
     y = ar.do('mycomposedfn', x)
     assert ar.do('allclose', x, y)
-    ar.register_function('numpy', 'mycomposedfn', lambda x: 1)
+    mycomposedfn.register('numpy', lambda x: 1)
     assert ar.do('mycomposedfn', x) == 1

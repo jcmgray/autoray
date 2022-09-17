@@ -1382,12 +1382,15 @@ class Composed:
         self._supply_backend = "backend" in signature(fn).parameters
         _COMPOSED_FUNCTION_GENERATORS[self._name] = self.make_function
 
+    def register(self, backend, fn):
+        register_function(backend, self._name, fn)
+
     def make_function(self, backend):
         if self._supply_backend:
             fn = functools.partial(self._default_fn, backend=backend)
         else:
             fn = self._default_fn
-        register_function(backend, self._name, fn)
+        self.register(backend, fn)
         return fn
 
     def __call__(self, *args, like=None, **kwargs):
