@@ -17,6 +17,8 @@ from .core import (
     sort,
     argsort,
     stack,
+    concatenate,
+    split,
     # binary
     multiply,
     add,
@@ -59,6 +61,7 @@ __all__ = (
     "shared_intermediates",
     "linalg",
     "array",
+    # basic and shape changing functions
     "transpose",
     "reshape",
     "tensordot",
@@ -72,12 +75,14 @@ __all__ = (
     "sort",
     "argsort",
     "stack",
-    # binary
+    "concatenate",
+    "split",
+    # binary functions
     "multiply",
     "add",
     "floordivide",
     "truedivide",
-    # unary
+    # unary functions
     "sin",
     "cos",
     "tan",
@@ -100,7 +105,7 @@ __all__ = (
     "angle",
     "real",
     "imag",
-    # reductions
+    # reduction functions
     "sum",
     "prod",
     "min",

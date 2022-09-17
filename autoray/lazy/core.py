@@ -31,7 +31,6 @@ class LazyArray:
         "_args",
         "_kwargs",
         "_shape",
-        "_dtype",
         "_data",
         "_deps",
     )
@@ -1201,6 +1200,42 @@ def stack(arrays, axis=0):
         deps=tuple(x for x in arrays if isinstance(x, LazyArray)),
     )
 
+
+@lazy_cache("concatenate")
+def concatenate(arrays, axis=0):
+    arrays = tuple(arrays)
+    newshape = list(arrays[0].shape)
+    newshape[axis] = sum(a.shape[axis] for a in arrays)
+
+    backend = infer_backend(arrays[0])
+    fn = get_lib_fn(backend, "concatenate")
+    return LazyArray(
+        backend=backend,
+        fn=fn,
+        args=(arrays, axis),
+        kwargs=None,
+        shape=tuple(newshape),
+        deps=tuple(x for x in arrays if isinstance(x, LazyArray)),
+    )
+
+
+@lazy_cache("split")
+def split(ary, indices_or_sections, axis=0):
+    ary = ensure_lazy(ary)
+
+    d = ary.shape[axis]
+    num_subarrays = len(indices_or_sections) + 1
+    div_points = [0] + list(indices_or_sections) + [d]
+
+    sub_arys = []
+    selector = [slice(None)] * ary.ndim
+    for i in range(num_subarrays):
+        st = div_points[i]
+        end = div_points[i + 1]
+        selector[axis] = slice(st, end)
+        sub_arys.append(ary[tuple(selector)])
+
+    return tuple(sub_arys)
 
 def make_binary_func(name, fn):
     @lazy_cache(name)
