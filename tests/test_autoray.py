@@ -631,3 +631,18 @@ def test_backend_like(backend):
         x = ar.do("ones", (2,), like=backend)
         assert ar.infer_backend(x) == backend
     assert ar.get_backend() is None
+
+
+def test_compose():
+
+    @ar.compose
+    def mycomposedfn(x, backend):
+        x = ar.do('exp', x, like=backend)
+        x = ar.do('log', x, like=backend)
+        return x
+
+    x = ar.do('ones', (2,), like='numpy')
+    y = mycomposedfn(x)
+    assert ar.do('allclose', x, y)
+    ar.register_function('numpy', 'mycomposedfn', lambda x: 1)
+    assert ar.do('mycomposedfn', x) == 1

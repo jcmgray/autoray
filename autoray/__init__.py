@@ -18,6 +18,7 @@ from .autoray import (
     to_numpy,
     register_backend,
     register_function,
+    compose,
     # the numpy mimic submodule
     numpy,
 )
@@ -45,6 +46,7 @@ __all__ = (
     "to_numpy",
     "register_backend",
     "register_function",
+    "compose",
     # the numpy mimic submodule
     "numpy",
     # abstract function compilation

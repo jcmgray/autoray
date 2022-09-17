@@ -21,6 +21,7 @@ import importlib
 import functools
 import itertools
 import contextlib
+from inspect import signature
 from collections import OrderedDict, defaultdict
 
 import numpy as _numpy
@@ -75,13 +76,7 @@ def do(fn, *args, like=None, **kwargs):
         >>> do('eye', 3, like=x_tf)
         <tf.Tensor: id=91, shape=(3, 3), dtype=float32>
     """
-    if like is None:
-        backend = _infer_auto(fn, *args, **kwargs)
-    elif isinstance(like, str):
-        backend = like
-    else:
-        backend = infer_backend(like)
-
+    backend = choose_backend(fn, *args, like=like, **kwargs)
     return get_lib_fn(backend, fn)(*args, **kwargs)
 
 
@@ -176,6 +171,22 @@ def infer_backend(array):
     ``numpy`` is the desired backend.
     """
     return _infer_class_backend_cached(array.__class__)
+
+
+def choose_backend(fn, *args, like=None, **kwargs):
+    """Choose a backend based on function name, arguments, and the ``like``
+    keyword argument. The default, if ``like`` is not specified, is to infer
+    the backend from the function call, the default of which is simply to use
+    the first argument, if no custom dispatcher is found. Otherwise the
+    backend is chosen based on the ``like`` argument - which can be an explicit
+    backend name or an arbitrary object.
+    """
+    if like is None:
+        return _infer_auto(fn, *args, **kwargs)
+    elif isinstance(like, str):
+        return like
+    else:
+        return infer_backend(like)
 
 
 # ------------------- importing and caching the function -------------------- #
@@ -1347,3 +1358,49 @@ def register_function(backend, name, fn, wrap=False):
         _FUNCS[backend, name] = fn(old)
     else:
         _FUNCS[backend, name] = fn
+
+
+class Composed:
+    """Compose an ``autoray.do`` using function. See the main wrapper
+    ``compose``.
+    """
+
+    def __init__(self, fn, name=None):
+        self._default_implementation = fn
+        if name is None:
+            name = fn.__name__
+        self._name = name
+        self._supply_backend = "backend" in signature(fn).parameters
+
+    def __call__(self, *args, like=None, **kwargs):
+        backend = choose_backend(self._name, *args, like=like, **kwargs)
+        try:
+            fn = get_lib_fn(backend, self._name)
+        except ImportError:
+            if self._supply_backend:
+                fn = functools.partial(
+                    self._default_implementation, backend=backend
+                )
+            else:
+                fn = self._default_implementation
+            register_function(backend, self._name, fn)
+        return fn(*args, **kwargs)
+
+    def __repr__(self):
+        return f"Composed('{self._name}')"
+
+
+def compose(fn, *, name=None):
+    """Take a function consisting of multiple ``autoray.do`` calls and compose
+    it into a new, single, named function, registered with ``autoray.do``.
+
+    This creates a default implementation of this function for each new backend
+    encountered without explicitly having to write each out, but also allows
+    for specific implementations to be overridden for specific backends.
+
+    If the function takes a ``backend`` argument, it will be supplied with the
+    backend name, to save having to re-choose the backend.
+    """
+    if fn is None:
+        return functools.partial(compose, name=name)
+    return functools.wraps(fn)(Composed(fn, name))
