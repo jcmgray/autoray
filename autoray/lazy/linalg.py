@@ -8,10 +8,7 @@ from ..autoray import get_lib_fn
 from .core import (
     ensure_lazy,
     lazy_cache,
-    dtype_real_equiv,
-    dtype_complex_equiv,
     find_common_backend,
-    find_common_dtype,
 )
 
 
@@ -22,9 +19,8 @@ def svd(a):
     lsvd = a.to(fn_svd, (a,), shape=(3,))
     m, n = a.shape
     k = min(m, n)
-    rdtype = dtype_real_equiv(a.dtype)
     lU = lsvd.to(operator.getitem, (lsvd, 0), shape=(m, k))
-    ls = lsvd.to(operator.getitem, (lsvd, 1), shape=(k,), dtype=rdtype)
+    ls = lsvd.to(operator.getitem, (lsvd, 1), shape=(k,))
     lV = lsvd.to(operator.getitem, (lsvd, 2), shape=(k, n))
     return lU, ls, lV
 
@@ -46,9 +42,8 @@ def eig(a):
     fn_eig = get_lib_fn(a.backend, "linalg.eig")
     leig = a.to(fn_eig, (a,), shape=(2,))
     m = a.shape[0]
-    newdtype = dtype_complex_equiv(a.dtype)
-    el = leig.to(operator.getitem, (leig, 0), shape=(m,), dtype=newdtype)
-    ev = leig.to(operator.getitem, (leig, 1), shape=(m, m), dtype=newdtype)
+    el = leig.to(operator.getitem, (leig, 0), shape=(m,))
+    ev = leig.to(operator.getitem, (leig, 1), shape=(m, m))
     return el, ev
 
 
@@ -58,8 +53,7 @@ def eigh(a):
     fn_eigh = get_lib_fn(a.backend, "linalg.eigh")
     leigh = a.to(fn_eigh, (a,), shape=(2,))
     m = a.shape[0]
-    rdtype = dtype_real_equiv(a.dtype)
-    el = leigh.to(operator.getitem, (leigh, 0), shape=(m,), dtype=rdtype)
+    el = leigh.to(operator.getitem, (leigh, 0), shape=(m,))
     ev = leigh.to(operator.getitem, (leigh, 1), shape=(m, m))
     return el, ev
 
@@ -84,9 +78,8 @@ def solve(a, b):
     b = ensure_lazy(b)
     backend = find_common_backend(a, b)
     fn_solve = get_lib_fn(backend, "linalg.solve")
-    dtype = find_common_dtype(a, b)
     return b.to(
-        backend=backend, fn=fn_solve, args=(a, b), dtype=dtype, deps=(a, b),
+        backend=backend, fn=fn_solve, args=(a, b), deps=(a, b),
     )
 
 
@@ -95,5 +88,4 @@ def norm(x, order=None):
     x = ensure_lazy(x)
     fn_inv = get_lib_fn(x.backend, "linalg.norm")
     newshape = ()
-    newdtype = dtype_real_equiv(x.dtype)
-    return x.to(fn_inv, (x, order), shape=newshape, dtype=newdtype)
+    return x.to(fn_inv, (x, order), shape=newshape)

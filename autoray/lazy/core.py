@@ -37,7 +37,7 @@ class LazyArray:
     )
 
     def __init__(
-        self, backend, fn, args, kwargs, shape, dtype, deps=None,
+        self, backend, fn, args, kwargs, shape, deps=None,
     ):
         # info required to perform the computation
         self._backend = backend
@@ -50,7 +50,6 @@ class LazyArray:
 
         # resulting array information
         self._shape = shape
-        self._dtype = dtype
         self._data = None
 
         # lazy arrays this ``LazyArray`` depends on
@@ -69,20 +68,18 @@ class LazyArray:
         obj._backend = infer_backend(data)
         obj._fn = obj._args = obj._kwargs = None
         obj._shape = tuple(map(int, data.shape))
-        obj._dtype = get_dtype_name(data)
         obj._data = data
         obj._deps = ()
         return obj
 
     @classmethod
-    def from_shape(cls, shape, backend='numpy', dtype=None):
+    def from_shape(cls, shape, backend='numpy'):
         """Create a new ``LazyArray`` with a given shape.
         """
         obj = cls.__new__(cls)
         obj._backend = backend
         obj._fn = obj._args = obj._kwargs = None
         obj._shape = tuple(map(int, shape))
-        obj._dtype = dtype
         obj._data = '__PLACEHOLDER__'
         obj._deps = ()
         return obj
@@ -94,11 +91,10 @@ class LazyArray:
         kwargs=None,
         backend=None,
         shape=None,
-        dtype=None,
         deps=None,
     ):
         """Create a new ``LazyArray``, by default propagating backend, shape,
-        dtype and deps from the the current LazyArray.
+        and deps from the the current LazyArray.
         """
         return LazyArray(
             fn=fn,
@@ -106,7 +102,6 @@ class LazyArray:
             kwargs=kwargs,
             backend=backend if backend is not None else self._backend,
             shape=shape if shape is not None else self.shape,
-            dtype=dtype if dtype is not None else self.dtype,
             deps=deps if deps is not None else (self,),
         )
 
@@ -582,10 +577,6 @@ class LazyArray:
         return functools.reduce(operator.mul, self.shape, 1)
 
     @property
-    def dtype(self):
-        return self._dtype
-
-    @property
     def backend(self):
         return self._backend
 
@@ -674,7 +665,6 @@ class LazyArray:
             f"<{self.__class__.__name__}("
             f"fn={self.fn_name}, "
             f"shape={self.shape}, "
-            f"dtype={self.dtype}, "
             f"backend='{self.backend}')>"
         )
 
@@ -964,11 +954,11 @@ def find_broadcast_shape(xshape, yshape):
 
 # -------------------------------- interface -------------------------------- #
 
-def Variable(shape, backend=None, dtype=None):
+def Variable(shape, backend=None):
     """Create a ``LazyArray`` from a shape only, representing a leaf node
     in the computational graph. It can only act as a placeholder for data.
     """
-    return LazyArray.from_shape(shape, backend=backend, dtype=dtype)
+    return LazyArray.from_shape(shape, backend=backend)
 
 
 @lazy_cache("array")
@@ -1092,7 +1082,6 @@ def tensordot(a, b, axes=2):
         d for i, d in enumerate(a.shape) if i not in axes[0]
     ) + tuple(d for i, d in enumerate(b.shape) if i not in axes[1])
 
-    newdtype = find_common_dtype(a, b)
     backend = find_common_backend(a, b)
     fn_tensordot = get_lib_fn(backend, "tensordot")
 
@@ -1102,7 +1091,6 @@ def tensordot(a, b, axes=2):
         args=(a, b, axes),
         kwargs=None,
         shape=newshape,
-        dtype=newdtype,
         deps=tuple(x for x in (a, b) if isinstance(x, LazyArray)),
     )
 
@@ -1121,7 +1109,6 @@ def einsum(*operands):
     newshape = tuple(size_dict[char] for char in output)
 
     backend = find_common_backend(*larrays)
-    newdtype = find_common_dtype(*larrays)
     fn_einsum = get_lib_fn(backend, "einsum")
 
     return LazyArray(
@@ -1130,7 +1117,6 @@ def einsum(*operands):
         args=(eq, *larrays),
         kwargs=None,
         shape=newshape,
-        dtype=newdtype,
         deps=tuple(x for x in larrays if isinstance(x, LazyArray)),
     )
 
@@ -1144,7 +1130,6 @@ def trace(a):
 @lazy_cache("matmul")
 def matmul(x1, x2):
     backend = find_common_backend(x1, x2)
-    newdtype = find_common_dtype(x1, x2)
     newshape = (*x1.shape[:-1], *x2.shape[1:])
     return LazyArray(
         backend=backend,
@@ -1152,7 +1137,6 @@ def matmul(x1, x2):
         args=(x1, x2),
         kwargs=None,
         shape=newshape,
-        dtype=newdtype,
         deps=tuple(x for x in (x1, x2) if isinstance(x, LazyArray)),
     )
 
@@ -1160,7 +1144,6 @@ def matmul(x1, x2):
 @lazy_cache("kron")
 def kron(x1, x2):
     backend = find_common_backend(x1, x2)
-    newdtype = find_common_dtype(x1, x2)
     newshape = tuple(d1 * d2 for d1, d2 in zip(x1.shape, x2.shape))
     fn_kron = get_lib_fn(backend, "kron")
     return LazyArray(
@@ -1169,7 +1152,6 @@ def kron(x1, x2):
         args=(x1, x2),
         kwargs=None,
         shape=newshape,
-        dtype=newdtype,
         deps=tuple(x for x in (x1, x2) if isinstance(x, LazyArray)),
     )
 
@@ -1198,14 +1180,13 @@ def sort(a, axis=-1):
 def argsort(a, axis=-1):
     a = ensure_lazy(a)
     return a.to(
-        fn=get_lib_fn(a.backend, "argsort"), args=(a, axis), dtype="int",
+        fn=get_lib_fn(a.backend, "argsort"), args=(a, axis),
     )
 
 
 @lazy_cache("stack")
 def stack(arrays, axis=0):
     arrays = tuple(arrays)
-    newdtype = find_common_dtype(*arrays)
     newshape = list(arrays[0].shape)
     newshape.insert(axis if axis >= 0 else axis + 1, len(arrays))
 
@@ -1217,7 +1198,6 @@ def stack(arrays, axis=0):
         args=(arrays, axis),
         kwargs=None,
         shape=tuple(newshape),
-        dtype=newdtype,
         deps=tuple(x for x in arrays if isinstance(x, LazyArray)),
     )
 
@@ -1225,7 +1205,6 @@ def stack(arrays, axis=0):
 def make_binary_func(name, fn):
     @lazy_cache(name)
     def binary_func(x1, x2):
-        newdtype = find_common_dtype(x1, x2)
         x1shape = getattr(x1, "shape", ())
         x2shape = getattr(x2, "shape", ())
         newshape = find_broadcast_shape(x1shape, x2shape)
@@ -1235,7 +1214,6 @@ def make_binary_func(name, fn):
             args=(x1, x2),
             kwargs=None,
             shape=newshape,
-            dtype=newdtype,
             deps=tuple(x for x in (x1, x2) if isinstance(x, LazyArray)),
         )
 
@@ -1251,7 +1229,6 @@ pow_ = make_binary_func("pow", operator.pow)
 
 
 def complex_(re, im):
-    newdtype = dtype_complex_equiv(find_common_dtype(re, im))
     newshape = find_broadcast_shape(re.shape, im.shape)
     backend = find_common_backend(re, im)
     fn_complex = get_lib_fn(backend, "complex")
@@ -1261,25 +1238,16 @@ def complex_(re, im):
         args=(re, im),
         kwargs=None,
         shape=newshape,
-        dtype=newdtype,
         deps=tuple(x for x in (re, im) if isinstance(x, LazyArray)),
     )
 
 
 def make_unary_func(name, to_real=False):
 
-    if to_real:
-        def get_newdtype(x):
-            return dtype_real_equiv(x.dtype)
-    else:
-        def get_newdtype(x):
-            return None
-
     @lazy_cache(name)
     def unary_func(x):
         x = ensure_lazy(x)
-        newdtype = get_newdtype(x)
-        return x.to(fn=get_lib_fn(x.backend, name), dtype=newdtype,)
+        return x.to(fn=get_lib_fn(x.backend, name))
 
     return unary_func
 
@@ -1351,7 +1319,7 @@ def lazy_get_dtype_name(x):
 @lazy_cache("astype")
 def lazy_astype(x, dtype_name):
     x = ensure_lazy(x)
-    return x.to(fn=astype, args=(x, dtype_name), dtype=dtype_name,)
+    return x.to(fn=astype, args=(x, dtype_name))
 
 
 register_function("autoray.lazy", "get_dtype_name", lazy_get_dtype_name)
