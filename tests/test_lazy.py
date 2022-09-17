@@ -30,7 +30,6 @@ def test_manual_construct():
         args=((x0, x1), {'1': x2}),
         kwargs=dict(c={'sub': (x3, x4)}),
         shape=(7,),
-        dtype='float64',
     )
 
     assert y.deps == (x0, x1, x2, x3, x4)
@@ -62,7 +61,6 @@ def wrap_strict_check(larray):
     def checked(*args, **kwargs):
         data = fn_orig(*args, **kwargs)
         assert tuple(data.shape) == larray.shape
-        assert get_dtype_name(data) == larray.dtype
         assert infer_backend(data) == larray.backend
         return data
 
@@ -84,7 +82,7 @@ def test_lazy_mgs(backend):
     make_strict(ly)
     assert str(ly) == (
         f"<LazyArray(fn=stack, shape=(5, 5), "
-        f"dtype=float64, backend='{backend}')>"
+        f"backend='{backend}')>"
     )
     assert isinstance(ly, lazy.LazyArray)
     hmax = ly.history_max_size()
@@ -247,7 +245,6 @@ def test_eigh(backend, dtype):
     x = lazy.array(gen_rand((5, 5), backend, dtype))
     x = x + x.H
     el, ev = do("linalg.eigh", x)
-    assert get_dtype_name(ev) == dtype
     assert el.shape == (5,)
     assert ev.shape == (5, 5)
     ly = ev @ (do("reshape", el, (-1, 1)) * ev.H)

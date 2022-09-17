@@ -193,6 +193,13 @@ def choose_backend(fn, *args, like=None, **kwargs):
 
 
 def import_lib_fn(backend, fn):
+
+    # first check explicitly composed functions -> if the function hasn't been
+    # called directly yet, it won't have been loaded into the cache, and needs
+    # generating before e.g. the ``do`` verrsion will work
+    if fn in _COMPOSED_FUNCTION_GENERATORS:
+        return _COMPOSED_FUNCTION_GENERATORS[fn](backend)
+
     try:
         # alias for global module,
         #     e.g. 'decimal' -> 'math'
@@ -701,6 +708,8 @@ _CUSTOM_WRAPPERS = {}
 # actual cache of funtions to use - this is populated lazily and can be used
 #     to directly set an implementation of a function for a specific backend
 _FUNCS = {}
+
+_COMPOSED_FUNCTION_GENERATORS = {}
 
 # ------------------------------ standard-lib ------------------------------- #
 
@@ -1366,24 +1375,27 @@ class Composed:
     """
 
     def __init__(self, fn, name=None):
-        self._default_implementation = fn
+        self._default_fn = fn
         if name is None:
             name = fn.__name__
         self._name = name
         self._supply_backend = "backend" in signature(fn).parameters
+        _COMPOSED_FUNCTION_GENERATORS[self._name] = self.make_function
+
+    def make_function(self, backend):
+        if self._supply_backend:
+            fn = functools.partial(self._default_fn, backend=backend)
+        else:
+            fn = self._default_fn
+        register_function(backend, self._name, fn)
+        return fn
 
     def __call__(self, *args, like=None, **kwargs):
         backend = choose_backend(self._name, *args, like=like, **kwargs)
         try:
             fn = get_lib_fn(backend, self._name)
         except ImportError:
-            if self._supply_backend:
-                fn = functools.partial(
-                    self._default_implementation, backend=backend
-                )
-            else:
-                fn = self._default_implementation
-            register_function(backend, self._name, fn)
+            fn = self.get_or_make_function(backend)
         return fn(*args, **kwargs)
 
     def __repr__(self):
