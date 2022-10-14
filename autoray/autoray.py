@@ -1398,7 +1398,7 @@ class Composed:
         try:
             fn = get_lib_fn(backend, self._name)
         except ImportError:
-            fn = self.get_or_make_function(backend)
+            fn = self.make_function(backend)
         return fn(*args, **kwargs)
 
     def __repr__(self):
