@@ -6,7 +6,6 @@ dependencies:
   - numpy
   - dask
   - pytorch>=1.4
-  - cpuonly
   - sparse
   - matplotlib
   - networkx
