@@ -646,3 +646,9 @@ def test_compose():
     assert ar.do('allclose', x, y)
     mycomposedfn.register('numpy', lambda x: 1)
     assert ar.do('mycomposedfn', x) == 1
+
+    @mycomposedfn.register("numpy")
+    def f(x):
+        return 2
+
+    assert ar.do('mycomposedfn', x) == 2

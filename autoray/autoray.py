@@ -1382,10 +1382,22 @@ class Composed:
         self._supply_backend = "backend" in signature(fn).parameters
         _COMPOSED_FUNCTION_GENERATORS[self._name] = self.make_function
 
-    def register(self, backend, fn):
-        register_function(backend, self._name, fn)
+    def register(self, backend, fn=None):
+        """Register a different implementation for ``backend``.
+        """
+        if fn is not None:
+            register_function(backend, self._name, fn)
+        else:
+            # wrapper form
+            def wrapper(fn):
+                register_function(backend, self._name, fn)
+                return fn
+
+            return wrapper
 
     def make_function(self, backend):
+        """Make a new function for the specific ``backend``.
+        """
         if self._supply_backend:
             fn = functools.partial(self._default_fn, backend=backend)
         else:
@@ -1415,6 +1427,26 @@ def compose(fn, *, name=None):
 
     If the function takes a ``backend`` argument, it will be supplied with the
     backend name, to save having to re-choose the backend.
+
+    Specific implementations can be provided by calling the ``register`` method
+    of the composed function, or it can itself be used like a decorator::
+
+        @compose
+        def foo(x):
+            ...
+
+        @foo.register("numpy")
+        @numba.njit
+        def foo_numba(x):
+            ...
+
+    Parameters
+    ----------
+    fn : callable
+        The funtion to compose, and its default implementation.
+    name : str, optional
+        The name of the composed function. If not provided, the name of the
+        function will be used.
     """
     if fn is None:
         return functools.partial(compose, name=name)
