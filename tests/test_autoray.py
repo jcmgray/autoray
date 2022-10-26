@@ -18,7 +18,6 @@ for lib in ["cupy", "dask", "tensorflow", "torch", "mars", "jax", "sparse"]:
             config.update("jax_enable_x64", True)
             config.update("jax_platform_name", "cpu")
             os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-
     else:
         BACKENDS.append(
             pytest.param(
