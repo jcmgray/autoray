@@ -1,13 +1,13 @@
 channels:
-  - pytorch
+  # - pytorch
   - defaults
   - conda-forge
 dependencies:
   - numpy
   - tensorflow>=2
   - dask
-  - pytorch>=1.4
-  - cpuonly
+  # - pytorch>=1.4
+  # - cpuonly
   - sparse
   - numba>=0.56
   - matplotlib
@@ -18,3 +18,5 @@ dependencies:
   - coveralls
   - codecov
   - pip
+  - pip:
+    - torch
