@@ -389,7 +389,7 @@ Currently the one place this isn't true is ``autoray.do('linalg.svd', x)`` where
 
 # Installation
 
-You can install ``autoray`` via [conda-forge](https://conda-forge.org/) as well as with ``pip``. Alternatively, simply copy the monolithic ``autoray.py`` into your project internally (if dependencies aren't your thing) to provide ``do``.
+You can install ``autoray`` via [conda-forge](https://conda-forge.org/) as well as with ``pip``. Alternatively, simply copy the monolithic ``autoray.py`` into your project internally (if dependencies aren't your thing) to provide ``do``. There are no dependencies.
 
 **Alternatives**
 

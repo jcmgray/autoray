@@ -5,8 +5,6 @@ import itertools
 import contextlib
 import collections
 
-import numpy as np
-
 from ..autoray import (
     get_lib_fn,
     infer_backend,
@@ -360,6 +358,7 @@ class LazyArray:
         return_fig : bool, optional
             If True, return the figure object, else just show and close it.
         """
+        import numpy as np
         import matplotlib.pyplot as plt
 
         y = np.array(self.history_size_footprint())
@@ -402,6 +401,7 @@ class LazyArray:
         """Convert this ``LazyArray`` into a ``networkx.DiGraph``, injecting
         various plotting information as properties.
         """
+        import numpy as np
         import networkx as nx
 
         if variables is not None:
@@ -910,6 +910,7 @@ def dtype_complex_equiv(dtype_name):
 
 @functools.lru_cache(None)
 def _find_common_dtype(array_types, scalar_types):
+    import numpy as np
     return np.find_common_type(array_types, scalar_types).name
 
 

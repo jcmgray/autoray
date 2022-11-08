@@ -24,8 +24,6 @@ import contextlib
 from inspect import signature
 from collections import OrderedDict, defaultdict
 
-import numpy as _numpy
-
 
 def do(fn, *args, like=None, **kwargs):
     """Do function named ``fn`` on ``(*args, **kwargs)``, peforming single
@@ -151,8 +149,12 @@ def register_backend(cls, name):
 
 @functools.lru_cache(None)
 def _infer_class_backend_cached(T):
-    if issubclass(T, _numpy.ndarray):
-        return "numpy"
+    try:
+        import numpy as _numpy
+        if issubclass(T, _numpy.ndarray):
+            return "numpy"
+    except ImportError:
+        pass
 
     if T in _CUSTOM_BACKENDS:
         return _CUSTOM_BACKENDS[T]

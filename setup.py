@@ -23,11 +23,9 @@ setup(
     author_email="johnniemcgray@gmail.com",
     license='Apache',
     packages=find_packages(exclude=['deps', 'tests*']),
-    install_requires=[
-        'numpy',
-    ],
     extras_require={
         'tests': [
+            'numpy',
             'coverage',
             'pytest',
             'pytest-cov',
@@ -42,6 +40,7 @@ setup(
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
     ],
     keywords='array agnostic numeric numpy cupy dask tensorflow jax autograd',
     long_description_content_type='text/markdown',
