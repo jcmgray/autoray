@@ -20,6 +20,7 @@ jobs:
         echo $CONDA/bin >> $GITHUB_PATH
     - name: Install dependencies
       run: |
+        conda config --append channels conda-forge
         conda install mamba
         mamba env update --file ci/requirements/py310.yml --name base
     - name: Test with pytest
