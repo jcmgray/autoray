@@ -632,6 +632,47 @@ def test_backend_like(backend):
     assert ar.get_backend() is None
 
 
+def test_nested_multihreaded_backend_like():
+    from autoray.autoray import choose_backend
+    from concurrent.futures import ThreadPoolExecutor
+
+    def foo(backend1, backend2):
+        bs = []
+        bs.append((ar.get_backend(), choose_backend('test', 1),))
+        with ar.backend_like(backend1):
+            bs.append((ar.get_backend(), choose_backend('test', 1),))
+            with ar.backend_like(backend2):
+                bs.append((ar.get_backend(), choose_backend('test', 1),))
+            bs.append((ar.get_backend(), choose_backend('test', 1),))
+        bs.append((ar.get_backend(), choose_backend('test', 1)))
+        return bs
+
+    b_exp = [('A', 'A'), ('B', 'B'), ('C', 'C'), ('B', 'B'), ('A', 'A')]
+    with ar.backend_like('A'):
+        b = foo('B', 'C')
+    assert b == b_exp
+
+    b_exp = [
+        ('A', 'A'), ('B', 'B'), (None, 'builtins'), ('B', 'B'), ('A', 'A')
+    ]
+    with ar.backend_like('A'):
+        b = foo('B', None)
+    assert b == b_exp
+
+    with ThreadPoolExecutor(3) as pool:
+        b_exp = [(None, 'A'), ('B', 'B'), ('C', 'C'), ('B', 'B'), (None, 'A')]
+        with ar.backend_like('A'):
+            bs = [pool.submit(foo, 'B', 'C') for _ in range(3)]
+        for b in bs:
+            assert b.result() == b_exp
+
+        b_exp = [(None, 'A'), ('B', 'B'), (None, 'A'), ('B', 'B'), (None, 'A')]
+        with ar.backend_like('A'):
+            bs = [pool.submit(foo, 'B', None) for _ in range(3)]
+        for b in bs:
+            assert b.result() == b_exp
+
+
 def test_compose():
 
     @ar.compose

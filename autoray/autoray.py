@@ -20,6 +20,7 @@ limitations under the License.
 import importlib
 import functools
 import itertools
+import threading
 import contextlib
 from inspect import signature
 from collections import OrderedDict, defaultdict
@@ -86,51 +87,160 @@ def _default_infer_from_sig(fn, *args, **kwargs):
     return infer_backend(dispatch_arg)
 
 
-_infer_auto = _default_infer_from_sig
 _global_backend = None
+_inferrer_global = _default_infer_from_sig
+
+# this is the function that autoray uses when `do` is called without an
+# explicit like/backend argument. It is set to `_default_infer_from_sig` by
+# default, but can be set to `_always_the_same` if a global backend is set e.g.
+_infer_auto = _inferrer_global
+
+# if a thread that isn't the 'importing' thread tries to set a backend, this
+# by default turns on thread aware dispatching, but once such custom sub
+# backends have been reset, the global values above are used again.
+_global_backends_threadaware = {}
+_inferrers_threadaware = {}
+_importing_thrid = threading.get_ident()
+_backend_lock = threading.Lock()
+
+
+def _default_infer_from_sig_threadaware(fn, *args, **kwargs):
+    # check for a thread aware inferrer, default to the global inferrer
+    thrid = threading.get_ident()
+    return _inferrers_threadaware.get(thrid, _inferrer_global)(
+        fn, *args, **kwargs
+    )
 
 
 def _always_the_same(*args, x, **kwargs):
     return x
 
 
-def get_backend():
-    """Return the global backend if it has been set, otherwise ``None``.
+def get_backend(get_globally="auto"):
+    """Return the universally set backend, if any.
+
+    Parameters
+    ----------
+    get_globally : {"auto", False, True}, optional
+        Which backend to return:
+
+        - True: return the globally set backend, if any.
+        - False: return the backend set for the current thread, if any.
+        - "auto": return the globally set backend, if this thread is the thread
+          that imported autoray. Otherwise return the backend set for the
+          current thread, if any.
+
+    Returns
+    -------
+    backend : str or None
+        The name of the backend, or None if no backend is set.
     """
-    global _global_backend
-    return _global_backend
+    if get_globally == "auto":
+        get_globally = (threading.get_ident() == _importing_thrid)
+
+    if get_globally:
+        backend = _global_backend
+    else:
+        thrid = threading.get_ident()
+        backend = _global_backends_threadaware.get(thrid, None)
+
+    # threadprint(f'getting: {backend}')
+    return backend
 
 
-def set_backend(like):
+def set_backend(like, set_globally='auto'):
     """Set a default global backend. The argument ``like`` can be an explicit
     backend name or an ``array``.
+
+    Parameters
+    ----------
+    like : str or array
+        The backend to set. If an array, the backend of the array's class will
+        be set.
+    set_globally : {"auto", False, True}, optional
+        Whether to set the backend globally or for the current thread:
+
+        - True: set the backend globally.
+        - False: set the backend for the current thread.
+        - "auto": set the backend globally if this thread is the thread that
+          imported autoray. Otherwise set the backend for the current thread.
+
+        Only one thread should ever call this function with
+        ``set_globally=True``, (by default this is importing thread).
     """
     global _global_backend
     global _infer_auto
+    global _inferrer_global
 
     if like is None:
-        _global_backend = None
-        _infer_auto = _default_infer_from_sig
+        backend = None
+        inferrer = _default_infer_from_sig
     elif isinstance(like, str):
-        _global_backend = like
-        _infer_auto = functools.partial(_always_the_same, x=_global_backend)
+        backend = like
+        inferrer = functools.partial(_always_the_same, x=backend)
     else:
-        _global_backend = infer_backend(like)
-        _infer_auto = functools.partial(_always_the_same, x=_global_backend)
+        backend = infer_backend(like)
+        inferrer = functools.partial(_always_the_same, x=backend)
+
+    if set_globally == 'auto':
+        set_globally = (threading.get_ident() == _importing_thrid)
+
+    if set_globally:
+        _global_backend = backend
+        _inferrer_global = inferrer
+        if not _inferrers_threadaware:
+            # only switch the actual function if no threaded settings
+            _infer_auto = inferrer
+    else:
+        thrid = threading.get_ident()
+        _backend_lock.acquire()
+        if backend is None:
+            _global_backends_threadaware.pop(thrid)
+            _inferrers_threadaware.pop(thrid)
+        else:
+            _global_backends_threadaware[thrid] = backend
+            _inferrers_threadaware[thrid] = inferrer
+
+        if _inferrers_threadaware:
+            # a 'sub backend' has been set, so we need to be thread aware
+            _infer_auto = _default_infer_from_sig_threadaware
+        else:
+            # no 'sub backend' has been set anymore, so we can ignore threads
+            # and just use the global inferrer
+            _infer_auto = _inferrer_global
+        _backend_lock.release()
 
 
 @contextlib.contextmanager
-def backend_like(like):
-    """Context manager for setting a default backend. Currently not thread
-    safe. The argument ``like`` can be an explicit backend name or an
-    ``array`` to infer it from.
+def backend_like(like, set_globally='auto'):
+    """Context manager for setting a default backend. The argument ``like`` can
+    be an explicit backend name or an ``array`` to infer it from.
+
+    Parameters
+    ----------
+    like : str or array
+        The backend to set. If an array, the backend of the array's class will
+        be set.
+    set_globally : {"auto", False, True}, optional
+        Whether to set the backend globally or for the current thread:
+
+        - True: set the backend globally.
+        - False: set the backend for the current thread.
+        - "auto": set the backend globally if this thread is the thread that
+          imported autoray. Otherwise set the backend for the current thread.
+
+        Only one thread should ever call this function with
+        ``set_globally=True``, (by default this is importing thread).
     """
-    old_backend = get_backend()
+    if set_globally == 'auto':
+        set_globally = (threading.get_ident() == _importing_thrid)
+
+    old_backend = get_backend(get_globally=set_globally)
     try:
-        set_backend(like)
+        set_backend(like, set_globally)
         yield
     finally:
-        set_backend(old_backend)
+        set_backend(old_backend, set_globally)
 
 
 _CUSTOM_BACKENDS = {}
