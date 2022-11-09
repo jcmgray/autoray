@@ -16,6 +16,7 @@ jobs:
       uses: mamba-org/provision-with-micromamba@main
       with:
         environment-file: ci/requirements/py310.yml
+        environment-name: py310test
 
     - name: Test with pytest
       shell: bash -l {0}
