@@ -1076,7 +1076,7 @@ def getitem(a, key):
 def tensordot(a, b, axes=2):
 
     if isinstance(axes, int):
-        axes = (tuple(range(a.ndim - axes, a.ndim)), tuple(range(b.ndim)))
+        axes = (tuple(range(a.ndim - axes, a.ndim)), tuple(range(axes)))
 
     newshape = tuple(
         d for i, d in enumerate(a.shape) if i not in axes[0]
