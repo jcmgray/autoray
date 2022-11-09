@@ -10,7 +10,6 @@ dependencies:
   - pytorch>=1.4
   - cpuonly
   - sparse
-  - numba>=0.56
   - matplotlib
   - networkx
   - pytest
@@ -22,4 +21,5 @@ dependencies:
   - pip:
     - jax
     - jaxlib
+    - numba>=0.56
     # - pymars
