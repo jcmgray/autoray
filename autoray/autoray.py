@@ -83,8 +83,12 @@ def do(fn, *args, like=None, **kwargs):
 
 
 def _default_infer_from_sig(fn, *args, **kwargs):
-    dispatch_arg = _DISPATCHERS[fn](*args, **kwargs)
-    return infer_backend(dispatch_arg)
+    """This is the default backend dispatcher, used if no global backend has
+    been set. Hot swapping this function out as below avoids having to check
+    manually for a global backend or worse, a thread aware global backend, on
+    every call to ``do``.
+    """
+    return _DISPATCHERS[fn](*args, **kwargs)
 
 
 _global_backend = None
@@ -144,7 +148,6 @@ def get_backend(get_globally="auto"):
         thrid = threading.get_ident()
         backend = _global_backends_threadaware.get(thrid, None)
 
-    # threadprint(f'getting: {backend}')
     return backend
 
 
@@ -189,7 +192,7 @@ def set_backend(like, set_globally='auto'):
         _global_backend = backend
         _inferrer_global = inferrer
         if not _inferrers_threadaware:
-            # only switch the actual function if no threaded settings
+            # only revert the actual function if no subthread backends set
             _infer_auto = inferrer
     else:
         thrid = threading.get_ident()
@@ -202,11 +205,11 @@ def set_backend(like, set_globally='auto'):
             _inferrers_threadaware[thrid] = inferrer
 
         if _inferrers_threadaware:
-            # a 'sub backend' has been set, so we need to be thread aware
+            # a subthread backend has been set, so we need to be thread aware
             _infer_auto = _default_infer_from_sig_threadaware
         else:
-            # no 'sub backend' has been set anymore, so we can ignore threads
-            # and just use the global inferrer
+            # no subthread backend has been set anymore, so we can ignore
+            # threads and just use the global inferrer
             _infer_auto = _inferrer_global
         _backend_lock.release()
 
@@ -283,6 +286,40 @@ def infer_backend(array):
     ``numpy`` is the desired backend.
     """
     return _infer_class_backend_cached(array.__class__)
+
+
+_multi_class_priorities = {
+    'builtins': -2,
+    'numpy': -1,
+    'autoray.lazy': 1,
+}
+
+
+@functools.lru_cache(None)
+def _infer_class_backend_multi_cached(classes):
+    return max(
+        map(_infer_class_backend_cached, classes),
+        key=lambda n: _multi_class_priorities.get(n, 0)
+    )
+
+
+def infer_backend_multi(*arrays):
+    """Infer which backend should be used for a function that takes multiple
+    arguments. This assigns a priority to each backend, and returns the backend
+    with the highest priority. By default, the priority is:
+
+    - ``builtins``: -2
+    - ``numpy``: -1
+    - other backends: 0
+    - ``autoray.lazy``: 1
+
+    I.e. when mixing with ``numpy``, other array libraries are preferred, when
+    mixing with ``autoray.lazy``, ``autoray.lazy`` is preferred. This has quite
+    low overhead due to caching.
+    """
+    return _infer_class_backend_multi_cached(
+        tuple(array.__class__ for array in arrays)
+    )
 
 
 def choose_backend(fn, *args, like=None, **kwargs):
@@ -714,7 +751,7 @@ def register_dispatch(fun, dispatcher):
 
 def default_dispatcher(*args, **kwargs):
     """Try to infer backend from first argument passed to function."""
-    return args[0]
+    return infer_backend(args[0])
 
 
 # lookup of custom dispatcher methods, for cases when backend cannot be
@@ -725,11 +762,11 @@ _DISPATCHERS = defaultdict(lambda: default_dispatcher)
 def join_array_dispatcher(*args, **kwargs):
     """Dispatcher for functions where first argument is a sequence."""
     try:
-        return args[0][0]
+        return infer_backend(args[0][0])
     except (TypeError, ValueError):
         # user passed an empty sequence, or something non-iterable
         # try to infer backend from first argument as fallback
-        return args[0]
+        return infer_backend(args[0])
 
 
 # List of functions listed in numpy API as array joining operations
@@ -743,19 +780,28 @@ register_dispatch("column_stack", join_array_dispatcher)
 register_dispatch("row_stack", join_array_dispatcher)
 
 
-def einsum_dispatcher(*args, **kwargs):
+def einsum_dispatcher(*args, **_):
     """Dispatcher for handling einsum.
 
-    einsum can either take string as first argument, in which case backend
-    should be inferred from second argument. Or it can take an array as first
-    argument, which should be used to infer backend.
+    einsum can be called with a str equation as the first argument, or with
+    'interleaved' inputs. This dispatcher handles both cases and also takes
+    into account all arrays.
     """
-    if isinstance(args[0], str):
-        return args[1]
-    return args[0]
+    return infer_backend_multi(*args)
 
 
 register_dispatch("einsum", einsum_dispatcher)
+
+
+def tensordot_dispatcher(*args, **_):
+    """There are cases when we want to take into account both backends.
+    """
+    return infer_backend_multi(*args[:2])
+
+
+register_dispatch("tensordot", tensordot_dispatcher)
+
+# TODO: register other binary functions such as add, matmul etc?
 
 # --------------- object to act as drop-in replace for numpy ---------------- #
 

@@ -78,6 +78,15 @@ def test_basic(backend, fn):
     assert ar.infer_backend(x) == ar.infer_backend(y) == backend
 
 
+def test_infer_backend_multi():
+    x = 1.0
+    y = gen_rand((2, 3), "numpy")
+    z = ar.lazy.Variable((4, 5))
+    assert ar.infer_backend_multi(x) == "builtins"
+    assert ar.infer_backend_multi(x, y) == "numpy"
+    assert ar.infer_backend_multi(x, y, z) == "autoray.lazy"
+
+
 @pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize(
     "fn,args",
