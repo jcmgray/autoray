@@ -6,6 +6,7 @@ dependencies:
   - python=3.10
   - numpy
   - dask
+  - scipy
   - pytorch>=1.4
   - cpuonly
   - matplotlib
