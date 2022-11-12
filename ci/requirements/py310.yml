@@ -19,3 +19,4 @@ dependencies:
   - coveralls
   - codecov
   - jax
+  - jaxlib>=0.3.7
