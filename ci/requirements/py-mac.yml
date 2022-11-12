@@ -15,8 +15,4 @@ dependencies:
   - coverage
   - coveralls
   - codecov
-  - pip
-  - pip:
-    - jax
-    - jaxlib
-    # - pymars
+  - jax
