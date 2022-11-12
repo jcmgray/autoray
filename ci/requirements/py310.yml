@@ -5,12 +5,9 @@ channels:
 dependencies:
   - python=3.10
   - numpy
-  - tensorflow>=2
   - dask
   - pytorch>=1.4
   - cpuonly
-  - sparse
-  - numba>=0.56
   - matplotlib
   - networkx
   - pytest
@@ -18,5 +15,3 @@ dependencies:
   - coverage
   - coveralls
   - codecov
-  - jax
-  - jaxlib>=0.3.7
