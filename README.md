@@ -12,7 +12,7 @@ A lightweight python AUTOmatic-arRAY library. Write numeric code that works for:
 * [pytorch](https://pytorch.org/)
 * ... and indeed **any** library that provides a numpy-*ish* api.
 
-[![Azure Pipelines](https://dev.azure.com/autoray-org/autoray/_apis/build/status/jcmgray.autoray?branchName=master)](https://dev.azure.com/autoray-org/autoray/_build/latest?definitionId=1&branchName=master) [![codecov](https://codecov.io/gh/jcmgray/autoray/branch/master/graph/badge.svg?token=Q5evNiuT9S)](https://codecov.io/gh/jcmgray/autoray) [![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/jcmgray/autoray.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/jcmgray/autoray/context:python) [![Anaconda-Server Badge](https://anaconda.org/conda-forge/autoray/badges/installer/conda.svg)](https://conda.anaconda.org/conda-forge)
+[![tests](https://github.com/jcmgray/autoray/actions/workflows/tests.yml/badge.svg)](https://github.com/jcmgray/autoray/actions/workflows/tests.yml) [![codecov](https://codecov.io/gh/jcmgray/autoray/branch/master/graph/badge.svg?token=Q5evNiuT9S)](https://codecov.io/gh/jcmgray/autoray) [![Available on pypi](https://img.shields.io/pypi/v/autoray.svg)](https://pypi.python.org/pypi/autoray/) [![Anaconda-Server Badge](https://anaconda.org/conda-forge/autoray/badges/version.svg)](https://conda.anaconda.org/conda-forge)
 
 As an example consider this function that orthogonalizes a matrix using the modified [Gram-Schmidt](https://en.wikipedia.org/wiki/Gram%E2%80%93Schmidt_process) algorithm:
 

@@ -27,6 +27,9 @@ jobs:
         - os: ubuntu-latest
           python-version: 3.9
           env: torch
+        - os: ubuntu-latest
+          python-version: 3.9
+          env: tensorflow
 
     steps:
     - uses: actions/checkout@v3
