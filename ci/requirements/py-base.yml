@@ -6,6 +6,8 @@ dependencies:
   - numpy
   - dask
   - scipy
+  - sparse
+  - numba
   - matplotlib
   - networkx
   - pytest
