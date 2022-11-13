@@ -29,6 +29,9 @@ jobs:
           env: torch
         - os: ubuntu-latest
           python-version: 3.9
+          env: jax
+        - os: ubuntu-latest
+          python-version: 3.9
           env: tensorflow
 
     steps:

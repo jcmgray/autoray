@@ -1,0 +1,14 @@
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - opt_einsum
+  - numpy
+  - scipy
+  - jax
+  - jaxlib
+  - matplotlib
+  - networkx
+  - pytest
+  - pytest-cov
+  - coverage
