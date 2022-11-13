@@ -1,5 +1,4 @@
 channels:
-  - pytorch
   - defaults
   - conda-forge
 dependencies:
@@ -7,12 +6,8 @@ dependencies:
   - numpy
   - dask
   - scipy
-  - pytorch>=1.4
-  - cpuonly
   - matplotlib
   - networkx
   - pytest
   - pytest-cov
   - coverage
-  - coveralls
-  - codecov
