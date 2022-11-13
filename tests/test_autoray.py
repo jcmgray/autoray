@@ -672,14 +672,14 @@ def test_nested_multihreaded_backend_like():
         b_exp = [(None, 'A'), ('B', 'B'), ('C', 'C'), ('B', 'B'), (None, 'A')]
         with ar.backend_like('A'):
             bs = [pool.submit(foo, 'B', 'C') for _ in range(3)]
-        for b in bs:
-            assert b.result() == b_exp
+            for b in bs:
+                assert b.result() == b_exp
 
         b_exp = [(None, 'A'), ('B', 'B'), (None, 'A'), ('B', 'B'), (None, 'A')]
         with ar.backend_like('A'):
             bs = [pool.submit(foo, 'B', None) for _ in range(3)]
-        for b in bs:
-            assert b.result() == b_exp
+            for b in bs:
+                assert b.result() == b_exp
 
 
 def test_compose():
