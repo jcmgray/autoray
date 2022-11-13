@@ -7,7 +7,7 @@ dependencies:
   - dask
   - scipy
   - sparse
-  - numba
+  - numba>=0.56
   - matplotlib
   - networkx
   - pytest
