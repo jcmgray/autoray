@@ -3,7 +3,6 @@ channels:
   - defaults
   - conda-forge
 dependencies:
-  - python=3.10
   - opt_einsum
   - numpy
   - dask
