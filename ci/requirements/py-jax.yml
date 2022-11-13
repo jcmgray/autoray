@@ -3,6 +3,8 @@ channels:
   - conda-forge
 dependencies:
   - opt_einsum
+  - jax>=0.3.24
+  - jaxlib>=0.3.24
   - numpy
   - scipy
   - matplotlib
@@ -10,6 +12,3 @@ dependencies:
   - pytest
   - pytest-cov
   - coverage
-  - pip
-  - pip:
-    - jax[cpu]
