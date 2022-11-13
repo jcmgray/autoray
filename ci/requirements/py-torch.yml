@@ -1,0 +1,15 @@
+channels:
+  - pytorch
+  - defaults
+  - conda-forge
+dependencies:
+  - pytorch
+  - cpuonly
+  - opt_einsum
+  - numpy
+  - scipy
+  - matplotlib
+  - networkx
+  - pytest
+  - pytest-cov
+  - coverage

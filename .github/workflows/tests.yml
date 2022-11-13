@@ -16,11 +16,15 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         python-version: [3.7, 3.8, 3.9, '3.10']
+        env: [base]
         include:
         - os: macos-latest
           python-version: 3.9
         - os: windows-latest
           python-version: 3.9
+        - os: ubuntu-latest
+          python-version: 3.9
+          env: torch
 
     steps:
     - uses: actions/checkout@v3
@@ -28,7 +32,7 @@ jobs:
     - name: Install micromamba
       uses: mamba-org/provision-with-micromamba@main
       with:
-        environment-file: ci/requirements/py-base.yml
+        environment-file: ci/requirements/py-${{ matrix.env }}.yml
         environment-name: test-env
         extra-specs: python=${{ matrix.python-version }}
         cache-env: true
