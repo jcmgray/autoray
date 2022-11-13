@@ -121,7 +121,7 @@ def test_partial_evaluation():
 
 
 def test_plot():
-    import matplotlib
+    matplotlib = pytest.importorskip("matplotlib")
 
     matplotlib.use("Template")
     la = lazy.array(gen_rand((10, 10), "numpy"))
