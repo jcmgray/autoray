@@ -26,7 +26,7 @@ jobs:
         environment-file: ci/requirements/py-base.yml
         environment-name: test-env
         extra-specs: python=${{ matrix.python-version }}
-          cache-env: true
+        cache-env: true
 
     - name: Test with pytest
       run: pytest --cov=autoray tests/ --cov-report=xml tests
