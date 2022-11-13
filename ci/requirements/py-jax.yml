@@ -4,7 +4,7 @@ channels:
 dependencies:
   - opt_einsum
   - jax>=0.3.24
-  - jaxlib>=0.3.24
+  - jaxlib>=0.3.24=cpu*
   - numpy
   - scipy
   - matplotlib
