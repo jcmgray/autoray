@@ -79,7 +79,10 @@ def solve(a, b):
     backend = find_common_backend(a, b)
     fn_solve = get_lib_fn(backend, "linalg.solve")
     return b.to(
-        backend=backend, fn=fn_solve, args=(a, b), deps=(a, b),
+        backend=backend,
+        fn=fn_solve,
+        args=(a, b),
+        deps=(a, b),
     )
 
 

@@ -32,8 +32,7 @@ _pytree_map_dispatch = {
 
 
 def pytree_array_map(fn, x):
-    """Map ``fn`` over 'pytree' ``x``, but only applying on array-like objects.
-    """
+    """Map ``fn`` over 'pytree' ``x``, but only applying on array-like objects."""
     cls = x.__class__
     try:
         pytree_map_fn = _pytree_map_dispatch[cls]
@@ -48,8 +47,7 @@ def pytree_array_map(fn, x):
 
 
 def pytree_flat_gen(x):
-    """Generate the leaves of pytree ``x``.
-    """
+    """Generate the leaves of pytree ``x``."""
     if isinstance(x, (tuple, list)):
         for el in x:
             yield from pytree_flat_gen(el)
@@ -128,14 +126,12 @@ class CompilePython:
         return out, variables
 
     def _setup(self, *args, **kwargs):
-        """Based on example ``arrays``, compile the function.
-        """
+        """Based on example ``arrays``, compile the function."""
         out, variables = self._trace(*args, **kwargs)
         return out.get_function(variables, fold_constants=self._fold_constants)
 
     def __call__(self, *args, array_backend=None, **kwargs):
-        """If necessary, build, then call the compiled function.
-        """
+        """If necessary, build, then call the compiled function."""
         # separate variable arrays from constant kwargs
         constants = []
         arrays = (
@@ -152,8 +148,7 @@ class CompilePython:
 
 
 class CompileJax:
-    """
-    """
+    """ """
 
     def __init__(self, fn, enable_x64=None, platform_name=None, **kwargs):
         self._fn = fn
@@ -188,8 +183,7 @@ class CompileJax:
 
 
 class CompileTensorFlow:
-    """
-    """
+    """ """
 
     def __init__(self, fn, **kwargs):
         self._fn = fn
@@ -199,6 +193,7 @@ class CompileTensorFlow:
 
     def setup(self):
         import tensorflow as tf
+
         self._jit_fn = tf.function(**self._jit_kwargs)(self._fn)
         self._fn = None
 
@@ -212,14 +207,14 @@ class CompileTensorFlow:
 
 
 class CompileTorch:
-    """
-    """
+    """ """
 
     def __init__(self, fn, **kwargs):
         import torch
+
         self.torch = torch
 
-        if (not hasattr(fn, '__name__') and isinstance(fn, functools.partial)):
+        if not hasattr(fn, "__name__") and isinstance(fn, functools.partial):
             # torch jit.trace requires fn.__name__ and others
             functools.update_wrapper(fn, fn.func)
 

@@ -20,8 +20,7 @@ _EMPTY_DICT = {}
 
 
 class LazyArray:
-    """A lazy array representing a shaped node in a computational graph.
-    """
+    """A lazy array representing a shaped node in a computational graph."""
 
     __slots__ = (
         "_backend",
@@ -34,7 +33,13 @@ class LazyArray:
     )
 
     def __init__(
-        self, backend, fn, args, kwargs, shape, deps=None,
+        self,
+        backend,
+        fn,
+        args,
+        kwargs,
+        shape,
+        deps=None,
     ):
         # info required to perform the computation
         self._backend = backend
@@ -59,8 +64,7 @@ class LazyArray:
 
     @classmethod
     def from_data(cls, data):
-        """Create a new ``LazyArray`` directly from a concrete array.
-        """
+        """Create a new ``LazyArray`` directly from a concrete array."""
         obj = cls.__new__(cls)
         obj._backend = infer_backend(data)
         obj._fn = obj._args = obj._kwargs = None
@@ -70,14 +74,13 @@ class LazyArray:
         return obj
 
     @classmethod
-    def from_shape(cls, shape, backend='numpy'):
-        """Create a new ``LazyArray`` with a given shape.
-        """
+    def from_shape(cls, shape, backend="numpy"):
+        """Create a new ``LazyArray`` with a given shape."""
         obj = cls.__new__(cls)
         obj._backend = backend
         obj._fn = obj._args = obj._kwargs = None
         obj._shape = tuple(map(int, shape))
-        obj._data = '__PLACEHOLDER__'
+        obj._data = "__PLACEHOLDER__"
         obj._deps = ()
         return obj
 
@@ -140,8 +143,7 @@ class LazyArray:
                 seen_add(nid)
 
     def ascend(self):
-        """Generate each unique computational node, from leaves to root.
-        """
+        """Generate each unique computational node, from leaves to root."""
         seen = set()
         ready = set()
         queue = [self]
@@ -189,8 +191,7 @@ class LazyArray:
                 variables.add(node)
 
     def as_string(self, params):
-        """Create a string which evaluates to the lazy array creation.
-        """
+        """Create a string which evaluates to the lazy array creation."""
         # name function and store in locals
         fn_name = f"{getattr(self._fn, '__name__', 'fn')}{id(self._fn)}"
         params.setdefault(fn_name, self._fn)
@@ -199,10 +200,7 @@ class LazyArray:
         str_call = ", ".join(
             itertools.chain(
                 (stringify(x, params) for x in self._args),
-                (
-                    f"{k}: {stringify(v, params)}"
-                    for k, v in self._kwargs.items()
-                ),
+                (f"{k}: {stringify(v, params)}" for k, v in self._kwargs.items()),
             )
         )
 
@@ -259,9 +257,7 @@ class LazyArray:
 
         # compile source
         code = compile(source, f"code{id(self)}", "exec", optimize=optimize)
-        compiled = functools.partial(
-            _code_exec_fn, code=code, out_name=f"x{id(self)}"
-        )
+        compiled = functools.partial(_code_exec_fn, code=code, out_name=f"x{id(self)}")
 
         # need both function and locals mapping to run it with / modify args
         return compiled, params
@@ -290,13 +286,10 @@ class LazyArray:
         var_names = tuple(f"x{id(v)}" for v in variables)
         fn, params = self.get_compiled()
 
-        return functools.partial(
-            _array_fn, var_names=var_names, params=params, fn=fn
-        )
+        return functools.partial(_array_fn, var_names=var_names, params=params, fn=fn)
 
     def history_max_size(self):
-        """Get the largest single tensor size appearing in this computation.
-        """
+        """Get the largest single tensor size appearing in this computation."""
         return max(node.size for node in self)
 
     def history_size_footprint(self):
@@ -322,8 +315,7 @@ class LazyArray:
         return list(itertools.accumulate(sizes))
 
     def history_peak_size(self):
-        """Get the peak combined intermediate size of this computation.
-        """
+        """Get the peak combined intermediate size of this computation."""
         return max(self.history_size_footprint())
 
     def history_total_size(self):
@@ -336,7 +328,7 @@ class LazyArray:
         self,
         log=None,
         figsize=(8, 2),
-        color='purple',
+        color="purple",
         alpha=0.5,
         ax=None,
         return_fig=False,
@@ -364,9 +356,9 @@ class LazyArray:
         y = np.array(self.history_size_footprint())
         if log:
             y = np.log2(y) / np.log2(log)
-            ylabel = f'$\\log_{log}[SIZE]$'
+            ylabel = f"$\\log_{log}[SIZE]$"
         else:
-            ylabel = 'SIZE'
+            ylabel = "SIZE"
 
         x = np.arange(y.size)
 
@@ -378,7 +370,7 @@ class LazyArray:
         ax.fill_between(x, 0, y, alpha=alpha, color=color)
 
         if fig is not None:
-            ax.grid(True, c=(0.95, 0.95, 0.95), which='both')
+            ax.grid(True, c=(0.95, 0.95, 0.95), which="both")
             ax.set_axisbelow(True)
             ax.set_xlim(0, np.max(x))
             ax.set_ylim(0, np.max(y))
@@ -427,7 +419,7 @@ class LazyArray:
             }
             d.update(kwargs)
             if not node._deps:
-                d["color"] = tuple(x ** 0.2 for x in d["color"])
+                d["color"] = tuple(x**0.2 for x in d["color"])
             return d
 
         G = nx.DiGraph()
@@ -464,8 +456,7 @@ class LazyArray:
         return_fig=False,
         **layout_opts,
     ):
-        """Plot the computational graph of this ``LazyArray``.
-        """
+        """Plot the computational graph of this ``LazyArray``."""
         import matplotlib as mpl
         import matplotlib.pyplot as plt
         from matplotlib.colors import to_rgb
@@ -502,9 +493,7 @@ class LazyArray:
 
         pos = getattr(nx, initial_layout + "_layout")(G, **layout_opts)
         if iterations:
-            pos = nx.layout.spring_layout(
-                G, pos=pos, k=k, iterations=iterations
-            )
+            pos = nx.layout.spring_layout(G, pos=pos, k=k, iterations=iterations)
 
         nx.draw_networkx_edges(
             G,
@@ -678,8 +667,7 @@ def ensure_lazy(array):
 
 
 def find_lazy(x):
-    """Recursively search for ``LazyArray`` instances in pytrees.
-    """
+    """Recursively search for ``LazyArray`` instances in pytrees."""
     if isinstance(x, LazyArray):
         yield x
         return
@@ -718,17 +706,19 @@ def materialize_identity(x):
     return x
 
 
-_materialize_dispatch = collections.defaultdict(lambda: materialize_identity, {
-    LazyArray: materialize_larray,
-    tuple: materialize_tuple,
-    list: materialize_list,
-    dict: materialize_dict,
-})
+_materialize_dispatch = collections.defaultdict(
+    lambda: materialize_identity,
+    {
+        LazyArray: materialize_larray,
+        tuple: materialize_tuple,
+        list: materialize_list,
+        dict: materialize_dict,
+    },
+)
 
 
 def maybe_materialize(x):
-    """Recursively evaluate LazyArray instances in tuples, lists and dicts.
-    """
+    """Recursively evaluate LazyArray instances in tuples, lists and dicts."""
     return _materialize_dispatch[x.__class__](x)
 
 
@@ -767,17 +757,19 @@ def stringify_identity(x, params):
     return name
 
 
-_stringify_dispatch = collections.defaultdict(lambda: stringify_identity, {
-    LazyArray: stringify_larray,
-    tuple: stringify_tuple,
-    list: stringify_list,
-    dict: stringify_dict,
-})
+_stringify_dispatch = collections.defaultdict(
+    lambda: stringify_identity,
+    {
+        LazyArray: stringify_larray,
+        tuple: stringify_tuple,
+        list: stringify_list,
+        dict: stringify_dict,
+    },
+)
 
 
 def stringify(x, params):
-    """Recursively stringify LazyArray instances in tuples, lists and dicts.
-    """
+    """Recursively stringify LazyArray instances in tuples, lists and dicts."""
     return _stringify_dispatch[x.__class__](x, params)
 
 
@@ -801,14 +793,12 @@ _SHARING_STACK = collections.defaultdict(list)
 
 
 def currently_sharing():
-    """Check if we are currently sharing a cache -- thread specific.
-    """
+    """Check if we are currently sharing a cache -- thread specific."""
     return threading.get_ident() in _SHARING_STACK
 
 
 def get_sharing_cache():
-    """Return the most recent sharing cache -- thread specific.
-    """
+    """Return the most recent sharing cache -- thread specific."""
     return _SHARING_STACK[threading.get_ident()][-1]
 
 
@@ -911,6 +901,7 @@ def dtype_complex_equiv(dtype_name):
 @functools.lru_cache(None)
 def _find_common_dtype(array_types, scalar_types):
     import numpy as np
+
     return np.find_common_type(array_types, scalar_types).name
 
 
@@ -934,9 +925,7 @@ def find_common_backend(*xs):
 
     # if no LazyArray args, check raw arrays
     if backend is None:
-        backend = next(iter(
-            infer_backend(x) for x in xs if hasattr(x, "shape")
-        ), None)
+        backend = next(iter(infer_backend(x) for x in xs if hasattr(x, "shape")), None)
 
     return backend
 
@@ -953,6 +942,7 @@ def find_broadcast_shape(xshape, yshape):
 
 
 # -------------------------------- interface -------------------------------- #
+
 
 def Variable(shape, backend=None):
     """Create a ``LazyArray`` from a shape only, representing a leaf node
@@ -1008,10 +998,8 @@ def find_full_reshape(newshape, size):
     try:
         expand = newshape.index(-1)
         before = newshape[:expand]
-        after = newshape[expand + 1:]
-        d = size // functools.reduce(
-            operator.mul, itertools.chain(before, after), 1
-        )
+        after = newshape[expand + 1 :]
+        d = size // functools.reduce(operator.mul, itertools.chain(before, after), 1)
         return (*before, d, *after)
     except ValueError:
         return newshape
@@ -1046,7 +1034,7 @@ def getitem(a, key):
         # expand ellipsis
         expand = key.index(...)
         ndiff = a.ndim - len(key) + 1
-        key = key[:expand] + (slice(None),) * ndiff + key[expand + 1:]
+        key = key[:expand] + (slice(None),) * ndiff + key[expand + 1 :]
     except ValueError:
         # else pad trailing slices if necessary
         ndiff = a.ndim - len(key)
@@ -1078,9 +1066,9 @@ def tensordot(a, b, axes=2):
     if isinstance(axes, int):
         axes = (tuple(range(a.ndim - axes, a.ndim)), tuple(range(axes)))
 
-    newshape = tuple(
-        d for i, d in enumerate(a.shape) if i not in axes[0]
-    ) + tuple(d for i, d in enumerate(b.shape) if i not in axes[1])
+    newshape = tuple(d for i, d in enumerate(a.shape) if i not in axes[0]) + tuple(
+        d for i, d in enumerate(b.shape) if i not in axes[1]
+    )
 
     backend = find_common_backend(a, b)
     fn_tensordot = get_lib_fn(backend, "tensordot")
@@ -1124,7 +1112,11 @@ def einsum(*operands):
 @lazy_cache("trace")
 def trace(a):
     a = ensure_lazy(a)
-    return a.to(fn=get_lib_fn(a.backend, "trace"), args=(a,), shape=(),)
+    return a.to(
+        fn=get_lib_fn(a.backend, "trace"),
+        args=(a,),
+        shape=(),
+    )
 
 
 @lazy_cache("matmul")
@@ -1180,7 +1172,8 @@ def sort(a, axis=-1):
 def argsort(a, axis=-1):
     a = ensure_lazy(a)
     return a.to(
-        fn=get_lib_fn(a.backend, "argsort"), args=(a, axis),
+        fn=get_lib_fn(a.backend, "argsort"),
+        args=(a, axis),
     )
 
 
@@ -1238,6 +1231,7 @@ def split(ary, indices_or_sections, axis=0):
 
     return tuple(sub_arys)
 
+
 def make_binary_func(name, fn):
     @lazy_cache(name)
     def binary_func(x1, x2):
@@ -1279,7 +1273,6 @@ def complex_(re, im):
 
 
 def make_unary_func(name, to_real=False):
-
     @lazy_cache(name)
     def unary_func(x):
         x = ensure_lazy(x)
@@ -1314,7 +1307,6 @@ imag = make_unary_func("imag", to_real=True)
 
 
 def make_reduction_func(name):
-
     @lazy_cache(name)
     def reduction_func(a, axis=None):
         a = ensure_lazy(a)
@@ -1322,7 +1314,10 @@ def make_reduction_func(name):
 
         nd = a.ndim
         if axis is None:
-            return a.to(fn=fn, shape=(),)
+            return a.to(
+                fn=fn,
+                shape=(),
+            )
         elif not hasattr(axis, "__len__"):
             axis = (axis,)
         axis = tuple(nd - i if i < 0 else i for i in axis)

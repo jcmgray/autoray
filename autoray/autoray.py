@@ -140,7 +140,7 @@ def get_backend(get_globally="auto"):
         The name of the backend, or None if no backend is set.
     """
     if get_globally == "auto":
-        get_globally = (threading.get_ident() == _importing_thrid)
+        get_globally = threading.get_ident() == _importing_thrid
 
     if get_globally:
         backend = _global_backend
@@ -151,7 +151,7 @@ def get_backend(get_globally="auto"):
     return backend
 
 
-def set_backend(like, set_globally='auto'):
+def set_backend(like, set_globally="auto"):
     """Set a default global backend. The argument ``like`` can be an explicit
     backend name or an ``array``.
 
@@ -185,8 +185,8 @@ def set_backend(like, set_globally='auto'):
         backend = infer_backend(like)
         inferrer = functools.partial(_always_the_same, x=backend)
 
-    if set_globally == 'auto':
-        set_globally = (threading.get_ident() == _importing_thrid)
+    if set_globally == "auto":
+        set_globally = threading.get_ident() == _importing_thrid
 
     if set_globally:
         _global_backend = backend
@@ -215,7 +215,7 @@ def set_backend(like, set_globally='auto'):
 
 
 @contextlib.contextmanager
-def backend_like(like, set_globally='auto'):
+def backend_like(like, set_globally="auto"):
     """Context manager for setting a default backend. The argument ``like`` can
     be an explicit backend name or an ``array`` to infer it from.
 
@@ -235,8 +235,8 @@ def backend_like(like, set_globally='auto'):
         Only one thread should ever call this function with
         ``set_globally=True``, (by default this is importing thread).
     """
-    if set_globally == 'auto':
-        set_globally = (threading.get_ident() == _importing_thrid)
+    if set_globally == "auto":
+        set_globally = threading.get_ident() == _importing_thrid
 
     old_backend = get_backend(get_globally=set_globally)
     try:
@@ -264,6 +264,7 @@ def register_backend(cls, name):
 def _infer_class_backend_cached(T):
     try:
         import numpy as _numpy
+
         if issubclass(T, _numpy.ndarray):
             return "numpy"
     except ImportError:
@@ -289,9 +290,9 @@ def infer_backend(array):
 
 
 _multi_class_priorities = {
-    'builtins': -2,
-    'numpy': -1,
-    'autoray.lazy': 1,
+    "builtins": -2,
+    "numpy": -1,
+    "autoray.lazy": 1,
 }
 
 
@@ -299,7 +300,7 @@ _multi_class_priorities = {
 def _infer_class_backend_multi_cached(classes):
     return max(
         map(_infer_class_backend_cached, classes),
-        key=lambda n: _multi_class_priorities.get(n, 0)
+        key=lambda n: _multi_class_priorities.get(n, 0),
     )
 
 
@@ -491,19 +492,18 @@ def get_dtype_name(x):
         return do("get_dtype_name", x, like=x)
 
 
-_COMPLEX_DTYPES = {'complex64', 'complex128'}
-_DOUBLE_DTYPES = {'float64', 'complex128'}
+_COMPLEX_DTYPES = {"complex64", "complex128"}
+_DOUBLE_DTYPES = {"float64", "complex128"}
 _DTYPE_MAP = {
-    (False, False): 'float32',
-    (False, True): 'float64',
-    (True, False): 'complex64',
-    (True, True): 'complex128',
+    (False, False): "float32",
+    (False, True): "float64",
+    (True, False): "complex64",
+    (True, True): "complex128",
 }
 
 
 def get_common_dtype(*arrays):
-    """Compute the minimal dtype sufficient for ``arrays``.
-    """
+    """Compute the minimal dtype sufficient for ``arrays``."""
     dtypes = set(map(get_dtype_name, arrays))
     has_complex = not _COMPLEX_DTYPES.isdisjoint(dtypes)
     has_double = not _DOUBLE_DTYPES.isdisjoint(dtypes)
@@ -794,8 +794,7 @@ register_dispatch("einsum", einsum_dispatcher)
 
 
 def tensordot_dispatcher(*args, **_):
-    """There are cases when we want to take into account both backends.
-    """
+    """There are cases when we want to take into account both backends."""
     return infer_backend_multi(*args[:2])
 
 
@@ -878,9 +877,9 @@ _MODULE_ALIASES["builtins"] = "numpy"
 
 
 _builtin_dtype_lookup = {
-    int: 'int64',
-    float: 'float64',
-    complex: 'complex128',
+    int: "int64",
+    float: "float64",
+    complex: "complex128",
 }
 
 
@@ -932,7 +931,7 @@ def jax_random_seed(seed=None):
         from random import SystemRandom
 
         seed = SystemRandom().randint(
-            -(2 ** 63), 2 ** 63 - 1
+            -(2**63), 2**63 - 1
         )  # inclusive high
     _JAX_RANDOM_KEY = PRNGKey(seed)
 
@@ -1495,7 +1494,7 @@ _CUSTOM_WRAPPERS["torch", "take"] = make_translator(
 )
 
 # for older versions of torch, can provide some alternative implementations
-_MODULE_ALIASES['torch[alt]'] = 'torch'
+_MODULE_ALIASES["torch[alt]"] = "torch"
 
 _FUNCS["torch[alt]", "linalg.eigh"] = torch_linalg_eigh
 _FUNCS["torch[alt]", "linalg.eigvalsh"] = torch_linalg_eigvalsh
@@ -1549,8 +1548,7 @@ class Composed:
         _COMPOSED_FUNCTION_GENERATORS[self._name] = self.make_function
 
     def register(self, backend, fn=None):
-        """Register a different implementation for ``backend``.
-        """
+        """Register a different implementation for ``backend``."""
         if fn is not None:
             register_function(backend, self._name, fn)
         else:
@@ -1562,8 +1560,7 @@ class Composed:
             return wrapper
 
     def make_function(self, backend):
-        """Make a new function for the specific ``backend``.
-        """
+        """Make a new function for the specific ``backend``."""
         if self._supply_backend:
             fn = functools.partial(self._default_fn, backend=backend)
         else:
