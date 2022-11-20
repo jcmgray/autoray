@@ -1510,6 +1510,18 @@ _CUSTOM_WRAPPERS["torch[alt]", "linalg.svd"] = svd_UsV_to_UsVH_wrapper
 _CUSTOM_WRAPPERS["torch[alt]", "linalg.qr"] = qr_allow_fat
 _CUSTOM_WRAPPERS["torch[alt]", "linalg.solve"] = torch_linalg_solve_wrap
 
+
+# ---------------------------------- mxnet ---------------------------------- #
+
+
+def mxnet_to_numpy(x):
+    return x.asnumpy()
+
+
+_MODULE_ALIASES["mxnet"] = "mxnet.numpy"
+_FUNCS["mxnet", "to_numpy"] = mxnet_to_numpy
+
+
 # --------------------------- register your own! ---------------------------- #
 
 
