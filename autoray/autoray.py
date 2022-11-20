@@ -1435,9 +1435,9 @@ def torch_eye_wrap(fn):
         if dtype is not None:
             dtype = to_backend_dtype(dtype, like="torch")
         if M is not None:
-            return fn(N, m=M, dtype=dtype)
+            return fn(N, m=M, dtype=dtype, **kwargs)
         else:
-            return fn(N, dtype=dtype)
+            return fn(N, dtype=dtype, **kwargs)
 
     return numpy_like
 
