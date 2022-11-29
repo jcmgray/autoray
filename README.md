@@ -12,7 +12,7 @@ A lightweight python AUTOmatic-arRAY library. Write numeric code that works for:
 * [pytorch](https://pytorch.org/)
 * ... and indeed **any** library that provides a numpy-*ish* api.
 
-[![tests](https://github.com/jcmgray/autoray/actions/workflows/tests.yml/badge.svg)](https://github.com/jcmgray/autoray/actions/workflows/tests.yml) [![codecov](https://codecov.io/gh/jcmgray/autoray/branch/master/graph/badge.svg?token=Q5evNiuT9S)](https://codecov.io/gh/jcmgray/autoray) [![Available on pypi](https://img.shields.io/pypi/v/autoray.svg)](https://pypi.python.org/pypi/autoray/) [![Anaconda-Server Badge](https://anaconda.org/conda-forge/autoray/badges/version.svg)](https://conda.anaconda.org/conda-forge)
+[![tests](https://github.com/jcmgray/autoray/actions/workflows/tests.yml/badge.svg)](https://github.com/jcmgray/autoray/actions/workflows/tests.yml) [![codecov](https://codecov.io/gh/jcmgray/autoray/branch/master/graph/badge.svg?token=Q5evNiuT9S)](https://codecov.io/gh/jcmgray/autoray) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/ba896d74c4954dd58da01df30c7bf326)](https://www.codacy.com/gh/jcmgray/autoray/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=jcmgray/autoray&amp;utm_campaign=Badge_Grade) ![PyPI](https://img.shields.io/pypi/v/autoray?color=teal) [![Anaconda-Server Badge](https://anaconda.org/conda-forge/autoray/badges/version.svg)](https://conda.anaconda.org/conda-forge)
 
 As an example consider this function that orthogonalizes a matrix using the modified [Gram-Schmidt](https://en.wikipedia.org/wiki/Gram%E2%80%93Schmidt_process) algorithm:
 
