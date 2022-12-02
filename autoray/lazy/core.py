@@ -1119,19 +1119,21 @@ def trace(a):
 
 
 @lazy_cache("diag")
-def diag(a):
+def diag(a, k=0):
     a = ensure_lazy(a)
 
     if a.ndim == 1:
-        new_shape = (a.size, a.size)
+        new_d = a.shape[0] + abs(k)
+        new_shape = (new_d, new_d)
     elif a.ndim == 2:
-        new_shape = (min(a.shape),)
+        new_d = max(min(a.shape) - abs(k), 0)
+        new_shape = (new_d,)
     else:
         raise ValueError("Input must be 1- or 2-d.")
 
     return a.to(
         fn=get_lib_fn(a.backend, "diag"),
-        args=(a,),
+        args=(a, k),
         shape=new_shape,
     )
 

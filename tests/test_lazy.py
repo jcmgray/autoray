@@ -379,17 +379,18 @@ def test_indexing():
         assert_allclose(a[key], b[key].compute())
 
 
+@pytest.mark.parametrize('k', [-3, -1, 0, 2, 4])
 @pytest.mark.parametrize('shape', [
     (3,),
     (2, 2),
     (3, 4),
     (4, 3),
 ])
-def test_diag(shape):
+def test_diag(shape, k):
     a = do('random.uniform', size=shape, like='numpy')
     b = lazy.array(a)
-    ad = do('diag', a)
-    bd = do('diag', b)
+    ad = do('diag', a, k)
+    bd = do('diag', b, k)
     assert_allclose(ad, bd.compute())
 
 
