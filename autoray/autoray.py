@@ -268,6 +268,7 @@ def _infer_class_backend_cached(T):
         if issubclass(T, _numpy.ndarray):
             return "numpy"
     except ImportError:
+        # numpy not installed
         pass
 
     if T in _CUSTOM_BACKENDS:

@@ -3,7 +3,7 @@ import re
 
 import pytest
 
-from autoray import do, lazy, to_numpy, infer_backend, get_dtype_name, astype
+from autoray import do, lazy, to_numpy, infer_backend, astype
 from numpy.testing import assert_allclose
 
 from .test_autoray import BACKENDS, gen_rand

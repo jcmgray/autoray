@@ -87,6 +87,13 @@ def test_infer_backend_multi():
     assert ar.infer_backend_multi(x, y, z) == "autoray.lazy"
 
 
+def test_raises_import_error_when_missing():
+    with pytest.raises(ImportError):
+        ar.do("anonexistantfunction", 1, like="numpy")
+    with pytest.raises(ImportError):
+        ar.do("ones", 1, like="anonexistantbackend")
+
+
 @pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize(
     "fn,args",
@@ -693,11 +700,19 @@ def test_compose():
     x = ar.do('ones', (2,), like='numpy')
     y = ar.do('mycomposedfn', x)
     assert ar.do('allclose', x, y)
+    y = mycomposedfn(x)
+    assert ar.do('allclose', x, y)
     mycomposedfn.register('numpy', lambda x: 1)
-    assert ar.do('mycomposedfn', x) == 1
+    y = ar.do('mycomposedfn', x)
+    assert y == 1
+    y = mycomposedfn(x)
+    assert y == 1
 
     @mycomposedfn.register("numpy")
     def f(x):
         return 2
 
-    assert ar.do('mycomposedfn', x) == 2
+    y = ar.do('mycomposedfn', x)
+    assert y == 2
+    y = mycomposedfn(x)
+    assert y == 2
