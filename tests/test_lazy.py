@@ -379,6 +379,20 @@ def test_indexing():
         assert_allclose(a[key], b[key].compute())
 
 
+@pytest.mark.parametrize('shape', [
+    (3,),
+    (2, 2),
+    (3, 4),
+    (4, 3),
+])
+def test_diag(shape):
+    a = do('random.uniform', size=shape, like='numpy')
+    b = lazy.array(a)
+    ad = do('diag', a)
+    bd = do('diag', b)
+    assert_allclose(ad, bd.compute())
+
+
 def test_einsum():
     a = do('random.uniform', size=(2, 3, 4, 5), like='numpy')
     b = do('random.uniform', size=(4, 5), like='numpy')

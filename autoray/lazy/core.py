@@ -12,7 +12,6 @@ from ..autoray import (
     get_dtype_name,
     register_function,
     astype,
-    complex_add_re_im,
 )
 
 
@@ -1116,6 +1115,24 @@ def trace(a):
         fn=get_lib_fn(a.backend, "trace"),
         args=(a,),
         shape=(),
+    )
+
+
+@lazy_cache("diag")
+def diag(a):
+    a = ensure_lazy(a)
+
+    if a.ndim == 1:
+        new_shape = (a.size, a.size)
+    elif a.ndim == 2:
+        new_shape = (min(a.shape),)
+    else:
+        raise ValueError("Input must be 1- or 2-d.")
+
+    return a.to(
+        fn=get_lib_fn(a.backend, "diag"),
+        args=(a,),
+        shape=new_shape,
     )
 
 
