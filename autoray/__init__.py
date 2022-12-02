@@ -56,6 +56,3 @@ __all__ = (
     # lazy array library
     "lazy",
 )
-
-from . import _version
-__version__ = _version.get_versions()['version']

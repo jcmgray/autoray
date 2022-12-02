@@ -1,5 +1,4 @@
 from setuptools import setup, find_packages
-import versioneer
 
 
 def readme():
@@ -17,8 +16,6 @@ setup(
     description=short_desc,
     long_description=readme(),
     url='http://github.com/jcmgray/autoray',
-    version=versioneer.get_version(),
-    cmdclass=versioneer.get_cmdclass(),
     author='Johnnie Gray',
     author_email="johnniemcgray@gmail.com",
     license='Apache',
@@ -36,7 +33,6 @@ setup(
         'Development Status :: 3 - Alpha',
         'License :: OSI Approved :: Apache Software License',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',

@@ -1,5 +1,3 @@
-include versioneer.py
-include autoray/_version.py
 include README.rst
 include setup.cfg
 include LICENSE
