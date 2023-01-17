@@ -2,7 +2,7 @@
 AUTORAY - backend agnostic array operations.
 
 
-Copyright 2019-2021 Johnnie Gray
+Copyright 2019-2023 Johnnie Gray
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -889,7 +889,7 @@ def builtins_get_dtype_name(x):
 
 
 _FUNCS["builtins", "get_dtype_name"] = builtins_get_dtype_name
-
+_FUNCS["builtins", "complex"] = complex
 
 # ---------------------------------- numpy ---------------------------------- #
 

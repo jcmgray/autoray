@@ -716,3 +716,11 @@ def test_compose():
     assert y == 2
     y = mycomposedfn(x)
     assert y == 2
+
+
+def test_builtins_complex():
+    re = 1.0
+    im = 2.0
+    z = ar.do('complex', re, im)
+    assert z == 1.0 + 2.0j
+    assert ar.infer_backend(z) == "builtins"
