@@ -261,20 +261,20 @@ def register_backend(cls, name):
 
 
 @functools.lru_cache(None)
-def _infer_class_backend_cached(T):
+def _infer_class_backend_cached(cls):
     try:
         import numpy as _numpy
 
-        if issubclass(T, _numpy.ndarray):
+        if issubclass(cls, _numpy.ndarray):
             return "numpy"
     except ImportError:
         # numpy not installed
         pass
 
-    if T in _CUSTOM_BACKENDS:
-        return _CUSTOM_BACKENDS[T]
+    if cls in _CUSTOM_BACKENDS:
+        return _CUSTOM_BACKENDS[cls]
 
-    lib = T.__module__.split(".")[0]
+    lib = cls.__module__.split(".")[0]
 
     # check if lib should mapped entirely to another lib
     backend = _BACKEND_ALIASES.get(lib, lib)
@@ -290,7 +290,7 @@ def infer_backend(array):
     return _infer_class_backend_cached(array.__class__)
 
 
-_multi_class_priorities = {
+multi_class_priorities = {
     "builtins": -2,
     "numpy": -1,
     "autoray.lazy": 1,
@@ -301,7 +301,7 @@ _multi_class_priorities = {
 def _infer_class_backend_multi_cached(classes):
     return max(
         map(_infer_class_backend_cached, classes),
-        key=lambda n: _multi_class_priorities.get(n, 0),
+        key=lambda n: multi_class_priorities.get(n, 0),
     )
 
 
@@ -1084,10 +1084,6 @@ def sparse_to_numpy(x):
     return x.todense()
 
 
-def sparse_complex(x, y):
-    return x + 1j * y
-
-
 def sparse_transpose(x, axes=None):
     return x.transpose(axes)
 
@@ -1146,8 +1142,9 @@ _FUNCS["sparse", "sum"] = sparse_sum
 _FUNCS["sparse", "prod"] = sparse_prod
 _FUNCS["sparse", "conj"] = sparse_conj
 _FUNCS["sparse", "real"] = sparse_real
+_FUNCS["sparse", "real"] = sparse_real
 _FUNCS["sparse", "imag"] = sparse_imag
-_FUNCS["sparse", "complex"] = sparse_complex
+_FUNCS["sparse", "complex"] = complex_add_re_im
 _FUNCS["sparse", "count_nonzero"] = sparse_count_nonzero
 _FUNCS["sparse", "random.uniform"] = sparse_random_uniform
 _FUNCS["sparse", "random.normal"] = sparse_random_normal
@@ -1548,6 +1545,305 @@ def register_function(backend, name, fn, wrap=False):
         _FUNCS[backend, name] = fn
 
 
+# ------------------------------- tree utils -------------------------------- #
+
+TREE_MAP_REGISTRY = {}
+TREE_APPLY_REGISTRY = {}
+TREE_ITER_REGISTRY = {}
+
+
+def tree_register_container(cls, mapper, iterator, applier):
+    """Register a new container type for use with ``tree_map`` and
+    ``tree_apply``.
+
+    Parameters
+    ----------
+    cls : type
+        The container type to register.
+    mapper : callable
+        A function that takes ``f``, ``tree`` and ``is_leaf`` and returns a new
+        tree of type ``cls`` with ``f`` applied to all leaves.
+    applier : callable
+        A function that takes ``f``, ``tree`` and ``is_leaf`` and applies ``f``
+        to all leaves in ``tree``.
+    """
+    TREE_MAP_REGISTRY[cls] = mapper
+    TREE_ITER_REGISTRY[cls] = iterator
+    TREE_APPLY_REGISTRY[cls] = applier
+
+
+IS_CONTAINER_CACHE = {}
+
+
+def is_not_container(x):
+    """The default function to determine if an object is a leaf. This simply
+    checks if the object is an instance of any of the registered container
+    types.
+    """
+    try:
+        return IS_CONTAINER_CACHE[x.__class__]
+    except KeyError:
+        isleaf = not any(isinstance(x, cls) for cls in TREE_MAP_REGISTRY)
+        IS_CONTAINER_CACHE[x.__class__] = isleaf
+        return isleaf
+
+
+def is_array(x):
+    """An alternative leaf tester for addressing only arrays within trees.
+    """
+    return hasattr(x, "shape")
+
+
+def identity(f, tree, is_leaf):
+    return tree
+
+
+TREE_MAPPER_CACHE = {}
+
+
+def tree_map(f, tree, is_leaf=is_not_container):
+    """Map ``f`` over all leaves in ``tree``, returning a new pytree.
+
+    Parameters
+    ----------
+    f : callable
+        A function to apply to all leaves in ``tree``.
+    tree : pytree
+        A nested sequence of tuples, lists, dicts and other objects.
+    is_leaf : callable
+        A function to determine if an object is a leaf, ``f`` is only applied
+        to objects for which ``is_leaf(x)`` returns ``True``.
+
+    Returns
+    -------
+    pytree
+    """
+    if is_leaf(tree):
+        return f(tree)
+
+    try:
+        return TREE_MAPPER_CACHE[tree.__class__](f, tree, is_leaf)
+    except KeyError:
+        # reverse so later registered classes take precedence
+        for cls, mapper in reversed(TREE_MAP_REGISTRY.items()):
+            if isinstance(tree, cls):
+                break
+        else:
+            # neither leaf nor container -> simply return it
+            mapper = identity
+        TREE_MAPPER_CACHE[tree.__class__] = mapper
+        return mapper(f, tree, is_leaf)
+
+
+def empty(tree, is_leaf):
+    return iter(())
+
+
+TREE_ITER_CACHE = {}
+
+
+def tree_iter(tree, is_leaf=is_not_container):
+    """Iterate over all leaves in ``tree``.
+
+    Parameters
+    ----------
+    f : callable
+        A function to apply to all leaves in ``tree``.
+    tree : pytree
+        A nested sequence of tuples, lists, dicts and other objects.
+    is_leaf : callable
+        A function to determine if an object is a leaf, ``f`` is only applied
+        to objects for which ``is_leaf(x)`` returns ``True``.
+    """
+    if is_leaf(tree):
+        yield tree
+        return
+
+    try:
+        yield from TREE_ITER_CACHE[tree.__class__](tree, is_leaf)
+    except KeyError:
+        # reverse so later registered classes take precedence
+        for cls, iterator in reversed(TREE_ITER_REGISTRY.items()):
+            if isinstance(tree, cls):
+                break
+        else:
+            # neither leaf nor container -> simply ignore it
+            iterator = empty
+        TREE_ITER_CACHE[tree.__class__] = iterator
+        yield from iterator(tree, is_leaf)
+
+
+def nothing(f, tree, is_leaf):
+    pass
+
+
+TREE_APPLIER_CACHE = {}
+
+
+def tree_apply(f, tree, is_leaf=is_not_container):
+    """Apply ``f`` to all leaves in ``tree``, no new pytree is built.
+
+    Parameters
+    ----------
+    f : callable
+        A function to apply to all leaves in ``tree``.
+    tree : pytree
+        A nested sequence of tuples, lists, dicts and other objects.
+    is_leaf : callable
+        A function to determine if an object is a leaf, ``f`` is only applied
+        to objects for which ``is_leaf(x)`` returns ``True``.
+    """
+    if is_leaf(tree):
+        f(tree)
+        return
+
+    try:
+        TREE_APPLIER_CACHE[tree.__class__](f, tree, is_leaf)
+    except KeyError:
+        # reverse so later registered classes take precedence
+        for cls, applier in reversed(TREE_APPLY_REGISTRY.items()):
+            if isinstance(tree, cls):
+                break
+        else:
+            # neither leaf nor container -> simply ignore it
+            applier = nothing
+        TREE_APPLIER_CACHE[tree.__class__] = applier
+        applier(f, tree, is_leaf)
+
+
+class Leaf:
+    """A singleton object to use as a placeholder in a pytree, for
+    unflattening.
+    """
+
+    def __repr__(self):
+        return "Leaf"
+
+
+LEAF = Leaf()
+
+
+def is_leaf_placeholder(x):
+    # don't do `x is LEAF` to allow pickling / unpickling
+    return x.__class__ is Leaf
+
+
+def tree_flatten(tree, is_leaf=is_not_container, get_ref=False):
+    """Flatten ``tree`` into a list of leaves.
+
+    Parameters
+    ----------
+    tree : pytree
+        A nested sequence of tuples, lists, dicts and other objects.
+    is_leaf : callable
+        A function to determine if an object is a leaf, only objects for which
+        ``is_leaf(x)`` returns ``True`` are returned in the flattened list.
+    get_ref : bool
+        If ``True``, a reference tree is returned which can be used to
+        reconstruct the original tree from a flattened list.
+
+    Returns
+    -------
+    objs : list
+        The flattened list of leaf objects.
+    (ref_tree) : pytree
+        If ``get_ref`` is ``True``, a reference tree, with leaves of ``Leaf``,
+        is returned which can be used to reconstruct the original tree.
+    """
+    objs = []
+    if get_ref:
+        # return a new tree with Leaf leaves, as well as the flattened list
+
+        def f(x):
+            objs.append(x)
+            return LEAF
+
+        ref_tree = tree_map(f, tree, is_leaf)
+        return objs, ref_tree
+    else:
+        tree_apply(objs.append, tree, is_leaf)
+        return objs
+
+
+def tree_unflatten(objs, tree, is_leaf=is_leaf_placeholder):
+    """Unflatten ``objs`` into a pytree of the same structure as ``tree``.
+
+    Parameters
+    ----------
+    objs : sequence
+        A sequence of objects to be unflattened into a pytree.
+    tree : pytree
+        A nested sequence of tuples, lists, dicts and other objects, the objs
+        will be inserted into a new pytree of the same structure.
+    is_leaf : callable
+        A function to determine if an object is a leaf, only objects for which
+        ``is_leaf(x)`` returns ``True`` will have the next item from ``objs``
+        inserted. By default checks for the ``Leaf`` object inserted by
+        ``tree_flatten(..., get_ref=True)``.
+
+    Returns
+    -------
+    pytree
+    """
+    objs = iter(objs)
+    return tree_map(lambda _: next(objs), tree, is_leaf)
+
+
+def tree_map_tuple(f, tree, is_leaf):
+    return tuple(tree_map(f, x, is_leaf) for x in tree)
+
+
+def tree_iter_tuple(tree, is_leaf):
+    for x in tree:
+        yield from tree_iter(x, is_leaf)
+
+
+def tree_apply_tuple(f, tree, is_leaf):
+    for x in tree:
+        tree_apply(f, x, is_leaf)
+
+
+tree_register_container(
+    tuple, tree_map_tuple, tree_iter_tuple, tree_apply_tuple
+)
+
+
+def tree_map_list(f, tree, is_leaf):
+    return [tree_map(f, x, is_leaf) for x in tree]
+
+
+def tree_iter_list(tree, is_leaf):
+    for x in tree:
+        yield from tree_iter(x, is_leaf)
+
+
+def tree_apply_list(f, tree, is_leaf):
+    for x in tree:
+        tree_apply(f, x, is_leaf)
+
+
+tree_register_container(list, tree_map_list, tree_iter_list, tree_apply_list)
+
+
+def tree_map_dict(f, tree, is_leaf):
+    return {k: tree_map(f, v, is_leaf) for k, v in tree.items()}
+
+
+def tree_iter_dict(tree, is_leaf):
+    for v in tree.values():
+        yield from tree_iter(v, is_leaf)
+
+
+def tree_apply_dict(f, tree, is_leaf):
+    for v in tree.values():
+        tree_apply(f, v, is_leaf)
+
+
+tree_register_container(dict, tree_map_dict, tree_iter_dict, tree_apply_dict)
+
+
+# --------------------------- composed functions ---------------------------- #
+
 class Composed:
     """Compose an ``autoray.do`` using function. See the main wrapper
     ``compose``.
@@ -1559,6 +1855,10 @@ class Composed:
             name = fn.__name__
         self._name = name
         self._supply_backend = "backend" in signature(fn).parameters
+
+        # this registers the fact that when `get_lib_fn` is called, the
+        # function can be created even if it doesn't exist for a specific
+        # backend yet.
         _COMPOSED_FUNCTION_GENERATORS[self._name] = self.make_function
 
     def register(self, backend, fn=None):
@@ -1584,10 +1884,8 @@ class Composed:
 
     def __call__(self, *args, like=None, **kwargs):
         backend = choose_backend(self._name, *args, like=like, **kwargs)
-        try:
-            fn = get_lib_fn(backend, self._name)
-        except ImportError:
-            fn = self.make_function(backend)
+        # `get_lib_fn` will call `make_function` if the function doesn't exist
+        fn = get_lib_fn(backend, self._name)
         return fn(*args, **kwargs)
 
     def __repr__(self):

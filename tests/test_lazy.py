@@ -79,6 +79,7 @@ def test_lazy_mgs(backend):
     x = gen_rand((5, 5), backend)
     lx = lazy.array(x)
     ly = modified_gram_schmidt(lx)
+    ly.show()
     make_strict(ly)
     assert str(ly) == (
         f"<LazyArray(fn=stack, shape=(5, 5), "
@@ -120,6 +121,29 @@ def test_partial_evaluation():
     lf.compute()
 
 
+def test_history_fn_frequencies():
+    la = lazy.array(gen_rand((10, 10), "numpy"))
+    lb = lazy.array(gen_rand((10, 10), "numpy"))
+    lc = lazy.array(gen_rand((10, 10), "numpy"))
+    ld = lazy.array(gen_rand((10, 10), "numpy"))
+    lab = do("tanh", la @ lb)
+    lcd = lc @ ld
+    ls = lab + lcd
+    ld = do("abs", lab / lcd)
+    le = do("einsum", "ab,ba->a", ls, ld)
+    lf = do("sum", le)
+    assert lf.history_fn_frequencies() == {
+        "None": 4,  # the inputs
+        "tanh": 1,
+        "matmul": 2,
+        "add": 1,
+        "absolute": 1,
+        "truediv": 1,
+        "einsum": 1,
+        "sum": 1,
+    }
+
+
 def test_plot():
     pytest.importorskip("networkx")
     matplotlib = pytest.importorskip("matplotlib")
@@ -135,7 +159,8 @@ def test_plot():
     le = do("einsum", "ab,ba->a", ls, ld)
     lf = do("sum", le)
     lf.plot()
-    lf.plot(variables=[lc, ld])
+    lf.plot_graph()
+    lf.plot_graph(variables=[lc, ld], color_by="variables")
     lf.plot_history_size_footprint()
 
 

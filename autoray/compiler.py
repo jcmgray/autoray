@@ -1,74 +1,15 @@
 import functools
 
-from .autoray import infer_backend, do, backend_like
+from .autoray import (
+    do,
+    infer_backend,
+    backend_like,
+    tree_map,
+    tree_apply,
+    tree_iter,
+    is_array
+)
 from . import lazy
-
-
-def pytree_map_array(fn, x):
-    return fn(x)
-
-
-def pytree_map_tuple(fn, x):
-    return tuple(pytree_array_map(fn, subx) for subx in x)
-
-
-def pytree_map_list(fn, x):
-    return [pytree_array_map(fn, subx) for subx in x]
-
-
-def pytree_map_dict(fn, x):
-    return {k: pytree_array_map(fn, v) for k, v in x.items()}
-
-
-def pytree_map_identity(fn, x):
-    return x
-
-
-_pytree_map_dispatch = {
-    tuple: pytree_map_tuple,
-    list: pytree_map_list,
-    dict: pytree_map_dict,
-}
-
-
-def pytree_array_map(fn, x):
-    """Map ``fn`` over 'pytree' ``x``, but only applying on array-like objects."""
-    cls = x.__class__
-    try:
-        pytree_map_fn = _pytree_map_dispatch[cls]
-    except KeyError:
-        if hasattr(x, "shape"):
-            # cache array types based on whether they have a shape attribute
-            pytree_map_fn = _pytree_map_dispatch[cls] = pytree_map_array
-        else:
-            # ignore non array types
-            pytree_map_fn = _pytree_map_dispatch[cls] = pytree_map_identity
-    return pytree_map_fn(fn, x)
-
-
-def pytree_flat_gen(x):
-    """Generate the leaves of pytree ``x``."""
-    if isinstance(x, (tuple, list)):
-        for el in x:
-            yield from pytree_flat_gen(el)
-    elif isinstance(x, dict):
-        for el in x.values():
-            yield from pytree_flat_gen(el)
-    else:
-        yield x
-
-
-def extract_arrays(x, constants=None):
-    if hasattr(x, "shape"):
-        yield x
-    elif isinstance(x, (tuple, list)):
-        for subx in x:
-            yield from extract_arrays(subx, constants)
-    elif isinstance(x, dict):
-        for subx in x.values():
-            yield from extract_arrays(subx, constants)
-    elif constants is not None:
-        constants.append(x)
 
 
 class CompilePython:
@@ -112,8 +53,9 @@ class CompilePython:
             return lx
 
         def _run_lazy():
-            lz_args = pytree_map_tuple(_collect_variable, args)
-            lz_kwargs = pytree_map_dict(_collect_variable, kwargs)
+            lz_args, lz_kwargs = tree_map(
+                _collect_variable, (args, kwargs), is_array
+            )
             return self._fn(*lz_args, **lz_kwargs)
 
         if self._share_intermediates:
@@ -133,13 +75,13 @@ class CompilePython:
     def __call__(self, *args, array_backend=None, **kwargs):
         """If necessary, build, then call the compiled function."""
         # separate variable arrays from constant kwargs
+        arrays = []
         constants = []
-        arrays = (
-            *extract_arrays(args, constants),
-            *extract_arrays(kwargs, constants),
+        tree_apply(
+            lambda x: (arrays if is_array(x) else constants).append(x),
+            (args, kwargs)
         )
         key = hash(tuple(constants))
-
         try:
             return self._fns[key](arrays)
         except KeyError:
@@ -229,7 +171,7 @@ class CompileTorch:
     def __call__(self, *args, array_backend=None, **kwargs):
         if array_backend != "torch":
             # torch doesn't handle numpy arrays itself
-            args = pytree_map_tuple(self.torch.as_tensor, args)
+            args = tree_map(self.torch.as_tensor, args, is_array)
         if self._jit_fn is None:
             self.setup(args)
         out = self._jit_fn(*args, **kwargs)
@@ -262,7 +204,10 @@ class AutoCompiled:
             self._compiler_kwargs = compiler_opts
 
     def __call__(self, *args, backend=None, **kwargs):
-        array_backend = infer_backend(next(pytree_flat_gen((args, kwargs))))
+        array_backend = infer_backend(next(
+            tree_iter((args, kwargs), is_array)
+        ))
+
         if backend is None:
             if self._backend is None:
                 backend = array_backend

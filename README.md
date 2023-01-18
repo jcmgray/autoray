@@ -3,13 +3,13 @@
 A lightweight python AUTOmatic-arRAY library. Write numeric code that works for:
 
 * [numpy](https://github.com/numpy/numpy)
+* [pytorch](https://pytorch.org/)
+* [jax](https://github.com/google/jax)
 * [cupy](https://github.com/cupy/cupy)
 * [dask](https://github.com/dask/dask)
 * [autograd](https://github.com/HIPS/autograd)
-* [jax](https://github.com/google/jax)
-* [mars](https://github.com/mars-project/mars)
 * [tensorflow](https://github.com/tensorflow/tensorflow)
-* [pytorch](https://pytorch.org/)
+* [mars](https://github.com/mars-project/mars)
 * ... and indeed **any** library that provides a numpy-*ish* api.
 
 [![tests](https://github.com/jcmgray/autoray/actions/workflows/tests.yml/badge.svg)](https://github.com/jcmgray/autoray/actions/workflows/tests.yml) [![codecov](https://codecov.io/gh/jcmgray/autoray/branch/master/graph/badge.svg?token=Q5evNiuT9S)](https://codecov.io/gh/jcmgray/autoray) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/ba896d74c4954dd58da01df30c7bf326)](https://www.codacy.com/gh/jcmgray/autoray/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=jcmgray/autoray&amp;utm_campaign=Badge_Grade) ![PyPI](https://img.shields.io/pypi/v/autoray?color=teal) [![Anaconda-Server Badge](https://anaconda.org/conda-forge/autoray/badges/version.svg)](https://conda.anaconda.org/conda-forge)
@@ -193,44 +193,83 @@ lx = lazy.array(x)
 # supply this to our function
 ly = modified_gram_schmidt(lx)
 ly
-# <LazyArray(fn=stack, shape=(5, 5), dtype=float32, backend='torch')>
+# <LazyArray(fn=stack, shape=(5, 5), backend='torch')>
 ```
 
-None of the functions have been called yet - simply the shapes and dtypes have been propagated through. ``ly`` represents the final ``stack`` call, and tracks which other ``LazyArray`` instances it needs to materialize before it can compute itself. At this point one can perform various bits of introspection:
+None of the functions have been called yet - simply the shape has been propagated through. ``ly`` represents the final ``stack`` call, and tracks which other ``LazyArray`` instances it needs to materialize before it can compute itself:
 
 ```python
+ly.show()
+#    0 stack[5, 5]
+#    1 ├─truediv[5]
+#    2 │ ├─getitem[5]
+#    3 │ │ ╰─←[5, 5]
+#    4 │ ╰─linalg_norm[]
+#    5 │   ╰─ ... (getitem[5] from line 2)
+#    5 ├─truediv[5]
+#    6 │ ├─sub[5]
+#    7 │ │ ├─getitem[5]
+#    8 │ │ │ ╰─ ... (←[5, 5] from line 3)
+#    8 │ │ ╰─mul[5]
+#    9 │ │   ├─ ... (truediv[5] from line 1)
+#    9 │ │   ╰─tensordot[]
+#   10 │ │     ├─ ... (getitem[5] from line 7)
+#   10 │ │     ╰─conj[5]
+#   11 │ │       ╰─ ... (truediv[5] from line 1)
+#   11 │ ╰─linalg_norm[]
+#   12 │   ╰─ ... (sub[5] from line 6)
+#   12 ├─truediv[5]
+#   13 │ ├─sub[5]
+#   14 │ │ ├─sub[5]
+#   15 │ │ │ ├─getitem[5]
+#   16 │ │ │ │ ╰─ ... (←[5, 5] from line 3)
+#   16 │ │ │ ╰─mul[5]
+#   17 │ │ │   ├─ ... (truediv[5] from line 1)
+#   17 │ │ │   ╰─tensordot[]
+#   18 │ │ │     ├─ ... (getitem[5] from line 15)
+#   ...
+```
+
+ At this point one can perform various bits of introspection:
+
+```python
+# --> frequency of each function call
+ly.history_fn_frequencies()
+# {'stack': 1,
+#  'truediv': 5,
+#  'linalg_norm': 5,
+#  'sub': 10,
+#  'mul': 10,
+#  'getitem': 5,
+#  'None': 1,
+#  'tensordot': 10,
+#  'conj': 10}
+
 # --> the largest array encountered
 ly.history_max_size()
 # 25
 
-# number of unique computational nodes
-len(tuple(ly))
+# --> traverse the unique computational nodes, e.g. to estimate FLOP cost
+len([node for node in ly])
 # 57
 
-# --> traverse the computational graph and collect statistics
-from collections import Counter
-Counter(node.fn_name for node in ly)
-# Counter({'stack': 1,
-#          'truediv': 5,
-#          'norm': 5,
-#          'sub': 10,
-#          'mul': 10,
-#          'getitem': 5,
-#          'None': 1,
-#          'tensordot': 10,
-#          'conjugate': 10})
+# --> traverse in topological/computational order
+len([node for node in ly.ascend()])
+# 57
 
-# --> plot the full computation graph
+# --> plot the full computation as a circuit
 ly.plot()
 ```
-<p align="left"><img src="https://i.imgur.com/1WOngc9.png" width="600px"></p>
+<p align="left"><img src="docs/images/autoray-readme-pic-1.png" width="650px"></p>
 
 Preview the memory footprint (in terms of number of array elements) throughout the computation:
 
 ```python
 ly.plot_history_size_footprint()
 ```
-<p align="left"><img src="https://i.imgur.com/iCcyxXI.png" width="600px"></p>
+<p align="left"><img src="docs/images/autoray-readme-pic-0.png" width="600px"></p>
+
+You can also plot the computation as a `networkx` graph with automatic layout using `ly.plot_graph()`.
 
 Finally, if we want to compute the actual value we call:
 ```python

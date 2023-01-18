@@ -35,6 +35,13 @@ from .autoray import (
     to_numpy,
     register_backend,
     register_function,
+    # tree utilities
+    is_array,
+    tree_map,
+    tree_iter,
+    tree_apply,
+    tree_flatten,
+    tree_unflatten,
     compose,
     # the numpy mimic submodule
     numpy,
@@ -64,6 +71,13 @@ __all__ = (
     "to_numpy",
     "register_backend",
     "register_function",
+    # tree utilities
+    "is_array",
+    "tree_map",
+    "tree_iter",
+    "tree_apply",
+    "tree_flatten",
+    "tree_unflatten",
     "compose",
     # the numpy mimic submodule
     "numpy",

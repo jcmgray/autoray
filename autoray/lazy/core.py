@@ -6,16 +6,19 @@ import contextlib
 import collections
 
 from ..autoray import (
+    astype,
+    get_dtype_name,
     get_lib_fn,
     infer_backend,
+    multi_class_priorities,
     register_backend,
-    get_dtype_name,
     register_function,
-    astype,
 )
+from .draw import plot_graph, plot_circuit, plot_history_size_footprint
 
 
 _EMPTY_DICT = {}
+get_depth = operator.attrgetter("_depth")
 
 
 class LazyArray:
@@ -29,6 +32,7 @@ class LazyArray:
         "_shape",
         "_data",
         "_deps",
+        "_depth",
     )
 
     def __init__(
@@ -58,8 +62,14 @@ class LazyArray:
             # automatically find them
             self._deps = (*find_lazy(self._args), *find_lazy(self._kwargs))
         else:
-            # manually specified (more efficient)
+            # manually specified (slightly more efficient)
             self._deps = deps
+
+        # tracking depth helps when ordering the computational graph
+        if self._deps:
+            self._depth = max(d._depth for d in self._deps) + 1
+        else:
+            self._depth = 0
 
     @classmethod
     def from_data(cls, data):
@@ -70,6 +80,7 @@ class LazyArray:
         obj._shape = tuple(map(int, data.shape))
         obj._data = data
         obj._deps = ()
+        obj._depth = 0
         return obj
 
     @classmethod
@@ -81,6 +92,7 @@ class LazyArray:
         obj._shape = tuple(map(int, shape))
         obj._data = "__PLACEHOLDER__"
         obj._deps = ()
+        obj._depth = 0
         return obj
 
     def to(
@@ -124,7 +136,7 @@ class LazyArray:
 
         return self._data
 
-    def __iter__(self):
+    def descend(self):
         """Generate each unique computational node. Use ``ascend`` if you need
         to visit children before parents.
         """
@@ -141,8 +153,12 @@ class LazyArray:
                 queue_extend(node._deps)
                 seen_add(nid)
 
+    __iter__ = descend
+
     def ascend(self):
-        """Generate each unique computational node, from leaves to root."""
+        """Generate each unique computational node, from leaves to root. I.e.
+        a topological ordering of the computational graph.
+        """
         seen = set()
         ready = set()
         queue = [self]
@@ -154,6 +170,7 @@ class LazyArray:
             node = queue[-1]
             need_to_visit = [c for c in node._deps if id(c) not in ready]
             if need_to_visit:
+                need_to_visit.sort(key=get_depth)
                 queue_extend(need_to_visit)
             else:
                 node = queue_pop()
@@ -287,6 +304,46 @@ class LazyArray:
 
         return functools.partial(_array_fn, var_names=var_names, params=params, fn=fn)
 
+    def show(self, filler=' '):
+        """Show the computational graph as a nested directory structure.
+        """
+        # ┃ ━ ┗ ┣ │ ─ └ ╰ ├ ← ⬤
+        bar = f"│{filler}"
+        space = f"{filler}{filler}"
+        junction = '├─'
+        bend = '╰─'
+
+        line = 0
+        seen = {}
+        queue = [(self, ())]
+        while queue:
+            t, columns = queue.pop()
+
+            prefix = f'{line:>4} '
+            if columns:
+                # work out various lines we need to draw based on whether the
+                # sequence of parents are themselves the last child of their parent
+                prefix += ''.join(bar if not p else space for p in columns[:-1])
+                prefix += (bend if columns[-1] else junction)
+
+            if t.fn_name not in (None, 'None'):
+                item = f"{t.fn_name}{list(t.shape)}"
+            else:
+                # input node
+                item = f"←{list(t.shape)}"
+
+            if t in seen:
+                # ignore loops, but point to when it was computed
+                print(f"{prefix} ... ({item} from line {seen[t]})")
+                continue
+            print(f"{prefix}{item}")
+            seen[t] = line
+            line += 1
+            deps = sorted(t.deps, key=get_depth, reverse=True)
+            islasts = [True] + [False] * (len(deps) - 1)
+            for islast, d in zip(islasts, deps):
+                queue.append((d, columns + (islast,)))
+
     def history_max_size(self):
         """Get the largest single tensor size appearing in this computation."""
         return max(node.size for node in self)
@@ -323,217 +380,45 @@ class LazyArray:
         """
         return sum(node.size for node in self)
 
-    def plot_history_size_footprint(
-        self,
-        log=None,
-        figsize=(8, 2),
-        color="purple",
-        alpha=0.5,
-        ax=None,
-        return_fig=False,
-    ):
-        """Plot the memory footprint throughout this computation.
-
-        Parameters
-        ----------
-        log : None or int, optional
-            If not None, display the sizes in base ``log``.
-        figsize : tuple, optional
-            Size of the figure.
-        color : str, optional
-            Color of the line.
-        alpha : float, optional
-            Alpha of the line.
-        ax : matplotlib.axes.Axes, optional
-            Axes to plot on, will be created if not provided.
-        return_fig : bool, optional
-            If True, return the figure object, else just show and close it.
+    def history_fn_frequencies(self):
+        """Get a dictionary mapping function names to the number of times they
+        are used in the computational graph.
         """
-        import numpy as np
-        import matplotlib.pyplot as plt
+        freq = {}
+        for node in self:
+            freq[node.fn_name] = freq.setdefault(node.fn_name, 0) + 1
+        return freq
 
-        y = np.array(self.history_size_footprint())
-        if log:
-            y = np.log2(y) / np.log2(log)
-            ylabel = f"$\\log_{log}[SIZE]$"
-        else:
-            ylabel = "SIZE"
-
-        x = np.arange(y.size)
-
-        if ax is None:
-            fig, ax = plt.subplots(figsize=figsize)
-        else:
-            fig = None
-
-        ax.fill_between(x, 0, y, alpha=alpha, color=color)
-
-        if fig is not None:
-            ax.grid(True, c=(0.95, 0.95, 0.95), which="both")
-            ax.set_axisbelow(True)
-            ax.set_xlim(0, np.max(x))
-            ax.set_ylim(0, np.max(y))
-            ax.set_ylabel(ylabel)
-
-        if return_fig or fig is None:
-            return fig
-        else:
-            plt.show()
-            plt.close(fig)
-
-    def to_nx_digraph(
-        self,
-        variables=None,
-        var_color=(0, 0.5, 0.25),
-        const_color=(0, 0.5, 1.0),
-        root_color=(1, 0, 0.5),
-        node_scale=5,
-    ):
-        """Convert this ``LazyArray`` into a ``networkx.DiGraph``, injecting
-        various plotting information as properties.
+    def to_nx_digraph(self, variables=None):
+        """Convert this ``LazyArray`` into a ``networkx.DiGraph``.
         """
-        import numpy as np
         import networkx as nx
 
-        if variables is not None:
-            if isinstance(variables, LazyArray):
-                variables = (variables,)
-            variables = set(variables)
-
-            def is_variable(node):
-                return node in variables
-
+        if variables is None:
+            variables = set()
+        elif isinstance(variables, LazyArray):
+            variables = {variables}
         else:
-
-            def is_variable(_):
-                return False
-
-        def extract_props(node, **kwargs):
-            v = is_variable(node)
-            d = {
-                "variable": v,
-                "fn": getattr(node._fn, "__name__", "CONST"),
-                "size": node_scale * np.log2(node.size) + node_scale,
-                "color": var_color if v else const_color,
-            }
-            d.update(kwargs)
-            if not node._deps:
-                d["color"] = tuple(x**0.2 for x in d["color"])
-            return d
+            variables = set(variables)
 
         G = nx.DiGraph()
         for node in self.ascend():
-            if any(is_variable(child) for child in node._deps):
+            variable = (
+                (node in variables) or
+                any(child in variables for child in node.deps)
+            )
+            if variable:
                 variables.add(node)
-            G.add_node(node, **extract_props(node))
-            for x in node._deps:
+            G.add_node(node, variable=variable)
+            for x in node.deps:
                 G.add_edge(x, node)
-        G.nodes[self]["color"] = root_color
 
         return G
 
-    def plot(
-        self,
-        variables=None,
-        initial_layout="spiral",
-        iterations=0,
-        k=None,
-        connectionstyle="arc3,rad=0.2",
-        arrowsize=5,
-        edge_color=None,
-        var_color=(0, 0.5, 0.25),
-        const_color=(0, 0.5, 1.0),
-        root_color=(1, 0, 0.5),
-        node_scale=5,
-        node_alpha=1.0,
-        show_labels=True,
-        label_alpha=0.2,
-        label_color=None,
-        font_size=8,
-        figsize=(6, 6),
-        ax=None,
-        return_fig=False,
-        **layout_opts,
-    ):
-        """Plot the computational graph of this ``LazyArray``."""
-        import matplotlib as mpl
-        import matplotlib.pyplot as plt
-        from matplotlib.colors import to_rgb
-        import networkx as nx
-
-        isdark = sum(to_rgb(mpl.rcParams["figure.facecolor"])) / 3 < 0.5
-        if isdark:
-            draw_color = (0.75, 0.77, 0.80, 1.0)
-        else:
-            draw_color = (0.45, 0.47, 0.50, 1.0)
-
-        if edge_color is None:
-            edge_color = draw_color
-
-        if label_color is None:
-            label_color = mpl.rcParams["axes.labelcolor"]
-
-        created_fig = ax is None
-        if created_fig:
-            fig, ax = plt.subplots(figsize=figsize, constrained_layout=True)
-            ax.axis("off")
-            ax.set_aspect("equal")
-
-        G = self.to_nx_digraph(
-            variables=variables,
-            var_color=var_color,
-            const_color=const_color,
-            root_color=root_color,
-            node_scale=node_scale,
-        )
-
-        if initial_layout == "spiral":
-            layout_opts.setdefault("equidistant", True)
-
-        pos = getattr(nx, initial_layout + "_layout")(G, **layout_opts)
-        if iterations:
-            pos = nx.layout.spring_layout(G, pos=pos, k=k, iterations=iterations)
-
-        nx.draw_networkx_edges(
-            G,
-            pos=pos,
-            ax=ax,
-            edge_color=draw_color,
-            connectionstyle=connectionstyle,
-            arrowsize=arrowsize,
-            arrows=True,
-        )
-        nx.draw_networkx_nodes(
-            G,
-            pos=pos,
-            ax=ax,
-            node_color=[G.nodes[x]["color"] for x in G.nodes],
-            node_size=[G.nodes[x]["size"] for x in G.nodes],
-            alpha=node_alpha,
-        )
-        if show_labels:
-            nx.draw_networkx_labels(
-                G,
-                pos=pos,
-                ax=ax,
-                labels={x: G.nodes[x]["fn"] for x in G.nodes},
-                font_color=label_color,
-                font_size=font_size,
-                alpha=label_alpha,
-                bbox={
-                    "color": to_rgb(mpl.rcParams["figure.facecolor"]),
-                    "alpha": label_alpha,
-                },
-            )
-
-        if not created_fig:
-            return
-
-        if return_fig:
-            return fig
-        else:
-            plt.show()
-            plt.close(fig)
+    plot = plot_circuit
+    plot_graph = plot_graph
+    plot_circuit = plot_circuit
+    plot_history_size_footprint = plot_history_size_footprint
 
     @property
     def fn(self):
@@ -570,6 +455,10 @@ class LazyArray:
     @property
     def deps(self):
         return self._deps
+
+    @property
+    def depth(self):
+        return self._depth
 
     def __getitem__(self, key):
         return getitem(self, key)
@@ -705,20 +594,21 @@ def materialize_identity(x):
     return x
 
 
-_materialize_dispatch = collections.defaultdict(
-    lambda: materialize_identity,
-    {
-        LazyArray: materialize_larray,
-        tuple: materialize_tuple,
-        list: materialize_list,
-        dict: materialize_dict,
-    },
-)
+_materialize_dispatch = {
+    LazyArray: materialize_larray,
+    tuple: materialize_tuple,
+    list: materialize_list,
+    dict: materialize_dict,
+}
 
 
 def maybe_materialize(x):
     """Recursively evaluate LazyArray instances in tuples, lists and dicts."""
-    return _materialize_dispatch[x.__class__](x)
+    try:
+        return _materialize_dispatch[x.__class__](x)
+    except KeyError:
+        _materialize_dispatch[x.__class__] = materialize_identity
+        return x
 
 
 # -------------------- recusively stringifying 'pytrees' -------------------- #
@@ -814,7 +704,7 @@ def _remove_sharing_cache():
 
 @contextlib.contextmanager
 def shared_intermediates(cache=None):
-    """Context in which contract intermediate results are shared.
+    """Context in which intermediate results are shared.
 
     Note that intermediate computations will not be garbage collected until
     1. this context exits, and
@@ -859,6 +749,17 @@ def hash_args_kwargs(fn_name, *args, **kwargs):
 
 
 def lazy_cache(fn_name, hasher=None):
+    """Decorator to mark a function as being lazy cacheable.
+
+    Parameters
+    ----------
+    fn_name : str
+        The name to use for the function in the cache.
+    hasher : callable
+        A function with signature ``hasher(fn_name, *args, **kwargs)`` that
+        returns a hashable key for the cache. If not specified, the default
+        is to use ``hash_args_kwargs``.
+    """
 
     if hasher is None:
         hasher = hash_args_kwargs
@@ -908,25 +809,19 @@ def find_common_dtype(*xs):
     return _find_common_dtype(tuple(map(get_dtype_name, xs)), ())
 
 
+@functools.lru_cache(None)
+def _find_common_backend_cached(names):
+    return max(
+        names, key=lambda n: multi_class_priorities.get(n, 0),
+    )
+
+
 def find_common_backend(*xs):
-    backend = None
-
-    # prefer inferring from LazyArray
-    for x in xs:
-        b = getattr(x, "backend", None)
-        if b == "autoray.lazy":
-            # check if any LazyArray is *itself* backed by LazyArray
-            return b
-
-        # else default to first backend seen
-        elif (backend is None) and (b is not None):
-            backend = b
-
-    # if no LazyArray args, check raw arrays
-    if backend is None:
-        backend = next(iter(infer_backend(x) for x in xs if hasattr(x, "shape")), None)
-
-    return backend
+    names = tuple(
+        x.backend if isinstance(x, LazyArray) else infer_backend(x)
+        for x in xs
+    )
+    return _find_common_backend_cached(names)
 
 
 @functools.lru_cache(1024)
@@ -961,10 +856,15 @@ def array(x):
 @lazy_cache("transpose")
 def transpose(a, axes=None):
     a = ensure_lazy(a)
-    fn_transpose = get_lib_fn(a.backend, "transpose")
 
     if axes is None:
         axes = range(a.ndim)[::-1]
+
+    if all(i == ax for i, ax in enumerate(axes)):
+        # no transposition required
+        return a
+
+    fn_transpose = get_lib_fn(a.backend, "transpose")
     newshape = tuple(a.shape[i] for i in axes)
 
     # check for chaining transpositions
@@ -1007,6 +907,11 @@ def find_full_reshape(newshape, size):
 def reshape(a, newshape):
     newshape = (newshape,) if isinstance(newshape, int) else tuple(newshape)
     newshape = find_full_reshape(newshape, a.size)
+
+    if a.shape == tuple(newshape):
+        # no reshape required
+        return a
+
     return _reshape_tuple(a, newshape)
 
 
