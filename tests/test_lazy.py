@@ -162,6 +162,9 @@ def test_plot():
     lf.plot_graph()
     lf.plot_graph(variables=[lc, ld], color_by="variables")
     lf.plot_history_size_footprint()
+    lf.plot_history_functions_scatter()
+    lf.plot_history_functions_lines()
+    lf.plot_history_functions_image()
 
 
 def test_share_intermediates():
