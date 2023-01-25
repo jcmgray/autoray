@@ -352,7 +352,6 @@ def import_lib_fn(backend, fn):
         return _COMPOSED_FUNCTION_GENERATORS[fn](backend)
 
     try:
-
         # submodule where function is found for backend,
         #     e.g. ['tensorflow', trace'] -> 'tensorflow.linalg'
         try:
@@ -371,13 +370,15 @@ def import_lib_fn(backend, fn):
             full_location = ".".join([full_location] + split_fn[:-1])
             only_fn = split_fn[-1]
 
-        # try aliases for global (not function specific) modules and submodules
-        #     e.g. 'decimal' -> 'math'
-        #     e.g. 'cupy.scipy' -> 'cupyx.scipy'
-        for k, v in _MODULE_ALIASES.items():
-            if full_location[:len(k)] == k:
-                full_location = full_location.replace(k, v, 1)
-                break
+            # try aliases for global (not function specific) modules and submodules
+            #     e.g. 'decimal' -> 'math'
+            #     e.g. 'cupy.scipy' -> 'cupyx.scipy'
+            # we don't do this if the function location has been explicitly
+            # give in _SUBMODULE_ALIASES, as that is already a full path
+            for k, v in _MODULE_ALIASES.items():
+                if full_location[:len(k)] == k:
+                    full_location = full_location.replace(k, v, 1)
+                    break
 
         # cached lookup of custom name function might take
         #     e.g. ['tensorflow', 'sum'] -> 'reduce_sum'
