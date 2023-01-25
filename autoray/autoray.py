@@ -352,9 +352,6 @@ def import_lib_fn(backend, fn):
         return _COMPOSED_FUNCTION_GENERATORS[fn](backend)
 
     try:
-        # alias for global module,
-        #     e.g. 'decimal' -> 'math'
-        module = _MODULE_ALIASES.get(backend, backend)
 
         # submodule where function is found for backend,
         #     e.g. ['tensorflow', trace'] -> 'tensorflow.linalg'
@@ -366,7 +363,7 @@ def import_lib_fn(backend, fn):
             only_fn = fn.split(".")[-1]
 
         except KeyError:
-            full_location = module
+            full_location = backend
 
             # move any prepended location into the full module path
             #     e.g. 'fn=linalg.eigh' -> ['linalg', 'eigh']
@@ -374,8 +371,9 @@ def import_lib_fn(backend, fn):
             full_location = ".".join([full_location] + split_fn[:-1])
             only_fn = split_fn[-1]
 
-        # try aliases for global submodules
-        #    e.g. 'cupy.scipy' -> 'cupyx.scipy'
+        # try aliases for global (not function specific) modules and submodules
+        #     e.g. 'decimal' -> 'math'
+        #     e.g. 'cupy.scipy' -> 'cupyx.scipy'
         for k, v in _MODULE_ALIASES.items():
             if full_location[:len(k)] == k:
                 full_location = full_location.replace(k, v, 1)
@@ -392,10 +390,10 @@ def import_lib_fn(backend, fn):
             if "." in full_location:
                 # sometimes libraries hack an attribute to look like submodule
                 mod, *submods = full_location.split(".")
-                mod = importlib.import_module(mod)
+                lib = importlib.import_module(mod)
                 # also need to handle nested submodules
                 for submod in submods:
-                    mod = getattr(mod, submod)
+                    lib = getattr(lib, submod)
             else:
                 # failed to import library at all -> catch + raise ImportError
                 raise AttributeError
