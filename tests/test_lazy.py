@@ -162,10 +162,11 @@ def test_plot():
     lf.plot_graph()
     lf.plot_graph(variables=[lc, ld], color_by="variables")
     lf.plot_circuit()
+    lf.plot_circuit(color_by="id")
     lf.plot_history_size_footprint()
     lf.plot_history_functions_scatter()
-    lf.plot_history_functions_lines()
-    lf.plot_history_functions_image()
+    lf.plot_history_functions_lines(log=2)
+    lf.plot_history_functions_image(rasterize=True)
 
 
 def test_share_intermediates():
