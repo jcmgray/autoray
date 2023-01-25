@@ -374,6 +374,13 @@ def import_lib_fn(backend, fn):
             full_location = ".".join([full_location] + split_fn[:-1])
             only_fn = split_fn[-1]
 
+        # try aliases for global submodules
+        #    e.g. 'cupy.scipy' -> 'cupyx.scipy'
+        for k, v in _MODULE_ALIASES.items():
+            if full_location[:len(k)] == k:
+                full_location = full_location.replace(k, v, 1)
+                break
+
         # cached lookup of custom name function might take
         #     e.g. ['tensorflow', 'sum'] -> 'reduce_sum'
         fn_name = _FUNC_ALIASES.get((backend, fn), only_fn)
@@ -384,8 +391,11 @@ def import_lib_fn(backend, fn):
         except ImportError:
             if "." in full_location:
                 # sometimes libraries hack an attribute to look like submodule
-                mod, submod = full_location.split(".")
-                lib = getattr(importlib.import_module(mod), submod)
+                mod, *submods = full_location.split(".")
+                mod = importlib.import_module(mod)
+                # also need to handle nested submodules
+                for submod in submods:
+                    mod = getattr(mod, submod)
             else:
                 # failed to import library at all -> catch + raise ImportError
                 raise AttributeError
@@ -898,9 +908,11 @@ def numpy_to_numpy(x):
     return do("asarray", x, like="numpy")
 
 
+_MODULE_ALIASES["numpy.scipy"] = "scipy"
 _FUNCS["numpy", "to_numpy"] = numpy_to_numpy
 _FUNCS["numpy", "complex"] = complex_add_re_im
 _FUNCS["builtins", "to_numpy"] = numpy_to_numpy
+_SUBMODULE_ALIASES["numpy", "linalg.lu"] = "scipy.linalg"
 _SUBMODULE_ALIASES["numpy", "linalg.expm"] = "scipy.linalg"
 _CUSTOM_WRAPPERS["numpy", "linalg.svd"] = svd_not_full_matrices_wrapper
 _CUSTOM_WRAPPERS["numpy", "random.normal"] = with_dtype_wrapper
@@ -913,6 +925,7 @@ def cupy_to_numpy(x):  # pragma: no cover
     return x.get()
 
 
+_MODULE_ALIASES["cupy.scipy"] = "cupyx.scipy"
 _FUNCS["cupy", "to_numpy"] = cupy_to_numpy
 _FUNCS["cupy", "complex"] = complex_add_re_im
 _CUSTOM_WRAPPERS["cupy", "linalg.svd"] = svd_not_full_matrices_wrapper
