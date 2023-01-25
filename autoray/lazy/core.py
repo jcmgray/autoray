@@ -14,7 +14,12 @@ from ..autoray import (
     register_backend,
     register_function,
 )
-from .draw import plot_graph, plot_circuit, plot_history_size_footprint
+from .draw import (
+    plot_graph,
+    plot_circuit,
+    plot_history_size_footprint,
+    plot_history_functions,
+)
 
 
 _EMPTY_DICT = {}
@@ -419,6 +424,16 @@ class LazyArray:
     plot_graph = plot_graph
     plot_circuit = plot_circuit
     plot_history_size_footprint = plot_history_size_footprint
+    plot_history_functions = plot_history_functions
+    plot_history_functions_scatter = functools.partialmethod(
+        plot_history_functions, kind='scatter'
+    )
+    plot_history_functions_lines = functools.partialmethod(
+        plot_history_functions, kind='lines'
+    )
+    plot_history_functions_image = functools.partialmethod(
+        plot_history_functions, kind='image'
+    )
 
     @property
     def fn(self):

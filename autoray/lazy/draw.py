@@ -5,6 +5,45 @@ import itertools
 import functools
 
 
+
+COLORING_SEED = 1  # 8, 10
+
+
+def set_coloring_seed(seed):
+    """Set the seed for the random color generator.
+
+    Parameters
+    ----------
+    seed : int
+        The seed to use.
+    """
+    global COLORING_SEED
+    COLORING_SEED = seed
+
+
+
+def hash_to_nvalues(s, nval, seed=None):
+    import hashlib
+
+    if seed is None:
+        seed = COLORING_SEED
+
+    m = hashlib.sha256()
+    m.update(f"{seed}".encode())
+    m.update(s.encode())
+    hsh = m.hexdigest()
+
+    b = len(hsh) // nval
+    if b == 0:
+        raise ValueError(
+            f"Can't extract {nval} values from hash of length {len(hsh)}"
+        )
+    return tuple(
+        int(hsh[i * b:(i + 1) * b], 16) / 16**b
+        for i in range(nval)
+    )
+
+
 def hash_to_color(
     s,
     hmin=0.0,
@@ -38,15 +77,9 @@ def hash_to_color(
     color : tuple
         A tuple of floats in the range [0, 1] representing the RGB color.
     """
-    import hashlib
     from matplotlib.colors import hsv_to_rgb
 
-    hsh = hashlib.md5(s.encode()).hexdigest()
-
-    h = int(hsh[0:4], 16) / 16**4
-    s = int(hsh[4:8], 16) / 16**4
-    v = int(hsh[8:12], 16) / 16**4
-
+    h, s, v = hash_to_nvalues(s, 3)
     h = hmin + h * (hmax - hmin)
     s = smin + s * (smax - smin)
     v = vmin + v * (vmax - vmin)
@@ -87,10 +120,10 @@ def count_around(c, layout):
 
 
 def get_default_colors_dict(colors):
+    import numpy as np
     colors = dict() if colors is None else dict(colors)
-    colors.setdefault("", (0.5, 0.5, 0.5))
-    colors.setdefault("None", (0.5, 0.5, 0.5))
-    colors.setdefault("getitem", (0.5, 0.5, 0.5))
+    colors.setdefault("None", np.array([0.5, 0.5, 0.5]))
+    colors.setdefault("getitem", np.array([0.5, 0.5, 0.5]))
     return colors
 
 
@@ -120,7 +153,6 @@ def plot_graph(
     label_rotation=45,
     figsize=None,
     ax=None,
-    return_fig=False,
     **layout_opts,
 ):
     """Plot the computational graph of this ``LazyArray``."""
@@ -174,11 +206,14 @@ def plot_graph(
         node_sizes[node] = 6 * node_scale * (np.log2(node.size) + 1)
 
         # set node label and marker
-        if node.fn_name != "None":
-            node_labels[node] = node.fn_name
-        else:
+        if node.fn_name == "None":
             node_markers.setdefault(node, "o")
             node_labels[node] = ""
+        if node.fn_name == "getitem":
+            node_markers.setdefault(node, ".")
+            node_labels[node] = ""
+        else:
+            node_labels[node] = node.fn_name
 
         node_markers.setdefault(node, node_shape)
 
@@ -241,14 +276,11 @@ def plot_graph(
         for _, t in text.items():
             t.set_rotation(label_rotation)
 
-    if not created_fig:
-        return
-
-    if return_fig:
-        return fig
-    else:
-        plt.show()
+    if fig is not None:
+        # created figure
         plt.close(fig)
+        return fig
+
 
 
 def plot_circuit(
@@ -422,14 +454,11 @@ def plot_circuit(
     ax.set_xlim(xmin - 0.5, xmax + 0.5)
     ax.set_ylim(ymin - 0.5, ymax + 0.5)
 
-    if not created_fig:
-        return
-
-    if return_fig:
-        return fig
-    else:
-        plt.show()
+    if fig is not None:
+        # created figure
         plt.close(fig)
+        return fig
+
 
 
 # a style to use for matplotlib that works with light and dark backgrounds
@@ -478,8 +507,9 @@ def plot_history_size_footprint(
     figsize=(8, 2),
     color="purple",
     alpha=0.5,
+    rasterize=4096,
+    rasterize_dpi=300,
     ax=None,
-    return_fig=False,
 ):
     """Plot the memory footprint throughout this computation.
 
@@ -504,18 +534,26 @@ def plot_history_size_footprint(
     y = np.array(self.history_size_footprint())
     if log:
         y = np.log2(y) / np.log2(log)
-        ylabel = f"$\\log_{log}[SIZE]$"
+        ylabel = f"$\\log_{log}[total size]$"
     else:
-        ylabel = "SIZE"
+        ylabel = "total size"
 
     x = np.arange(y.size)
 
     if ax is None:
         fig, ax = plt.subplots(figsize=figsize)
+        fig.set_dpi(rasterize_dpi)
     else:
         fig = None
 
-    ax.fill_between(x, 0, y, alpha=alpha, color=color)
+    if isinstance(rasterize, (float, int)):
+        # only turn on above a certain size
+        rasterize = y.size > rasterize
+
+    if rasterize:
+        ax.set_rasterization_zorder(0)
+
+    ax.fill_between(x, 0, y, alpha=alpha, color=color, zorder=-1)
 
     if fig is not None:
         ax.grid(True, c=(0.95, 0.95, 0.95), which="both")
@@ -524,8 +562,143 @@ def plot_history_size_footprint(
         ax.set_ylim(0, np.max(y))
         ax.set_ylabel(ylabel)
 
-    if return_fig or fig is None:
-        return fig
-    else:
-        plt.show()
+    if fig is not None:
+        # created figure
         plt.close(fig)
+        return fig
+
+
+
+@default_to_neutral_style
+def plot_history_functions(
+    self,
+    *,
+    fn=None,
+    log=None,
+    colors=None,
+    kind="lines",
+    scatter_size=5,
+    scatter_marker="s",
+    lines_width=5,
+    image_alpha_pow=2/3,
+    image_aspect=4,
+    legend=True,
+    legend_ncol=None,
+    legend_bbox_to_anchor=None,
+    legend_loc=None,
+    rasterize=4096,
+    rasterize_dpi=300,
+    ax=None,
+    figsize=(8, 2),
+):
+    """Plot the functions used throughout this computation, color coded, as
+    either a scatter plot or an image, showing the size of the that individual
+    intermediate as well.
+    """
+    import numpy as np
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+
+    if fn is not None:
+        ylabel = "custom"
+    else:
+        ylabel = "node size"
+
+        def fn(node):
+            return node.size
+
+    if log:
+        # wrap the function to take log of values
+        ylabel = f"$\\log_{{{log}}}[{ylabel}]$"
+        orig_fn = fn
+
+        def fn(node):
+            return np.log2(orig_fn(node)) / np.log2(log)
+
+    colors = get_default_colors_dict(colors)
+
+    xs = []
+    ys = []
+    cs = []
+    ymax = 0
+    for i, node in enumerate(self.ascend()):
+        xs.append(i)
+        y = fn(node)
+        ymax = max(ymax, y)
+        ys.append(y)
+        try:
+            c = colors[node.fn_name]
+        except KeyError:
+            c = colors[node.fn_name] = hash_to_color(node.fn_name)
+        cs.append(c)
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+        fig.set_dpi(rasterize_dpi)
+        ax.set_ylabel(ylabel)
+    else:
+        fig = None
+
+    if isinstance(rasterize, (float, int)):
+        # only turn on above a certain size
+        rasterize = len(xs) > rasterize
+
+    if rasterize:
+        ax.set_rasterization_zorder(0)
+
+    if kind == "scatter":
+        ax.scatter(
+            xs, ys,
+            c=cs,
+            s=scatter_size,
+            marker=scatter_marker,
+            rasterized=rasterize
+        )
+
+    elif kind == "lines":
+        lns = [((x, 0.0), (x, y)) for x, y in zip(xs, ys)]
+        ax.add_collection(mpl.collections.LineCollection(
+            lns, colors=cs, zorder=-1, lw=lines_width,
+        ))
+        ax.set_xlim(-0.5, len(lns) + 0.5)
+        ax.set_ylim(0, 1.05 * ymax)
+
+    elif kind == "image":
+        ax.axis("off")
+        ys = np.array(ys)
+        ys = (ys / ys.max()).reshape(-1, 1)**image_alpha_pow
+        N = len(cs)
+        da = round((N / image_aspect) ** 0.5)
+        db = N // da
+        while da * db < N:
+            db += 1
+        Ns = da * db
+        img = np.concatenate([cs, ys], axis=1)
+        img = np.concatenate([img, np.tile(0.0, (Ns - N, 4))], axis=0)
+        img = img.reshape(da, db, 4)
+        ax.imshow(img, zorder=-1)
+
+    if legend:
+        legend_items = [
+            mpl.patches.Patch(facecolor=c, label=fn_name)
+            for fn_name, c in colors.items()
+        ]
+
+        if legend_ncol is None:
+            legend_ncol = max(1, round(len(legend_items) / 6))
+        if legend_bbox_to_anchor is None:
+            legend_bbox_to_anchor = (1.0, 1.0)
+        if legend_loc is None:
+            legend_loc = "upper left"
+
+        ax.legend(
+            handles=legend_items,
+            ncol=legend_ncol,
+            bbox_to_anchor=legend_bbox_to_anchor,
+            loc=legend_loc,
+        )
+
+    if fig is not None:
+        # created figure
+        plt.close(fig)
+        return fig
