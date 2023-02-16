@@ -1259,7 +1259,7 @@ def make_reduction_func(name):
             )
         elif not hasattr(axis, "__len__"):
             axis = (axis,)
-        axis = tuple(nd - i if i < 0 else i for i in axis)
+        axis = tuple(nd + i if i < 0 else i for i in axis)
 
         newshape = tuple(d for i, d in enumerate(a.shape) if i not in axis)
         return a.to(fn=fn, args=(a, axis), shape=newshape)
