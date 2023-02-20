@@ -1192,7 +1192,7 @@ def where(condition, x, y):
     return x.to(
         fn=get_lib_fn(x.backend, "where"),
         args=(condition, x, y),
-        deps=tuple(a for a in (condition, x) if isinstance(a, LazyArray))
+        deps=tuple(a for a in (condition, x, y) if isinstance(a, LazyArray))
     )
 
 
