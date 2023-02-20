@@ -1189,9 +1189,12 @@ def split(ary, indices_or_sections, axis=0):
 def where(condition, x, y):
     x = ensure_lazy(x)
     condition = ensure_lazy(condition)
-    return x.to(
+    return LazyArray(
+        backend=find_common_backend(condition, x),
         fn=get_lib_fn(x.backend, "where"),
         args=(condition, x, y),
+        kwargs=None,
+        shape=find_broadcast_shape(condition.shape, x.shape),
         deps=tuple(a for a in (condition, x, y) if isinstance(a, LazyArray))
     )
 
@@ -1221,10 +1224,10 @@ floordivide = make_binary_func("floordivide", operator.floordiv)
 truedivide = make_binary_func("truedivide", operator.truediv)
 pow_ = make_binary_func("pow", operator.pow)
 gt = make_binary_func('gt', operator.gt)
-ne = make_binary_func('gt', operator.ne)
-lt = make_binary_func('gt', operator.lt)
-ge = make_binary_func('gt', operator.ge)
-le = make_binary_func('gt', operator.le)
+ne = make_binary_func('ne', operator.ne)
+lt = make_binary_func('lt', operator.lt)
+ge = make_binary_func('ge', operator.ge)
+le = make_binary_func('le', operator.le)
 
 
 def complex_(re, im):
