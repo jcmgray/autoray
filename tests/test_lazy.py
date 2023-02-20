@@ -453,3 +453,14 @@ def test_use_variable_to_trace_function():
     y = do('random.uniform', size=(3, 4), like='numpy')
     z = f([x, y])
     assert z.shape == (2, 4)
+
+
+def test_where():
+    a = lazy.Variable(shape=(4,), backend='numpy')
+    b = lazy.Variable(shape=(4,), backend='numpy')
+    c = do('where', (a > 0, b, 1))
+    f = c.get_function([a, b])
+    x = do('asarray', [-0.5, -0.5, 1, 2], like='numpy')
+    y = do('asarray', [1, 2, 3, 4], like='numpy')
+    z = f([x, y])
+    assert_allclose(z, [1, 1, 3, 4])
