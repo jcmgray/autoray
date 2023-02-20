@@ -20,6 +20,7 @@ from .core import (
     stack,
     concatenate,
     split,
+    where,
     # binary
     multiply,
     add,
@@ -80,6 +81,7 @@ __all__ = (
     "stack",
     "concatenate",
     "split",
+    "where",
     # binary functions
     "multiply",
     "add",

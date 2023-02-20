@@ -529,6 +529,21 @@ class LazyArray:
     def __neg__(self):
         return self.to(operator.neg)
 
+    def __ne__(self, other):
+        return ne(self, other)
+
+    def __gt__(self, other):
+        return gt(self, other)
+
+    def __lt__(self, other):
+        return lt(self, other)
+
+    def __ge__(self, other):
+        return ge(self, other)
+
+    def __le__(self, other):
+        return le(self, other)
+
     @property
     def T(self):
         return transpose(self)
@@ -1171,6 +1186,19 @@ def split(ary, indices_or_sections, axis=0):
     return tuple(sub_arys)
 
 
+def where(condition, x, y):
+    x = ensure_lazy(x)
+    condition = ensure_lazy(condition)
+    return LazyArray(
+        backend=find_common_backend(condition, x),
+        fn=get_lib_fn(x.backend, "where"),
+        args=(condition, x, y),
+        kwargs=None,
+        shape=find_broadcast_shape(condition.shape, x.shape),
+        deps=tuple(a for a in (condition, x, y) if isinstance(a, LazyArray))
+    )
+
+
 def make_binary_func(name, fn):
     @lazy_cache(name)
     def binary_func(x1, x2):
@@ -1195,6 +1223,11 @@ sub = make_binary_func("sub", operator.sub)
 floordivide = make_binary_func("floordivide", operator.floordiv)
 truedivide = make_binary_func("truedivide", operator.truediv)
 pow_ = make_binary_func("pow", operator.pow)
+gt = make_binary_func('gt', operator.gt)
+ne = make_binary_func('ne', operator.ne)
+lt = make_binary_func('lt', operator.lt)
+ge = make_binary_func('ge', operator.ge)
+le = make_binary_func('le', operator.le)
 
 
 def complex_(re, im):
