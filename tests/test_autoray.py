@@ -3,6 +3,7 @@ import importlib
 import pytest
 
 import autoray as ar
+from autoray import shape
 
 
 # find backends to tests
@@ -117,7 +118,7 @@ def test_attribute_prefs(backend, fn, args):
 def modified_gram_schmidt(X):
 
     Q = []
-    for j in range(0, X.shape[0]):
+    for j in range(0, shape(X)[0]):
 
         q = X[j, :]
         for i in range(0, j):
@@ -148,7 +149,7 @@ def modified_gram_schmidt_np_mimic(X):
     print(np)
 
     Q = []
-    for j in range(0, X.shape[0]):
+    for j in range(0, shape(X)[0]):
 
         q = X[j, :]
         for i in range(0, j):
@@ -325,7 +326,7 @@ def test_count_nonzero(backend, array_dtype):
 def test_pseudo_submodules():
     x = gen_rand((2, 3), "numpy")
     xT = ar.do("numpy.transpose", x, like="autoray")
-    assert xT.shape == (3, 2)
+    assert shape(xT) == (3, 2)
 
 
 @pytest.mark.parametrize("backend", BACKENDS)
@@ -460,7 +461,7 @@ def test_pad(backend):
         (((4, 3), (2, 4), (3, 2)), (10, 10, 10)),
     ]:
         B = ar.do("pad", A, pad_width)
-        assert B.shape == new_shape
+        assert shape(B) == new_shape
         assert ar.to_numpy(ar.do("sum", A)) == pytest.approx(
             ar.to_numpy(ar.do("sum", B))
         )
@@ -502,7 +503,7 @@ def test_take(backend):
 
     # Take along axis 1, and check if result makes sense
     B = ar.do("take", A, ind, axis=1)
-    assert B.shape == (2, 4, 4)
+    assert shape(B) == (2, 4, 4)
     for i in range(num_inds):
         assert ar.do(
             "allclose", ar.to_numpy(A[:, ind[0], :]), ar.to_numpy(B[:, 0, :])
@@ -518,7 +519,7 @@ def test_concatenate(backend):
     # also check if automatically inferring backend works
     mats_concat1 = ar.do("concatenate", mats, axis=1)
     mats_concat2 = ar.do("concatenate", mats, axis=1, like=backend)
-    assert mats_concat1.shape == mats_concat2.shape == (2, 9, 4)
+    assert shape(mats_concat1) == shape(mats_concat2) == (2, 9, 4)
     assert (
         backend
         == ar.infer_backend(mats_concat1)
@@ -534,7 +535,7 @@ def test_stack(backend):
     # also check if automatically inferring backend works
     mats_stack1 = ar.do("stack", mats)
     mats_stack2 = ar.do("stack", mats, like=backend)
-    assert mats_stack1.shape == mats_stack2.shape == (3, 2, 3, 4)
+    assert shape(mats_stack1) == shape(mats_stack2) == (3, 2, 3, 4)
     assert (
         backend
         == ar.infer_backend(mats_stack1)
@@ -556,7 +557,7 @@ def test_einsum(backend):
         C3 = C1
     C4 = ar.do("reshape", A, (2, 12)) @ ar.do("reshape", B, (12, 2))
 
-    assert C1.shape == C2.shape == C3.shape == (2, 2)
+    assert shape(C1) == shape(C2) == shape(C3) == (2, 2)
     assert ar.do("allclose", ar.to_numpy(C1), ar.to_numpy(C4))
     assert ar.do("allclose", ar.to_numpy(C2), ar.to_numpy(C4))
     assert ar.do("allclose", ar.to_numpy(C3), ar.to_numpy(C4))
@@ -621,9 +622,9 @@ def test_dtype_kwarg(backend, dtype_str, fn, str_or_backend):
         A = ar.do(fn, shape=(10, 5), dtype=dtype, like=backend)
     else:  # fn = 'eye'
         A = ar.do(fn, 10, dtype=dtype, like=backend)
-        assert A.shape == (10, 10)
+        assert shape(A) == (10, 10)
         A = ar.do(fn, 10, 5, dtype=dtype, like=backend)
-    assert A.shape == (10, 5)
+    assert shape(A) == (10, 5)
     assert ar.get_dtype_name(A) == dtype_str
 
 

@@ -1,6 +1,6 @@
 import pytest
 
-from autoray import do, autojit, infer_backend, to_numpy
+from autoray import do, autojit, infer_backend, to_numpy, shape
 from .test_autoray import BACKENDS, gen_rand
 
 from numpy.testing import assert_allclose
@@ -13,7 +13,7 @@ BACKENDS = [
 
 def modified_gram_schmidt(X):
     Q = []
-    for j in range(0, X.shape[0]):
+    for j in range(0, shape(X)[0]):
         q = X[j, :]
         for i in range(0, j):
             rij = do("tensordot", do("conj", Q[i]), q, axes=1)

@@ -3,7 +3,7 @@ import re
 
 import pytest
 
-from autoray import do, lazy, to_numpy, infer_backend, astype
+from autoray import do, lazy, to_numpy, infer_backend, astype, shape
 from numpy.testing import assert_allclose
 
 from .test_autoray import BACKENDS, gen_rand
@@ -43,7 +43,7 @@ def test_manual_construct():
 
 def modified_gram_schmidt(X):
     Q = []
-    for j in range(0, X.shape[0]):
+    for j in range(0, shape(X)[0]):
         q = X[j, :]
         for i in range(0, j):
             rij = do("tensordot", do("conj", Q[i]), q, axes=1)
@@ -60,7 +60,7 @@ def wrap_strict_check(larray):
     @functools.wraps(fn_orig)
     def checked(*args, **kwargs):
         data = fn_orig(*args, **kwargs)
-        assert tuple(data.shape) == larray.shape
+        assert shape(data) == shape(larray)
         assert infer_backend(data) == larray.backend
         return data
 
@@ -221,9 +221,9 @@ def test_svd(backend, dtype):
         pytest.xfail("Sparse doesn't support 'linalg.svd' yet...")
     x = lazy.array(gen_rand((4, 5), backend, dtype))
     U, s, VH = do("linalg.svd", x)
-    assert U.shape == (4, 4)
-    assert s.shape == (4,)
-    assert VH.shape == (4, 5)
+    assert shape(U) == (4, 4)
+    assert shape(s) == (4,)
+    assert shape(VH) == (4, 5)
     s = astype(s, dtype)
     ly = U @ (do("reshape", s, (-1, 1)) * VH)
     make_strict(ly)
@@ -238,8 +238,8 @@ def test_qr(backend):
         pytest.xfail("Sparse doesn't support 'linalg.qr' yet...")
     x = lazy.array(gen_rand((4, 5), backend))
     Q, R = do("linalg.qr", x)
-    assert Q.shape == (4, 4)
-    assert R.shape == (4, 5)
+    assert shape(Q) == (4, 4)
+    assert shape(R) == (4, 5)
     ly = Q @ R
     make_strict(ly)
     assert_allclose(
@@ -258,8 +258,8 @@ def test_eig_inv(backend, dtype):
     d = 20
     x = lazy.array(gen_rand((d, d), backend, dtype))
     el, ev = do("linalg.eig", x)
-    assert el.shape == (d,)
-    assert ev.shape == (d, d)
+    assert shape(el) == (d,)
+    assert shape(ev) == (d, d)
     ly = ev @ (do("reshape", el, (-1, 1)) * do("linalg.inv", ev))
     make_strict(ly)
     assert_allclose(
@@ -275,8 +275,8 @@ def test_eigh(backend, dtype):
     x = lazy.array(gen_rand((5, 5), backend, dtype))
     x = x + x.H
     el, ev = do("linalg.eigh", x)
-    assert el.shape == (5,)
-    assert ev.shape == (5, 5)
+    assert shape(el) == (5,)
+    assert shape(ev) == (5, 5)
     ly = ev @ (do("reshape", el, (-1, 1)) * ev.H)
     make_strict(ly)
     assert_allclose(
@@ -292,7 +292,7 @@ def test_cholesky(backend, dtype):
     x = lazy.array(gen_rand((5, 5), backend, dtype))
     x = x @ x.H
     C = do("linalg.cholesky", x)
-    assert C.shape == (5, 5)
+    assert shape(C) == (5, 5)
     ly = C @ C.H
     make_strict(ly)
     assert_allclose(
@@ -309,7 +309,7 @@ def test_solve(backend, dtype):
     y = lazy.array(gen_rand((5,), backend, dtype))
 
     x = do("linalg.solve", A, y)
-    assert x.shape == (5,)
+    assert shape(x) == (5,)
     # tensorflow e.g. doesn't allow ``A @ x`` for vector x ...
     ly = do("tensordot", A, x, axes=1)
     make_strict(ly)
@@ -452,7 +452,7 @@ def test_use_variable_to_trace_function():
     x = do('random.uniform', size=(2, 3), like='numpy')
     y = do('random.uniform', size=(3, 4), like='numpy')
     z = f([x, y])
-    assert z.shape == (2, 4)
+    assert shape(z) == (2, 4)
 
 
 def test_where():

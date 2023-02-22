@@ -6,6 +6,7 @@ import contextlib
 import collections
 
 from ..autoray import (
+    shape,
     astype,
     get_dtype_name,
     get_lib_fn,
@@ -82,7 +83,7 @@ class LazyArray:
         obj = cls.__new__(cls)
         obj._backend = infer_backend(data)
         obj._fn = obj._args = obj._kwargs = None
-        obj._shape = tuple(map(int, data.shape))
+        obj._shape = shape(data)
         obj._data = data
         obj._deps = ()
         obj._depth = 0
@@ -895,7 +896,8 @@ def transpose(a, axes=None):
         return a
 
     fn_transpose = get_lib_fn(a.backend, "transpose")
-    newshape = tuple(a.shape[i] for i in axes)
+    oldshape = shape(a)
+    newshape = tuple(oldshape[i] for i in axes)
 
     # check for chaining transpositions
     if a._fn is fn_transpose:
@@ -938,7 +940,7 @@ def reshape(a, newshape):
     newshape = (newshape,) if isinstance(newshape, int) else tuple(newshape)
     newshape = find_full_reshape(newshape, a.size)
 
-    if a.shape == tuple(newshape):
+    if shape(a) == tuple(newshape):
         # no reshape required
         return a
 
@@ -976,7 +978,7 @@ def getitem(a, key):
             key = key + (slice(None),) * ndiff
 
     newshape = []
-    for k, d in zip(key, a.shape):
+    for k, d in zip(key, shape(a)):
         if isinstance(k, LazyArray):
             newshape.append(k.size)
             deps += (k,)
@@ -1000,8 +1002,8 @@ def tensordot(a, b, axes=2):
     if isinstance(axes, int):
         axes = (tuple(range(a.ndim - axes, a.ndim)), tuple(range(axes)))
 
-    newshape = tuple(d for i, d in enumerate(a.shape) if i not in axes[0]) + tuple(
-        d for i, d in enumerate(b.shape) if i not in axes[1]
+    newshape = tuple(d for i, d in enumerate(shape(a)) if i not in axes[0]) + tuple(
+        d for i, d in enumerate(shape(b)) if i not in axes[1]
     )
 
     backend = find_common_backend(a, b)
@@ -1025,8 +1027,9 @@ def einsum(*operands):
 
     size_dict = {}
     for term, op in zip(deps.split(","), larrays):
+        op_shape = shape(op)
         for i, char in enumerate(term):
-            size_dict[char] = max(size_dict.get(char, 1), op.shape[i])
+            size_dict[char] = max(size_dict.get(char, 1), op_shape[i])
     eq = deps + "->" + output
     newshape = tuple(size_dict[char] for char in output)
 
@@ -1058,10 +1061,10 @@ def diag(a, k=0):
     a = ensure_lazy(a)
 
     if a.ndim == 1:
-        new_d = a.shape[0] + abs(k)
+        new_d = shape(a)[0] + abs(k)
         new_shape = (new_d, new_d)
     elif a.ndim == 2:
-        new_d = max(min(a.shape) - abs(k), 0)
+        new_d = max(min(shape(a)) - abs(k), 0)
         new_shape = (new_d,)
     else:
         raise ValueError("Input must be 1- or 2-d.")
@@ -1076,7 +1079,11 @@ def diag(a, k=0):
 @lazy_cache("matmul")
 def matmul(x1, x2):
     backend = find_common_backend(x1, x2)
-    newshape = (*x1.shape[:-1], *x2.shape[1:])
+
+    shape1 = shape(x1)
+    shape2 = shape(x2)
+    newshape = (*shape1[:-2], shape1[-2], shape2[-1])
+
     return LazyArray(
         backend=backend,
         fn=operator.matmul,
@@ -1090,7 +1097,9 @@ def matmul(x1, x2):
 @lazy_cache("kron")
 def kron(x1, x2):
     backend = find_common_backend(x1, x2)
-    newshape = tuple(d1 * d2 for d1, d2 in zip(x1.shape, x2.shape))
+    shape1 = shape(x1)
+    shape2 = shape(x2)
+    newshape = tuple(d1 * d2 for d1, d2 in zip(shape1, shape2))
     fn_kron = get_lib_fn(backend, "kron")
     return LazyArray(
         backend=backend,
@@ -1134,7 +1143,7 @@ def argsort(a, axis=-1):
 @lazy_cache("stack")
 def stack(arrays, axis=0):
     arrays = tuple(arrays)
-    newshape = list(arrays[0].shape)
+    newshape = list(shape(arrays[0]))
     newshape.insert(axis if axis >= 0 else axis + 1, len(arrays))
 
     backend = find_common_backend(*arrays)
@@ -1153,7 +1162,7 @@ def stack(arrays, axis=0):
 def concatenate(arrays, axis=0):
     arrays = tuple(arrays)
     newshape = list(arrays[0].shape)
-    newshape[axis] = sum(a.shape[axis] for a in arrays)
+    newshape[axis] = sum(shape(a)[axis] for a in arrays)
 
     backend = infer_backend(arrays[0])
     fn = get_lib_fn(backend, "concatenate")
@@ -1171,7 +1180,7 @@ def concatenate(arrays, axis=0):
 def split(ary, indices_or_sections, axis=0):
     ary = ensure_lazy(ary)
 
-    d = ary.shape[axis]
+    d = shape(ary)[axis]
     num_subarrays = len(indices_or_sections) + 1
     div_points = [0] + list(indices_or_sections) + [d]
 
@@ -1231,7 +1240,7 @@ le = make_binary_func('le', operator.le)
 
 
 def complex_(re, im):
-    newshape = find_broadcast_shape(re.shape, im.shape)
+    newshape = find_broadcast_shape(shape(re), shape(im))
     backend = find_common_backend(re, im)
     fn_complex = get_lib_fn(backend, "complex")
     return LazyArray(
@@ -1294,7 +1303,7 @@ def make_reduction_func(name):
             axis = (axis,)
         axis = tuple(nd + i if i < 0 else i for i in axis)
 
-        newshape = tuple(d for i, d in enumerate(a.shape) if i not in axis)
+        newshape = tuple(d for i, d in enumerate(shape(a)) if i not in axis)
         return a.to(fn=fn, args=(a, axis), shape=newshape)
 
     return reduction_func

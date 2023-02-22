@@ -6,6 +6,7 @@ import operator
 from ..autoray import get_lib_fn
 
 from .core import (
+    shape,
     ensure_lazy,
     lazy_cache,
     find_common_backend,
@@ -17,7 +18,7 @@ def svd(a):
     a = ensure_lazy(a)
     fn_svd = get_lib_fn(a.backend, "linalg.svd")
     lsvd = a.to(fn_svd, (a,), shape=(3,))
-    m, n = a.shape
+    m, n = shape(a)
     k = min(m, n)
     lU = lsvd.to(operator.getitem, (lsvd, 0), shape=(m, k))
     ls = lsvd.to(operator.getitem, (lsvd, 1), shape=(k,))
@@ -29,7 +30,7 @@ def svd(a):
 def qr(a):
     a = ensure_lazy(a)
     lQR = a.to(get_lib_fn(a.backend, "linalg.qr"), (a,), shape=(2,))
-    m, n = a.shape
+    m, n = shape(a)
     k = min(m, n)
     lQ = lQR.to(operator.getitem, (lQR, 0), shape=(m, k))
     lR = lQR.to(operator.getitem, (lQR, 1), shape=(k, n))
@@ -41,7 +42,7 @@ def eig(a):
     a = ensure_lazy(a)
     fn_eig = get_lib_fn(a.backend, "linalg.eig")
     leig = a.to(fn_eig, (a,), shape=(2,))
-    m = a.shape[0]
+    m = shape(a)[0]
     el = leig.to(operator.getitem, (leig, 0), shape=(m,))
     ev = leig.to(operator.getitem, (leig, 1), shape=(m, m))
     return el, ev
@@ -52,7 +53,7 @@ def eigh(a):
     a = ensure_lazy(a)
     fn_eigh = get_lib_fn(a.backend, "linalg.eigh")
     leigh = a.to(fn_eigh, (a,), shape=(2,))
-    m = a.shape[0]
+    m = shape(a)[0]
     el = leigh.to(operator.getitem, (leigh, 0), shape=(m,))
     ev = leigh.to(operator.getitem, (leigh, 1), shape=(m, m))
     return el, ev
