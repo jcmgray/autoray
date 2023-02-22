@@ -153,6 +153,7 @@ def plot_graph(
     label_rotation=45,
     figsize=None,
     ax=None,
+    show_and_close=True,
     **layout_opts,
 ):
     """Plot the computational graph of this ``LazyArray``."""
@@ -276,10 +277,11 @@ def plot_graph(
         for _, t in text.items():
             t.set_rotation(label_rotation)
 
-    if fig is not None:
-        # created figure
+    if (fig is not None) and show_and_close:
+        plt.show()
         plt.close(fig)
-        return fig
+
+    return fig, ax
 
 
 
@@ -295,7 +297,7 @@ def plot_circuit(
     fontsize_scale=1,
     figsize=None,
     ax=None,
-    return_fig=False,
+    show_and_close=True,
 ):
     import matplotlib as mpl
     import matplotlib.pyplot as plt
@@ -454,10 +456,11 @@ def plot_circuit(
     ax.set_xlim(xmin - 0.5, xmax + 0.5)
     ax.set_ylim(ymin - 0.5, ymax + 0.5)
 
-    if fig is not None:
-        # created figure
+    if (fig is not None) and show_and_close:
+        plt.show()
         plt.close(fig)
-        return fig
+
+    return fig, ax
 
 
 
@@ -510,6 +513,7 @@ def plot_history_size_footprint(
     rasterize=4096,
     rasterize_dpi=300,
     ax=None,
+    show_and_close=True,
 ):
     """Plot the memory footprint throughout this computation.
 
@@ -562,10 +566,11 @@ def plot_history_size_footprint(
         ax.set_ylim(0, np.max(y))
         ax.set_ylabel(ylabel)
 
-    if fig is not None:
-        # created figure
+    if (fig is not None) and show_and_close:
+        plt.show()
         plt.close(fig)
-        return fig
+
+    return fig, ax
 
 
 
@@ -590,6 +595,7 @@ def plot_history_functions(
     rasterize_dpi=300,
     ax=None,
     figsize=(8, 2),
+    show_and_close=True,
 ):
     """Plot the functions used throughout this computation, color coded, as
     either a scatter plot or an image, showing the size of the that individual
@@ -698,7 +704,50 @@ def plot_history_functions(
             loc=legend_loc,
         )
 
-    if fig is not None:
-        # created figure
+    if (fig is not None) and show_and_close:
+        plt.show()
         plt.close(fig)
-        return fig
+
+    return fig, ax
+
+
+@default_to_neutral_style
+def plot_history_stats(
+    self, *,
+    fn='count',
+    colors=None,
+    rasterize_dpi=300,
+    ax=None,
+    figsize=(2, 2),
+    show_and_close=True,
+):
+    from matplotlib import pyplot as plt
+
+    stats = self.history_stats(fn)
+
+    colors = get_default_colors_dict(colors)
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+        fig.set_dpi(rasterize_dpi)
+    else:
+        fig = None
+
+    xs, labels, clrs = [], [], []
+
+    for fn_name, cnt in sorted(stats.items(), key=lambda x: -x[1]):
+        xs.append(cnt)
+        labels.append(f"{fn_name}: {cnt}")
+        try:
+            color = colors[fn_name]
+        except KeyError:
+            color = colors[fn_name] = hash_to_color(fn_name)
+        clrs.append(color)
+
+    ax.pie(x=xs, labels=labels, colors=clrs)
+
+    if (fig is not None) and show_and_close:
+        plt.show()
+        plt.close(fig)
+
+    return fig, ax

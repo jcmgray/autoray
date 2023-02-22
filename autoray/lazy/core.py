@@ -20,6 +20,7 @@ from .draw import (
     plot_circuit,
     plot_history_size_footprint,
     plot_history_functions,
+    plot_history_stats,
 )
 
 
@@ -396,14 +397,51 @@ class LazyArray:
         """
         return sum(node.size for node in self)
 
+    def history_stats(self, fn):
+        """Compute aggregate statistics about the computational graph.
+
+        Parameters
+        ----------
+        fn : callable or str
+            Function to apply to each node in the computational graph. If a
+            string, one of 'count', 'sizein', 'sizeout' can be used to count
+            the number of nodes, the total size of the inputs, or the total
+            size of each output respectively.
+
+        Returns
+        -------
+        stats : dict
+            Dictionary mapping function names to the aggregate statistics.
+        """
+        if not callable(fn):
+            if fn == 'count':
+
+                def fn(node):
+                    return 1
+
+            elif fn == 'sizein':
+
+                def fn(node):
+                    return sum(child.size for child in node.deps)
+
+            elif fn == 'sizeout':
+
+                def fn(node):
+                    return node.size
+
+        stats = collections.defaultdict(int)
+        for node in self:
+            node_cost = fn(node)
+            if node_cost is not None:
+                stats[node.fn_name] += fn(node)
+
+        return dict(stats)
+
     def history_fn_frequencies(self):
         """Get a dictionary mapping function names to the number of times they
         are used in the computational graph.
         """
-        freq = {}
-        for node in self:
-            freq[node.fn_name] = freq.setdefault(node.fn_name, 0) + 1
-        return freq
+        return self.history_stats('count')
 
     def to_nx_digraph(self, variables=None):
         """Convert this ``LazyArray`` into a ``networkx.DiGraph``.
@@ -444,6 +482,13 @@ class LazyArray:
     )
     plot_history_functions_image = functools.partialmethod(
         plot_history_functions, kind='image'
+    )
+    plot_history_stats = plot_history_stats
+    plot_history_stats_counts = functools.partialmethod(
+        plot_history_stats, fn='count'
+    )
+    plot_history_stats_sizein = functools.partialmethod(
+        plot_history_stats, fn='sizein'
     )
 
     @property
