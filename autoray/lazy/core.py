@@ -310,9 +310,14 @@ class LazyArray:
 
         return functools.partial(_array_fn, var_names=var_names, params=params, fn=fn)
 
-    def show(self, filler=' '):
+    def show(self, filler=' ', max_lines=None, max_depth=None):
         """Show the computational graph as a nested directory structure.
         """
+        if max_lines is None:
+            max_lines = float('inf')
+        if max_depth is None:
+            max_depth = float('inf')
+
         # ┃ ━ ┗ ┣ │ ─ └ ╰ ├ ← ⬤
         bar = f"│{filler}"
         space = f"{filler}{filler}"
@@ -322,10 +327,11 @@ class LazyArray:
         line = 0
         seen = {}
         queue = [(self, ())]
-        while queue:
+        while queue and (line < max_lines):
+
             t, columns = queue.pop()
 
-            prefix = f'{line:>4} '
+            prefix = ''
             if columns:
                 # work out various lines we need to draw based on whether the
                 # sequence of parents are themselves the last child of their parent
@@ -340,15 +346,19 @@ class LazyArray:
 
             if t in seen:
                 # ignore loops, but point to when it was computed
-                print(f"{prefix} ... ({item} from line {seen[t]})")
+                print(f"{line:>4} {prefix} ... ({item} from line {seen[t]})")
+                line += 1
                 continue
-            print(f"{prefix}{item}")
+
+            print(f"{line:>4} {prefix}{item}")
             seen[t] = line
             line += 1
-            deps = sorted(t.deps, key=get_depth, reverse=True)
-            islasts = [True] + [False] * (len(deps) - 1)
-            for islast, d in zip(islasts, deps):
-                queue.append((d, columns + (islast,)))
+
+            if len(columns) < max_depth:
+                deps = sorted(t.deps, key=get_depth, reverse=True)
+                islasts = [True] + [False] * (len(deps) - 1)
+                for islast, d in zip(islasts, deps):
+                    queue.append((d, columns + (islast,)))
 
     def history_max_size(self):
         """Get the largest single tensor size appearing in this computation."""
