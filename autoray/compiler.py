@@ -7,7 +7,7 @@ from .autoray import (
     tree_map,
     tree_apply,
     tree_iter,
-    is_array
+    is_array,
 )
 from . import lazy
 
@@ -79,7 +79,7 @@ class CompilePython:
         constants = []
         tree_apply(
             lambda x: (arrays if is_array(x) else constants).append(x),
-            (args, kwargs)
+            (args, kwargs),
         )
         key = hash(tuple(constants))
         try:
@@ -204,9 +204,9 @@ class AutoCompiled:
             self._compiler_kwargs = compiler_opts
 
     def __call__(self, *args, backend=None, **kwargs):
-        array_backend = infer_backend(next(
-            tree_iter((args, kwargs), is_array)
-        ))
+        array_backend = infer_backend(
+            next(tree_iter((args, kwargs), is_array))
+        )
 
         if backend is None:
             if self._backend is None:

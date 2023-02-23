@@ -5,7 +5,6 @@ import itertools
 import functools
 
 
-
 COLORING_SEED = 1  # 8, 10
 
 
@@ -19,7 +18,6 @@ def set_coloring_seed(seed):
     """
     global COLORING_SEED
     COLORING_SEED = seed
-
 
 
 def hash_to_nvalues(s, nval, seed=None):
@@ -39,8 +37,7 @@ def hash_to_nvalues(s, nval, seed=None):
             f"Can't extract {nval} values from hash of length {len(hsh)}"
         )
     return tuple(
-        int(hsh[i * b:(i + 1) * b], 16) / 16**b
-        for i in range(nval)
+        int(hsh[i * b : (i + 1) * b], 16) / 16**b for i in range(nval)
     )
 
 
@@ -121,6 +118,7 @@ def count_around(c, layout):
 
 def get_default_colors_dict(colors):
     import numpy as np
+
     colors = dict() if colors is None else dict(colors)
     colors.setdefault("None", np.array([0.5, 0.5, 0.5]))
     colors.setdefault("getitem", np.array([0.5, 0.5, 0.5]))
@@ -138,7 +136,7 @@ def plot_graph(
     colors=None,
     connectionstyle="arc3,rad=-0.05",
     arrowsize=6,
-    edge_color=(.5, .5, .5),
+    edge_color=(0.5, 0.5, 0.5),
     edge_alpha=0.3,
     var_color=(0, 0.5, 0.25),
     const_color=(0, 0.5, 1.0),
@@ -147,7 +145,7 @@ def plot_graph(
     node_scale=1.0,
     node_alpha=1.0,
     show_labels=True,
-    label_color=(.5, .5, .5),
+    label_color=(0.5, 0.5, 0.5),
     label_alpha=1.0,
     font_size=8,
     label_rotation=45,
@@ -170,7 +168,7 @@ def plot_graph(
     created_fig = ax is None
     if created_fig:
         if figsize is None:
-            w = h = (G.number_of_nodes() + 1)**0.5
+            w = h = (G.number_of_nodes() + 1) ** 0.5
             figsize = (w, h)
         fig, ax = plt.subplots(figsize=figsize, constrained_layout=True)
         fig.set_facecolor((0, 0, 0, 0))
@@ -284,7 +282,6 @@ def plot_graph(
     return fig, ax
 
 
-
 def plot_circuit(
     self,
     color_by="function",
@@ -344,7 +341,6 @@ def plot_circuit(
                 active.add(rails[child])
             # add connector
             edges.append((node, child))
-
 
     created_fig = ax is None
     if created_fig:
@@ -463,30 +459,28 @@ def plot_circuit(
     return fig, ax
 
 
-
 # a style to use for matplotlib that works with light and dark backgrounds
 NEUTRAL_STYLE = {
-    'axes.edgecolor': (0.5, 0.5, 0.5),
-    'axes.facecolor': (0, 0, 0, 0),
-    'axes.grid': True,
-    'axes.labelcolor': (0.5, 0.5, 0.5),
-    'axes.spines.right': False,
-    'axes.spines.top': False,
-    'figure.facecolor': (0, 0, 0, 0),
-    'grid.alpha': 0.1,
-    'grid.color': (0.5, 0.5, 0.5),
-    'legend.frameon': False,
-    'text.color': (0.5, 0.5, 0.5),
-    'xtick.color': (0.5, 0.5, 0.5),
-    'xtick.minor.visible': True,
-    'ytick.color': (0.5, 0.5, 0.5),
-    'ytick.minor.visible': True,
+    "axes.edgecolor": (0.5, 0.5, 0.5),
+    "axes.facecolor": (0, 0, 0, 0),
+    "axes.grid": True,
+    "axes.labelcolor": (0.5, 0.5, 0.5),
+    "axes.spines.right": False,
+    "axes.spines.top": False,
+    "figure.facecolor": (0, 0, 0, 0),
+    "grid.alpha": 0.1,
+    "grid.color": (0.5, 0.5, 0.5),
+    "legend.frameon": False,
+    "text.color": (0.5, 0.5, 0.5),
+    "xtick.color": (0.5, 0.5, 0.5),
+    "xtick.minor.visible": True,
+    "ytick.color": (0.5, 0.5, 0.5),
+    "ytick.minor.visible": True,
 }
 
 
 def default_to_neutral_style(fn):
-    """Wrap a function or method to use the neutral style by default.
-    """
+    """Wrap a function or method to use the neutral style by default."""
 
     @functools.wraps(fn)
     def wrapper(*args, style="neutral", **kwargs):
@@ -573,7 +567,6 @@ def plot_history_size_footprint(
     return fig, ax
 
 
-
 @default_to_neutral_style
 def plot_history_functions(
     self,
@@ -585,7 +578,7 @@ def plot_history_functions(
     scatter_size=5,
     scatter_marker="s",
     lines_width=5,
-    image_alpha_pow=2/3,
+    image_alpha_pow=2 / 3,
     image_aspect=4,
     legend=True,
     legend_ncol=None,
@@ -654,25 +647,31 @@ def plot_history_functions(
 
     if kind == "scatter":
         ax.scatter(
-            xs, ys,
+            xs,
+            ys,
             c=cs,
             s=scatter_size,
             marker=scatter_marker,
-            rasterized=rasterize
+            rasterized=rasterize,
         )
 
     elif kind == "lines":
         lns = [((x, 0.0), (x, y)) for x, y in zip(xs, ys)]
-        ax.add_collection(mpl.collections.LineCollection(
-            lns, colors=cs, zorder=-1, lw=lines_width,
-        ))
+        ax.add_collection(
+            mpl.collections.LineCollection(
+                lns,
+                colors=cs,
+                zorder=-1,
+                lw=lines_width,
+            )
+        )
         ax.set_xlim(-0.5, len(lns) + 0.5)
         ax.set_ylim(0, 1.05 * ymax)
 
     elif kind == "image":
         ax.axis("off")
         ys = np.array(ys)
-        ys = (ys / ys.max()).reshape(-1, 1)**image_alpha_pow
+        ys = (ys / ys.max()).reshape(-1, 1) ** image_alpha_pow
         N = len(cs)
         da = round((N / image_aspect) ** 0.5)
         db = N // da
@@ -713,8 +712,9 @@ def plot_history_functions(
 
 @default_to_neutral_style
 def plot_history_stats(
-    self, *,
-    fn='count',
+    self,
+    *,
+    fn="count",
     colors=None,
     rasterize_dpi=300,
     ax=None,

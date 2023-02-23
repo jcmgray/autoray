@@ -368,7 +368,6 @@ _COMPOSED_FUNCTION_GENERATORS = {}
 
 
 def import_lib_fn(backend, fn):
-
     # first check explicitly composed functions -> if the function hasn't been
     # called directly yet, it won't have been loaded into the cache, and needs
     # generating before e.g. the ``do`` verrsion will work
@@ -400,7 +399,7 @@ def import_lib_fn(backend, fn):
             # we don't do this if the function location has been explicitly
             # give in _SUBMODULE_ALIASES, as that is already a full path
             for k, v in _MODULE_ALIASES.items():
-                if full_location[:len(k)] == k:
+                if full_location[: len(k)] == k:
                     full_location = full_location.replace(k, v, 1)
                     break
 
@@ -430,7 +429,6 @@ def import_lib_fn(backend, fn):
         lib_fn = _FUNCS[backend, fn] = wrapper(getattr(lib, fn_name))
 
     except AttributeError:
-
         # check if there is a backup function (e.g. for older library version)
         backend_alt = backend + "[alt]"
         if backend_alt in _MODULE_ALIASES:
@@ -536,8 +534,7 @@ def is_not_container(x):
 
 
 def is_array(x):
-    """An alternative leaf tester for addressing only arrays within trees.
-    """
+    """An alternative leaf tester for addressing only arrays within trees."""
     return hasattr(x, "shape")
 
 
@@ -791,6 +788,7 @@ tree_register_container(dict, tree_map_dict, tree_iter_dict, tree_apply_dict)
 
 # --------------------------- composed functions ---------------------------- #
 
+
 class Composed:
     """Compose an ``autoray.do`` using function. See the main wrapper
     ``compose``.
@@ -873,7 +871,6 @@ def compose(fn, *, name=None):
     if fn is None:
         return functools.partial(compose, name=name)
     return functools.wraps(fn)(Composed(fn, name))
-
 
 
 # ---------------------- special top level functions ------------------------ #
@@ -1041,7 +1038,6 @@ def qr_allow_fat(fn):
 def tril_to_band_part(fn):
     @functools.wraps(fn)
     def numpy_like(x, k=0):
-
         if k < 0:
             raise ValueError(
                 "'k' must be positive to recreate 'numpy.tril' "
@@ -1056,7 +1052,6 @@ def tril_to_band_part(fn):
 def triu_to_band_part(fn):
     @functools.wraps(fn)
     def numpy_like(x, k=0):
-
         if k > 0:
             raise ValueError(
                 "'k' must be negative to recreate 'numpy.triu' "
@@ -1267,7 +1262,6 @@ class NumpyMimic:
         self.submodule = submodule
 
     def __getattribute__(self, fn):
-
         # look out for certain submodules which are not functions
         if fn == "linalg":
             return numpy_linalg
@@ -1421,6 +1415,7 @@ _FUNCS["jax", "random.normal"] = jax_random_normal
 
 
 # --------------------------------- aesara ---------------------------------- #
+
 
 @shape.register("aesara")
 def aesara_shape(x):

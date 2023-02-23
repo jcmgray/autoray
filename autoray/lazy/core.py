@@ -130,7 +130,6 @@ class LazyArray:
         to the recursion limit, use ``x.compute()`` instead.
         """
         if self._data is None:
-
             # materialize any actual array args
             args = (maybe_materialize(x) for x in self._args)
             kwargs = {k: maybe_materialize(v) for k, v in self._kwargs.items()}
@@ -223,7 +222,10 @@ class LazyArray:
         str_call = ", ".join(
             itertools.chain(
                 (stringify(x, params) for x in self._args),
-                (f"{k}: {stringify(v, params)}" for k, v in self._kwargs.items()),
+                (
+                    f"{k}: {stringify(v, params)}"
+                    for k, v in self._kwargs.items()
+                ),
             )
         )
 
@@ -280,7 +282,9 @@ class LazyArray:
 
         # compile source
         code = compile(source, f"code{id(self)}", "exec", optimize=optimize)
-        compiled = functools.partial(_code_exec_fn, code=code, out_name=f"x{id(self)}")
+        compiled = functools.partial(
+            _code_exec_fn, code=code, out_name=f"x{id(self)}"
+        )
 
         # need both function and locals mapping to run it with / modify args
         return compiled, params
@@ -309,37 +313,39 @@ class LazyArray:
         var_names = tuple(f"x{id(v)}" for v in variables)
         fn, params = self.get_compiled()
 
-        return functools.partial(_array_fn, var_names=var_names, params=params, fn=fn)
+        return functools.partial(
+            _array_fn, var_names=var_names, params=params, fn=fn
+        )
 
-    def show(self, filler=' ', max_lines=None, max_depth=None):
-        """Show the computational graph as a nested directory structure.
-        """
+    def show(self, filler=" ", max_lines=None, max_depth=None):
+        """Show the computational graph as a nested directory structure."""
         if max_lines is None:
-            max_lines = float('inf')
+            max_lines = float("inf")
         if max_depth is None:
-            max_depth = float('inf')
+            max_depth = float("inf")
 
         # ┃ ━ ┗ ┣ │ ─ └ ╰ ├ ← ⬤
         bar = f"│{filler}"
         space = f"{filler}{filler}"
-        junction = '├─'
-        bend = '╰─'
+        junction = "├─"
+        bend = "╰─"
 
         line = 0
         seen = {}
         queue = [(self, ())]
         while queue and (line < max_lines):
-
             t, columns = queue.pop()
 
-            prefix = ''
+            prefix = ""
             if columns:
                 # work out various lines we need to draw based on whether the
                 # sequence of parents are themselves the last child of their parent
-                prefix += ''.join(bar if not p else space for p in columns[:-1])
-                prefix += (bend if columns[-1] else junction)
+                prefix += "".join(
+                    bar if not p else space for p in columns[:-1]
+                )
+                prefix += bend if columns[-1] else junction
 
-            if t.fn_name not in (None, 'None'):
+            if t.fn_name not in (None, "None"):
                 item = f"{t.fn_name}{list(t.shape)}"
             else:
                 # input node
@@ -414,17 +420,17 @@ class LazyArray:
             Dictionary mapping function names to the aggregate statistics.
         """
         if not callable(fn):
-            if fn == 'count':
+            if fn == "count":
 
                 def fn(node):
                     return 1
 
-            elif fn == 'sizein':
+            elif fn == "sizein":
 
                 def fn(node):
                     return sum(child.size for child in node.deps)
 
-            elif fn == 'sizeout':
+            elif fn == "sizeout":
 
                 def fn(node):
                     return node.size
@@ -441,11 +447,10 @@ class LazyArray:
         """Get a dictionary mapping function names to the number of times they
         are used in the computational graph.
         """
-        return self.history_stats('count')
+        return self.history_stats("count")
 
     def to_nx_digraph(self, variables=None):
-        """Convert this ``LazyArray`` into a ``networkx.DiGraph``.
-        """
+        """Convert this ``LazyArray`` into a ``networkx.DiGraph``."""
         import networkx as nx
 
         if variables is None:
@@ -457,9 +462,8 @@ class LazyArray:
 
         G = nx.DiGraph()
         for node in self.ascend():
-            variable = (
-                (node in variables) or
-                any(child in variables for child in node.deps)
+            variable = (node in variables) or any(
+                child in variables for child in node.deps
             )
             if variable:
                 variables.add(node)
@@ -475,20 +479,20 @@ class LazyArray:
     plot_history_size_footprint = plot_history_size_footprint
     plot_history_functions = plot_history_functions
     plot_history_functions_scatter = functools.partialmethod(
-        plot_history_functions, kind='scatter'
+        plot_history_functions, kind="scatter"
     )
     plot_history_functions_lines = functools.partialmethod(
-        plot_history_functions, kind='lines'
+        plot_history_functions, kind="lines"
     )
     plot_history_functions_image = functools.partialmethod(
-        plot_history_functions, kind='image'
+        plot_history_functions, kind="image"
     )
     plot_history_stats = plot_history_stats
     plot_history_stats_counts = functools.partialmethod(
-        plot_history_stats, fn='count'
+        plot_history_stats, fn="count"
     )
     plot_history_stats_sizein = functools.partialmethod(
-        plot_history_stats, fn='sizein'
+        plot_history_stats, fn="sizein"
     )
 
     @property
@@ -853,7 +857,6 @@ def lazy_cache(fn_name, hasher=None):
     def wrapper(fn):
         @functools.wraps(fn)
         def wrapped(*args, **kwargs):
-
             if not currently_sharing():
                 return fn(*args, **kwargs)
 
@@ -898,14 +901,14 @@ def find_common_dtype(*xs):
 @functools.lru_cache(None)
 def _find_common_backend_cached(names):
     return max(
-        names, key=lambda n: multi_class_priorities.get(n, 0),
+        names,
+        key=lambda n: multi_class_priorities.get(n, 0),
     )
 
 
 def find_common_backend(*xs):
     names = tuple(
-        x.backend if isinstance(x, LazyArray) else infer_backend(x)
-        for x in xs
+        x.backend if isinstance(x, LazyArray) else infer_backend(x) for x in xs
     )
     return _find_common_backend_cached(names)
 
@@ -985,7 +988,9 @@ def find_full_reshape(newshape, size):
         expand = newshape.index(-1)
         before = newshape[:expand]
         after = newshape[expand + 1 :]
-        d = size // functools.reduce(operator.mul, itertools.chain(before, after), 1)
+        d = size // functools.reduce(
+            operator.mul, itertools.chain(before, after), 1
+        )
         return (*before, d, *after)
     except ValueError:
         return newshape
@@ -1053,13 +1058,12 @@ def getitem(a, key):
 
 @lazy_cache("tensordot")
 def tensordot(a, b, axes=2):
-
     if isinstance(axes, int):
         axes = (tuple(range(a.ndim - axes, a.ndim)), tuple(range(axes)))
 
-    newshape = tuple(d for i, d in enumerate(shape(a)) if i not in axes[0]) + tuple(
-        d for i, d in enumerate(shape(b)) if i not in axes[1]
-    )
+    newshape = tuple(
+        d for i, d in enumerate(shape(a)) if i not in axes[0]
+    ) + tuple(d for i, d in enumerate(shape(b)) if i not in axes[1])
 
     backend = find_common_backend(a, b)
     fn_tensordot = get_lib_fn(backend, "tensordot")
@@ -1259,7 +1263,7 @@ def where(condition, x, y):
         args=(condition, x, y),
         kwargs=None,
         shape=find_broadcast_shape(condition.shape, x.shape),
-        deps=tuple(a for a in (condition, x, y) if isinstance(a, LazyArray))
+        deps=tuple(a for a in (condition, x, y) if isinstance(a, LazyArray)),
     )
 
 
@@ -1287,11 +1291,11 @@ sub = make_binary_func("sub", operator.sub)
 floordivide = make_binary_func("floordivide", operator.floordiv)
 truedivide = make_binary_func("truedivide", operator.truediv)
 pow_ = make_binary_func("pow", operator.pow)
-gt = make_binary_func('gt', operator.gt)
-ne = make_binary_func('ne', operator.ne)
-lt = make_binary_func('lt', operator.lt)
-ge = make_binary_func('ge', operator.ge)
-le = make_binary_func('le', operator.le)
+gt = make_binary_func("gt", operator.gt)
+ne = make_binary_func("ne", operator.ne)
+lt = make_binary_func("lt", operator.lt)
+ge = make_binary_func("ge", operator.ge)
+le = make_binary_func("le", operator.le)
 
 
 def complex_(re, im):

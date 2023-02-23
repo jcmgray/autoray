@@ -62,29 +62,35 @@ def test_autodispatch(backend, mgs_case):
 
 
 def test_complicated_signature():
-
     @autojit
     def foo(a, b, c):
         a1, a2 = a
-        b1 = b['1']
-        c1, c2 = c['sub']
-        return do('sum', do('stack', (a1, a2, b1, c1, c2)), axis=0)
+        b1 = b["1"]
+        c1, c2 = c["sub"]
+        return do("sum", do("stack", (a1, a2, b1, c1, c2)), axis=0)
 
-    x = do('random.uniform', size=(5, 7), like='numpy')
-    y = foo((x[0, :], x[1, :]), {'1': x[2, :]}, c={'sub': (x[3, :], x[4, :])})
+    x = do("random.uniform", size=(5, 7), like="numpy")
+    y = foo((x[0, :], x[1, :]), {"1": x[2, :]}, c={"sub": (x[3, :], x[4, :])})
     assert_allclose(y, x.sum(0))
 
 
 def test_static_kwargs_change():
-
     @autojit
     def foo(a, b, c):
-        if c == 'sum':
+        if c == "sum":
             return a + b
-        elif c == 'sub':
+        elif c == "sub":
             return a - b
 
-    assert foo(do('array', 100, like='numpy'),
-               do('array', 1, like='numpy'), 'sum') == 101
-    assert foo(do('array', 100, like='numpy'),
-               do('array', 1, like='numpy'), 'sub') == 99
+    assert (
+        foo(
+            do("array", 100, like="numpy"), do("array", 1, like="numpy"), "sum"
+        )
+        == 101
+    )
+    assert (
+        foo(
+            do("array", 100, like="numpy"), do("array", 1, like="numpy"), "sub"
+        )
+        == 99
+    )
