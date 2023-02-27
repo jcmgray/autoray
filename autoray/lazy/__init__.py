@@ -21,6 +21,7 @@ from .core import (
     concatenate,
     split,
     where,
+    take,
     # binary
     multiply,
     add,
@@ -82,6 +83,7 @@ __all__ = (
     "concatenate",
     "split",
     "where",
+    "take",
     # binary functions
     "multiply",
     "add",

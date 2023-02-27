@@ -1046,7 +1046,7 @@ def getitem(a, key):
             newshape.append(len(range(d)[k]))
         else:
             try:
-                newshape.append(len(k))
+                newshape = indices_shape_for_lazy(k)
             except TypeError:
                 pass
 
@@ -1264,6 +1264,43 @@ def where(condition, x, y):
         kwargs=None,
         shape=find_broadcast_shape(condition.shape, x.shape),
         deps=tuple(a for a in (condition, x, y) if isinstance(a, LazyArray)),
+    )
+
+
+def indices_shape_for_lazy(indices):
+    shape_list = []
+
+    def helper(sequence):
+        if isinstance(sequence, (list, tuple)):
+            if all(isinstance(x, int) for x in sequence):
+                shape_list.append(len(sequence))
+            elif all((isinstance(x, (list, tuple)) and len(x) == len(sequence[0])) for x in sequence):
+                shape_list.append(len(sequence))
+                helper(sequence[0])
+            else:
+                raise ValueError(
+                    'setting an array element with a sequence. '
+                )
+
+    helper(indices)
+    return shape_list
+
+
+@lazy_cache('take')
+def take(x, indices):
+    x = ensure_lazy(x)
+    if isinstance(indices, (list, tuple)):
+        new_shape = indices_shape_for_lazy(indices)
+    else:
+        indices = ensure_lazy(indices)
+        new_shape = indices.shape
+    return LazyArray(
+        backend=x.backend,
+        fn=get_lib_fn(x.backend, 'take'),
+        args=(x, indices),
+        kwargs=None,
+        shape=new_shape,
+        deps=tuple(a for a in (x, indices) if isinstance(a, LazyArray)),
     )
 
 
