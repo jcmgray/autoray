@@ -1268,21 +1268,8 @@ def where(condition, x, y):
 
 
 def indices_shape_for_lazy(indices):
-    shape_list = []
-
-    def helper(sequence):
-        if isinstance(sequence, (list, tuple)):
-            if all(isinstance(x, int) for x in sequence):
-                shape_list.append(len(sequence))
-            elif all((isinstance(x, (list, tuple)) and len(x) == len(sequence[0])) for x in sequence):
-                shape_list.append(len(sequence))
-                helper(sequence[0])
-            else:
-                raise ValueError(
-                    'setting an array element with a sequence. '
-                )
-
-    helper(indices)
+    import numpy as np
+    shape_list = list(np.array(indices).shape)
     return shape_list
 
 

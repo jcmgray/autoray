@@ -472,3 +472,65 @@ def test_where():
     y = do("asarray", [1, 2, 3, 4], like="numpy")
     z = f([x, y])
     assert_allclose(z, [1, 1, 3, 4])
+
+
+@pytest.mark.parametrize(
+    "indices",
+    [
+        [0, 1],
+        [[0, 1], [1, 2]],
+        [[[0, 1], [1, 2]], [[1, 1], [2, 2]]],
+        [[[[0, 1, 2, 3]]]],
+        [[[[0], [1]]], [[[2], [3]]]]
+    ],
+)
+@pytest.mark.parametrize(
+    "shape",
+    [
+        (4,),
+        (4, 5),
+        (4, 5, 6),
+        (4, 5, 6, 7),
+    ],
+)
+def test_take(indices, shape):
+    a = do("random.uniform", size=shape, like="numpy")
+    b = lazy.Variable(shape=shape, backend="numpy")
+    np_shape = do("take", a, indices).shape
+    lazy_shape = do("take", b, indices).shape
+
+    fn = do("take", b, indices).get_function([b])
+    lazy_func_shape = fn([a]).shape
+    assert_allclose(np_shape, lazy_shape)
+    assert_allclose(np_shape, lazy_func_shape)
+
+
+@pytest.mark.parametrize(
+    "indices",
+    [
+        [0, 1],
+        [[0, 1], [1, 2]],
+        [[[0, 1], [1, 2]], [[1, 1], [2, 2]]],
+        [[[[0, 1, 2, 3]]]],
+        [[[[0], [1]]], [[[2], [3]]]]
+    ],
+)
+@pytest.mark.parametrize(
+    "shape",
+    [
+        (4,),
+        (4, 5),
+        (4, 5, 6),
+        (4, 5, 6, 7),
+    ],
+)
+def test_getitem(indices, shape):
+    a = do("random.uniform", size=shape, like="numpy")
+    b = lazy.Variable(shape=shape, backend="numpy")
+    np_shape = a[indices].shape
+    lazy_shape = b[indices].shape
+
+    fn = b[indices].get_function([b])
+    lazy_func_shape = fn([a]).shape
+    assert_allclose(np_shape, lazy_shape)
+    assert_allclose(np_shape, lazy_func_shape)
