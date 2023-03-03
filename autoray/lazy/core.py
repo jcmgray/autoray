@@ -1268,8 +1268,7 @@ def where(condition, x, y):
 
 
 def _get_py_shape(x):
-    """Infer the shape of a possibly nested list/tuple object.
-    """
+    """Infer the shape of a possibly nested list/tuple object."""
     if hasattr(x, "shape"):
         return list(x.shape)
     if isinstance(x, (tuple, list)):
@@ -1277,7 +1276,7 @@ def _get_py_shape(x):
     return []
 
 
-@lazy_cache('take')
+@lazy_cache("take")
 def take(x, indices):
     x = ensure_lazy(x)
     if isinstance(indices, (list, tuple)):
@@ -1287,7 +1286,7 @@ def take(x, indices):
         new_shape = indices.shape
     return LazyArray(
         backend=x.backend,
-        fn=get_lib_fn(x.backend, 'take'),
+        fn=get_lib_fn(x.backend, "take"),
         args=(x, indices),
         kwargs=None,
         shape=new_shape,
