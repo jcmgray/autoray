@@ -1046,7 +1046,7 @@ def getitem(a, key):
             newshape.append(len(range(d)[k]))
         else:
             try:
-                newshape = indices_shape_for_lazy(k)
+                newshape = _get_py_shape(k)
             except TypeError:
                 pass
 
@@ -1267,17 +1267,21 @@ def where(condition, x, y):
     )
 
 
-def indices_shape_for_lazy(indices):
-    import numpy as np
-    shape_list = list(np.array(indices).shape)
-    return shape_list
+def _get_py_shape(x):
+    """Infer the shape of a possibly nested list/tuple object.
+    """
+    if hasattr(x, "shape"):
+        return list(x.shape)
+    if isinstance(x, (tuple, list)):
+        return [len(x)] + _get_py_shape(x[0])
+    return []
 
 
 @lazy_cache('take')
 def take(x, indices):
     x = ensure_lazy(x)
     if isinstance(indices, (list, tuple)):
-        new_shape = indices_shape_for_lazy(indices)
+        new_shape = _get_py_shape(indices)
     else:
         indices = ensure_lazy(indices)
         new_shape = indices.shape
