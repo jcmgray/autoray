@@ -215,6 +215,7 @@ class Function:
     __slots__ = (
         "in_names",
         "out_names",
+        "source",
         "code",
         "params",
         "single_in",
@@ -229,11 +230,11 @@ class Function:
         # write source and populate locals mapping that function will run under
         # params will include the functions and other constant objects
         self.params = {}
-        source = get_source(outputs, params=self.params)
+        self.source = get_source(outputs, params=self.params)
 
         # compile source
         self.code = compile(
-            source=source,
+            source=self.source,
             filename="<string>",
             mode="exec",
             optimize=1,
@@ -277,8 +278,51 @@ class Function:
         # return the results, whilst removing them from the locals
         return tuple(self.params.pop(name) for name in self.out_names)
 
+    def __getstate__(self):
+        # can't pickle the code object -> recompile in setstate
+        return (
+            self.in_names,
+            self.out_names,
+            self.source,
+            self.params,
+            self.single_in,
+            self.single_out,
+        )
+
+    def __setstate__(self, state):
+        (
+            self.in_names,
+            self.out_names,
+            self.source,
+            self.params,
+            self.single_in,
+            self.single_out,
+        ) = state
+
+        # recompile the source
+        self.code = compile(
+            source=self.source,
+            filename="<string>",
+            mode="exec",
+            optimize=1,
+        )
+
+    def print_source(self):
+        """Print the source code of the compiled function."""
+        print(self.source)
+
     def __repr__(self):
-        return f"<Function({self.in_names} -> {self.out_names})>"
+        if self.single_in:
+            insig = "array_like"
+        else:
+            insig = "Sequence[array_like]"
+
+        if self.single_out:
+            outsig = "array_like"
+        else:
+            outsig = "Tuple[array_like]"
+
+        return f"<Function({insig}) -> {outsig}>"
 
 
 # --------------------------- computational nodes --------------------------- #

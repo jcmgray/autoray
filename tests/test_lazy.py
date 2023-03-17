@@ -463,6 +463,24 @@ def test_use_variable_to_trace_function():
     assert shape(z) == (2, 4)
 
 
+def test_can_pickle_traced_function():
+    import pickle
+
+    a = lazy.Variable(shape=(2, 3), backend="numpy")
+    b = lazy.Variable(shape=(3, 4), backend="numpy")
+    c = do("tanh", a @ b)
+    f = c.get_function([a, b])
+    x = do("random.uniform", size=(2, 3), like="numpy")
+    y = do("random.uniform", size=(3, 4), like="numpy")
+    z = f([x, y])
+    assert shape(z) == (2, 4)
+
+    s = pickle.dumps(f)
+    g = pickle.loads(s)
+    z = g([x, y])
+    assert shape(z) == (2, 4)
+
+
 def test_where():
     a = lazy.Variable(shape=(4,), backend="numpy")
     b = lazy.Variable(shape=(4,), backend="numpy")
