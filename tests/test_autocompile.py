@@ -74,6 +74,21 @@ def test_complicated_signature():
     assert_allclose(y, x.sum(0))
 
 
+def test_multi_output():
+    @autojit
+    def foo(a, b, c):
+        a = a - do("sum", b)
+        b = b - do("sum", a)
+        return a + c, b - c
+
+    a = gen_rand((2, 3), "numpy")
+    b = gen_rand((4, 5), "numpy")
+    x, y = foo(a, b, 1)
+
+    assert_allclose(x, a - b.sum() + 1)
+    assert_allclose(y, b - (a - b.sum()).sum() - 1)
+
+
 def test_static_kwargs_change():
     @autojit
     def foo(a, b, c):

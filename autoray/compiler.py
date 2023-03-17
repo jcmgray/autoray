@@ -41,7 +41,7 @@ class CompilePython:
         self._share_intermediates = share_intermediates
         self._fns = {}
 
-    def _trace(self, *args, **kwargs):
+    def _trace_fn(self, *args, **kwargs):
         """Convert the example arrays to lazy variables and trace them through
         the function.
         """
@@ -60,17 +60,14 @@ class CompilePython:
 
         if self._share_intermediates:
             with backend_like("autoray.lazy"), lazy.shared_intermediates():
-                out = _run_lazy()
+                outs = _run_lazy()
         else:
             with backend_like("autoray.lazy"):
-                out = _run_lazy()
+                outs = _run_lazy()
 
-        return out, variables
-
-    def _setup(self, *args, **kwargs):
-        """Based on example ``arrays``, compile the function."""
-        out, variables = self._trace(*args, **kwargs)
-        return out.get_function(variables, fold_constants=self._fold_constants)
+        return lazy.Function(
+            variables, outs, fold_constants=self._fold_constants
+        )
 
     def __call__(self, *args, array_backend=None, **kwargs):
         """If necessary, build, then call the compiled function."""
@@ -85,7 +82,7 @@ class CompilePython:
         try:
             return self._fns[key](arrays)
         except KeyError:
-            fn = self._fns[key] = self._setup(*args, **kwargs)
+            fn = self._fns[key] = self._trace_fn(*args, **kwargs)
             return fn(arrays)
 
 
@@ -210,10 +207,13 @@ class AutoCompiled:
 
         if backend is None:
             if self._backend is None:
+                # no backend specified anywhere, use the array backend
                 backend = array_backend
             else:
+                # use the backend specified at init
                 backend = self._backend
 
+        # work out which compiler to use for combo of backend and array backend
         try:
             key = _backend_lookup[backend, array_backend]
         except KeyError:

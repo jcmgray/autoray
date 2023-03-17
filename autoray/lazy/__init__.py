@@ -1,6 +1,8 @@
 from . import linalg
 
 from .core import (
+    compute,
+    Function,
     LazyArray,
     Variable,
     shared_intermediates,
@@ -60,6 +62,8 @@ from .core import max_ as max
 from .core import complex_ as complex
 
 __all__ = (
+    "compute",
+    "Function",
     "LazyArray",
     "Variable",
     "shared_intermediates",

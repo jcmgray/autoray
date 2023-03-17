@@ -28,6 +28,262 @@ _EMPTY_DICT = {}
 get_depth = operator.attrgetter("_depth")
 
 
+# ------------------------ traversal and computation ------------------------ #
+
+
+def descend(lz):
+    """Generate each unique computational node. Use ``ascend`` if you need to
+    visit children before parents.
+
+    Parameters
+    ----------
+    lz : LazyArray or sequence of LazyArray
+        The output node(s) of the computational graph to descend.
+
+    Yields
+    ------
+    LazyArray
+    """
+    if isinstance(lz, LazyArray):
+        queue = [lz]
+    else:
+        queue = sorted(lz, key=get_depth)
+
+    seen = set()
+    while queue:
+        node = queue.pop()
+        nid = id(node)
+        if nid not in seen:
+            yield node
+            queue.extend(node._deps)
+            seen.add(nid)
+
+
+def ascend(lz):
+    """Generate each unique computational node, from leaves to root. I.e. a
+    topological ordering of the computational graph. Moreover, the nodes
+    are visited 'shallowest first'.
+
+    Parameters
+    ----------
+    lz : LazyArray or sequence of LazyArray
+        The output node(s) of the computational graph to ascend to.
+
+    Yields
+    ------
+    LazyArray
+    """
+    if isinstance(lz, LazyArray):
+        queue = [lz]
+    else:
+        queue = sorted(lz, key=get_depth)
+
+    seen = set()
+    ready = set()
+    while queue:
+        node = queue[-1]
+        need_to_visit = [c for c in node._deps if id(c) not in ready]
+        if need_to_visit:
+            need_to_visit.sort(key=get_depth)
+            queue.extend(need_to_visit)
+        else:
+            node = queue.pop()
+            nid = id(node)
+            ready.add(nid)
+            if nid not in seen:
+                yield node
+                seen.add(nid)
+
+
+def compute(lz):
+    """Compute the value of one or more lazy arrays.
+
+    Parameters
+    ----------
+    lz : LazyArray or sequence of LazyArray
+        The output node(s) of the computational graph to compute.
+
+    Returns
+    -------
+    array or tuple of array
+        The computed value(s) of the lazy array(s).
+    """
+    for node in ascend(lz):
+        node._materialize()
+
+    if isinstance(lz, LazyArray):
+        return lz._data
+
+    return tuple(node._data for node in lz)
+
+
+def compute_constants(lz, variables):
+    """Fold constant arrays - everything not dependent on ``variables`` -
+    into the graph.
+
+    Parameters
+    ----------
+    lz : LazyArray or sequence of LazyArray
+        The output node(s) of the computational graph.
+    variables : LazyArray or sequence of LazyArray
+        Nodes that should be treated as variable. I.e. any descendants will
+        not be folded into the graph.
+    """
+    if isinstance(variables, LazyArray):
+        variables = {variables}
+    else:
+        variables = set(variables)
+
+    # must ascend
+    for node in ascend(lz):
+        if not any(c in variables for c in node._deps):
+            # can fold
+            node._materialize()
+        else:
+            # inherit variable status
+            variables.add(node)
+
+
+def get_source(lz, params=None):
+    """Write the source code of an unravelled version of the computational
+    graph, injecting required runtime objects into ``params``.
+
+    Parameters
+    ----------
+    lz : LazyArray or sequence of LazyArray
+        The output node(s) of the computational graph to write the source code
+        for. Their corresponding label is ``f"x{id(node)}"`` in the
+        source code.
+
+    Returns
+    -------
+    str
+        The source code of the computational graph, suitable for ``exec``.
+    """
+    if params is None:
+        # locals space mapping LazyArray names to values
+        params = {}
+
+    delete_checked = set()
+    s = []  # source code lines
+
+    for node in reversed(tuple(ascend(lz))):
+        # when *descending*, the first encounter of a node is the
+        # *last* time it is referenced in forward pass -> delete,
+        # need to do this for GC since running in single big function
+        for c in node._deps:
+            if c not in delete_checked:
+                if c._deps:
+                    # is an intermediate - safe to delete. While we could
+                    # delete input variables, we want to keep input *constants*
+                    s.append(f"del x{id(c)}")
+                delete_checked.add(c)
+
+        if node._data is None:
+            # create the array via computation
+            s.append(node.as_string(params))
+        else:
+            # inject the already computed data as constant
+            params[f"x{id(node)}"] = node._data
+
+    # reverse (ascend) into source code
+    return "\n".join(reversed(s))
+
+
+class Function:
+    """Get a compiled (by python ``compile``), function that performs the
+    computational graph corresponding to ``inputs`` -> ``outputs``. The
+    signature of the function is ``func(input_arrays) -> output_arrays``. As an
+    intermediate step, the computational graph is traced to a flattened source
+    code string.
+
+    Parameters
+    ----------
+    inputs : LazyArray or sequence of LazyArray
+        The input node(s) of the computational graph.
+    outputs : LazyArray or sequence of LazyArray
+        The output node(s) of the computational graph.
+    fold_constants : bool, optional
+        If True, fold constant arrays (those with no dependence on ``inputs``)
+        into the graph ahead of compile.
+
+    See Also
+    --------
+    get_source, compute
+    """
+
+    __slots__ = (
+        "in_names",
+        "out_names",
+        "code",
+        "params",
+        "single_in",
+        "single_out",
+    )
+
+    def __init__(self, inputs, outputs, fold_constants=True):
+        if fold_constants:
+            # compute everything not dependent on inputs
+            compute_constants(outputs, variables=inputs)
+
+        # write source and populate locals mapping that function will run under
+        # params will include the functions and other constant objects
+        self.params = {}
+        source = get_source(outputs, params=self.params)
+
+        # compile source
+        self.code = compile(
+            source=source,
+            filename="<string>",
+            mode="exec",
+            optimize=1,
+        )
+
+        # get names to inject and extract arrays into and from locals
+        self.single_in = isinstance(inputs, LazyArray)
+        if self.single_in:
+            self.in_names = f"x{id(inputs)}"
+        else:
+            self.in_names = tuple(f"x{id(v)}" for v in inputs)
+
+        self.single_out = isinstance(outputs, LazyArray)
+        if self.single_out:
+            self.out_names = f"x{id(outputs)}"
+        else:
+            self.out_names = tuple(f"x{id(v)}" for v in outputs)
+
+    def __call__(self, arrays):
+        # inject the new array(s)
+        if self.single_in:
+            self.params[self.in_names] = arrays
+        else:
+            for name, array in zip(self.in_names, arrays):
+                self.params[name] = array
+
+        # run the byte-compiled function with the updated locals
+        exec(self.code, None, self.params)
+
+        if self.single_in:
+            # remove the input array(s) from the locals
+            del self.params[self.in_names]
+        else:
+            for name in self.in_names:
+                del self.params[name]
+
+        if self.single_out:
+            # return the result, whilst removing it from the locals
+            return self.params.pop(self.out_names)
+
+        # return the results, whilst removing them from the locals
+        return tuple(self.params.pop(name) for name in self.out_names)
+
+    def __repr__(self):
+        return f"<Function({self.in_names} -> {self.out_names})>"
+
+
+# --------------------------- computational nodes --------------------------- #
+
+
 class LazyArray:
     """A lazy array representing a shaped node in a computational graph."""
 
@@ -142,49 +398,8 @@ class LazyArray:
 
         return self._data
 
-    def descend(self):
-        """Generate each unique computational node. Use ``ascend`` if you need
-        to visit children before parents.
-        """
-        seen = set()
-        queue = [self]
-        queue_pop = queue.pop
-        queue_extend = queue.extend
-        seen_add = seen.add
-        while queue:
-            node = queue_pop()
-            nid = id(node)
-            if nid not in seen:
-                yield node
-                queue_extend(node._deps)
-                seen_add(nid)
-
-    __iter__ = descend
-
-    def ascend(self):
-        """Generate each unique computational node, from leaves to root. I.e.
-        a topological ordering of the computational graph.
-        """
-        seen = set()
-        ready = set()
-        queue = [self]
-        queue_extend = queue.extend
-        queue_pop = queue.pop
-        ready_add = ready.add
-        seen_add = seen.add
-        while queue:
-            node = queue[-1]
-            need_to_visit = [c for c in node._deps if id(c) not in ready]
-            if need_to_visit:
-                need_to_visit.sort(key=get_depth)
-                queue_extend(need_to_visit)
-            else:
-                node = queue_pop()
-                nid = id(node)
-                ready_add(nid)
-                if nid not in seen:
-                    yield node
-                    seen_add(nid)
+    __iter__ = descend = descend
+    ascend = ascend
 
     def compute(self):
         """Compute the value of this lazy array.
@@ -195,22 +410,7 @@ class LazyArray:
             node._materialize()
         return self._data
 
-    def compute_constants(self, variables):
-        """Fold constant arrays - everything not dependent on ``variables`` -
-        into the graph.
-        """
-        if isinstance(variables, LazyArray):
-            variables = (variables,)
-        variables = set(variables)
-
-        # must ascend
-        for node in self.ascend():
-            if not any(c in variables for c in node._deps):
-                # can fold
-                node._materialize()
-            else:
-                # mark as variable
-                variables.add(node)
+    compute_constants = compute_constants
 
     def as_string(self, params):
         """Create a string which evaluates to the lazy array creation."""
@@ -232,62 +432,7 @@ class LazyArray:
         # assign function call to new variable
         return f"x{id(self)} = {fn_name}({str_call})"
 
-    def get_source(self, params=None):
-        """Write the source code of an unravelled version of the computational
-        graph, injecting required runtime objects into ``params``.
-        """
-        if params is None:
-            # locals space mapping LazyArray names to values
-            params = {}
-
-        delete_checked = set()
-        s = []  # source code lines
-
-        for node in reversed(tuple(self.ascend())):
-            # when *descending*, the first encounter of a node is the
-            # *last* time it is referenced in forward pass -> delete,
-            # need to do this for GC since running in single big function
-            for c in node._deps:
-                if c not in delete_checked:
-                    if c._deps:
-                        # is an intermediate - safe to delete
-                        s.append(f"del x{id(c)}")
-                    delete_checked.add(c)
-
-            if node._data is None:
-                # create the array via computation
-                s.append(node.as_string(params))
-            else:
-                # inject the already computed data as constant
-                params[f"x{id(node)}"] = node._data
-
-        # reverse (ascend) into source code
-        return "\n".join(reversed(s))
-
-    def get_compiled(self, optimize=1):
-        """Compile the function into a  code object using ``compile``,
-        returning a  wrapper that executes it using ``exec`` and the 'locals'
-        dict specifiying inputs which can be modified. It should be called
-        like:
-
-            fn, params = x.get_compiled()
-            # modify params e.g. inject new arrays here before call
-            ...
-            fn(params)
-
-        """
-        # write source and populate locals mapping that function will run under
-        params = {}
-        source = self.get_source(params)
-
-        # compile source
-        code = compile(source, f"code{id(self)}", "exec", optimize=optimize)
-        compiled = functools.partial(
-            _code_exec_fn, code=code, out_name=f"x{id(self)}"
-        )
-
-        # need both function and locals mapping to run it with / modify args
-        return compiled, params
+    get_source = get_source
 
     def get_function(self, variables, fold_constants=True):
         """Get a compiled function that computes ``fn(arrays)``, with ``fn``
@@ -307,14 +452,8 @@ class LazyArray:
         fn : callable
             Function with signature ``fn(arrays)``.
         """
-        if fold_constants:
-            self.compute_constants(variables=variables)
-
-        var_names = tuple(f"x{id(v)}" for v in variables)
-        fn, params = self.get_compiled()
-
-        return functools.partial(
-            _array_fn, var_names=var_names, params=params, fn=fn
+        return Function(
+            inputs=variables, outputs=self, fold_constants=fold_constants
         )
 
     def show(self, filler=" ", max_lines=None, max_depth=None):
@@ -750,19 +889,6 @@ _stringify_dispatch = collections.defaultdict(
 def stringify(x, params):
     """Recursively stringify LazyArray instances in tuples, lists and dicts."""
     return _stringify_dispatch[x.__class__](x, params)
-
-
-def _code_exec_fn(params, code, out_name):
-    exec(code, None, params)
-    return params[out_name]
-
-
-def _array_fn(arrays, var_names, fn, params):
-    # inject the new arrays
-    for name, array in zip(var_names, arrays):
-        params[name] = array
-    # run the byte-compiled function with the new locals
-    return fn(params)
 
 
 # --------------------------------- caching --------------------------------- #
