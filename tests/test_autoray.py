@@ -747,3 +747,21 @@ def test_builtins_complex():
     z = ar.do("complex", re, im)
     assert z == 1.0 + 2.0j
     assert ar.infer_backend(z) == "builtins"
+
+
+def test_shape_ndim_builtins():
+    import numpy as np
+
+    xs = [
+        1,
+        4.0,
+        7j,
+        (),
+        [],
+        [[]],
+        [np.ones(3), np.ones(3)],
+        np.ones((5, 4, 3)),
+    ]
+    for x in xs:
+        assert ar.shape(x) == np.shape(x)
+        assert ar.ndim(x) == np.ndim(x)

@@ -878,12 +878,26 @@ def compose(fn, *, name=None):
 
 @compose
 def shape(x):
-    return x.shape
+    try:
+        return x.shape
+    except AttributeError:
+        # want to handle builtins / nested stuff
+        if isinstance(x, (list, tuple)):
+            d = len(x)
+            if d != 0:
+                # NB: slightly different from np.shape, as we do not check for
+                # ragged arrays, but that behavior is seemingly deprecated
+                return (d,) + shape(x[0])
+            return (d,)
+        return ()
 
 
 @compose
 def ndim(x):
-    return x.ndim
+    try:
+        return x.ndim
+    except AttributeError:
+        return len(shape(x))
 
 
 def conj(x):
