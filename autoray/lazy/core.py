@@ -213,13 +213,13 @@ class Function:
     """
 
     __slots__ = (
-        "in_names",
-        "out_names",
-        "source",
-        "code",
-        "params",
-        "single_in",
-        "single_out",
+        "_in_names",
+        "_out_names",
+        "_source",
+        "_code",
+        "_params",
+        "_is_single_in",
+        "_is_single_out",
     )
 
     def __init__(self, inputs, outputs, fold_constants=True):
@@ -229,79 +229,84 @@ class Function:
 
         # write source and populate locals mapping that function will run under
         # params will include the functions and other constant objects
-        self.params = {}
-        self.source = get_source(outputs, params=self.params)
+        self._params = {}
+        self._source = get_source(outputs, params=self._params)
 
         # compile source
-        self.code = compile(
-            source=self.source,
+        self._code = compile(
+            source=self._source,
             filename="<string>",
             mode="exec",
             optimize=1,
         )
 
         # get names to inject and extract arrays into and from locals
-        self.single_in = isinstance(inputs, LazyArray)
-        if self.single_in:
-            self.in_names = f"x{id(inputs)}"
+        self._is_single_in = isinstance(inputs, LazyArray)
+        if self._is_single_in:
+            self._in_names = f"x{id(inputs)}"
         else:
-            self.in_names = tuple(f"x{id(v)}" for v in inputs)
+            self._in_names = tuple(f"x{id(v)}" for v in inputs)
 
-        self.single_out = isinstance(outputs, LazyArray)
-        if self.single_out:
-            self.out_names = f"x{id(outputs)}"
+        self._is_single_out = isinstance(outputs, LazyArray)
+        if self._is_single_out:
+            self._out_names = f"x{id(outputs)}"
         else:
-            self.out_names = tuple(f"x{id(v)}" for v in outputs)
+            self._out_names = tuple(f"x{id(v)}" for v in outputs)
 
-    def __call__(self, arrays):
+    def __call__(self, arrays, *args):
+
+        # allow fn(arrays) or fn(*arrays)
+        if args:
+            arrays = (arrays,) + args
+
         # inject the new array(s)
-        if self.single_in:
-            self.params[self.in_names] = arrays
+        if self._is_single_in:
+            self._params[self._in_names] = arrays
         else:
-            for name, array in zip(self.in_names, arrays):
-                self.params[name] = array
+            for name, array in zip(self._in_names, arrays):
+                self._params[name] = array
 
         # run the byte-compiled function with the updated locals
-        exec(self.code, None, self.params)
+        exec(self._code, None, self._params)
 
-        if self.single_in:
+        if self._is_single_in:
             # remove the input array(s) from the locals
-            del self.params[self.in_names]
+            del self._params[self._in_names]
         else:
-            for name in self.in_names:
-                del self.params[name]
+            for name in self._in_names:
+                del self._params[name]
 
-        if self.single_out:
+        if self._is_single_out:
             # return the result, whilst removing it from the locals
-            return self.params.pop(self.out_names)
+            return self._params.pop(self._out_names)
 
         # return the results, whilst removing them from the locals
-        return tuple(self.params.pop(name) for name in self.out_names)
+        return tuple(self._params.pop(name) for name in self._out_names)
 
     def __getstate__(self):
         # can't pickle the code object -> recompile in setstate
         return (
-            self.in_names,
-            self.out_names,
-            self.source,
-            self.params,
-            self.single_in,
-            self.single_out,
+            self._in_names,
+            self._out_names,
+            self._source,
+            self._params,
+            self._is_single_in,
+            self._is_single_out,
         )
 
     def __setstate__(self, state):
         (
-            self.in_names,
-            self.out_names,
-            self.source,
-            self.params,
-            self.single_in,
-            self.single_out,
+            self._in_names,
+            self._out_names,
+            self._source,
+            self._params,
+            self._is_single_in,
+            self._is_single_out,
         ) = state
 
         # recompile the source
-        self.code = compile(
-            source=self.source,
+        self._code = compile(
+            source=self._source,
             filename="<string>",
             mode="exec",
             optimize=1,
@@ -309,15 +314,15 @@ class Function:
 
     def print_source(self):
         """Print the source code of the compiled function."""
-        print(self.source)
+        print(self._source)
 
     def __repr__(self):
-        if self.single_in:
+        if self._is_single_in:
             insig = "array_like"
         else:
             insig = "Sequence[array_like]"
 
-        if self.single_out:
+        if self._is_single_out:
             outsig = "array_like"
         else:
             outsig = "Tuple[array_like]"
