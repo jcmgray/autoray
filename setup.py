@@ -29,6 +29,15 @@ setup(
             "pytest",
             "pytest-cov",
         ],
+        'docs': [
+            'sphinx>=2.0',
+            'sphinx-autoapi',
+            'sphinx-copybutton',
+            'myst-nb',
+            'furo',
+            'setuptools_scm',
+            'ipython!=8.7.0',
+        ],
     },
     python_requires=">=3.6",
     classifiers=[
