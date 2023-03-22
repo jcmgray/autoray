@@ -36,7 +36,7 @@ The main function of `autoray` is [`do`](autoray.do), which takes a function
 name followed by `*args` and `**kwargs`, and automatically looks up (and
 caches) the correct function to match the equivalent numpy call:
 
-```{code-block} python
+```python
 from autoray as ar
 
 def noised_svd(x):
@@ -44,7 +44,7 @@ def noised_svd(x):
     U, s, VH = ar.do('linalg.svd', x)
 
     # automatic dispatch based on different array
-    sn = s + 0.1 * ar.do('random.normal', size=s.shape, like=s)
+    sn = s + 0.1 * ar.do('random.normal', size=ar.shape(s), like=s)
 
     # automatic dispatch for multiple arrays for certain functions
     return ar.do('einsum', 'ij,j,jk->ik', U, sn, VH)
