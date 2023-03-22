@@ -9,6 +9,7 @@ A lightweight python AUTOmatic-arRAY library. Write numeric code that works for:
 * [dask](https://github.com/dask/dask)
 * [autograd](https://github.com/HIPS/autograd)
 * [tensorflow](https://github.com/tensorflow/tensorflow)
+* [sparse](https://sparse.pydata.org/)
 * [mars](https://github.com/mars-project/mars)
 * ... and indeed **any** library that provides a numpy-*ish* api.
 

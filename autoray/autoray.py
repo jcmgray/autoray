@@ -17,6 +17,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import math
 import importlib
 import functools
 import itertools
@@ -252,6 +253,15 @@ _CUSTOM_BACKENDS = {}
 def register_backend(cls, name):
     """Register the name (and by default the module or submodule) of a custom
     array class.
+
+    Parameters
+    ----------
+    cls : type
+        The array class itself.
+    name : str
+        The name of the backend that should be used for this class. By default
+        this wil be assumed to be the location of the relevant functions for
+        this class, but this can be overridden.
     """
     if not isinstance(cls, type):
         raise TypeError("The array class itself should be supplied.")
@@ -898,6 +908,14 @@ def ndim(x):
         return x.ndim
     except AttributeError:
         return len(shape(x))
+
+
+@compose
+def size(x):
+    try:
+        return x.size
+    except AttributeError:
+        return math.prod(shape(x))
 
 
 def conj(x):
@@ -1750,6 +1768,11 @@ _CUSTOM_WRAPPERS["tensorflow", "clip"] = make_translator(
 def torch_shape(x):
     # torch returns a Size object, we want tuple[int]
     return tuple(x.shape)
+
+
+@size.register("torch")
+def torch_size(x):
+    return x.numel()
 
 
 def torch_to_numpy(x):

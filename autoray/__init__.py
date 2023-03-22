@@ -25,6 +25,7 @@ from .autoray import (
     get_lib_fn,
     shape,
     ndim,
+    size,
     conj,
     transpose,
     dag,
@@ -52,6 +53,13 @@ from .autoray import (
 from .compiler import autojit
 from . import lazy
 
+# useful constants
+from math import (
+    e,
+    pi,
+    inf,
+    nan,
+)
 
 __all__ = (
     "do",
@@ -63,6 +71,7 @@ __all__ = (
     "get_lib_fn",
     "shape",
     "ndim",
+    "size",
     "conj",
     "transpose",
     "dag",
@@ -90,4 +99,9 @@ __all__ = (
     "autojit",
     # lazy array library
     "lazy",
+    # math constants,
+    "e",
+    "pi",
+    "inf",
+    "nan",
 )
