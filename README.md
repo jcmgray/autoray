@@ -1,4 +1,4 @@
-<p align="left"><img src="https://github.com/jcmgray/autoray/blob/master/docs/images/autoray-header.png?raw=true" alt="autoray" width="500px"></p>
+<p align="left"><img src="https://github.com/jcmgray/autoray/blob/master/docs/_static/autoray-header.png?raw=true" alt="autoray" width="500px"></p>
 
 A lightweight python AUTOmatic-arRAY library. Write numeric code that works for:
 
