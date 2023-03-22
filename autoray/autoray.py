@@ -888,6 +888,25 @@ def compose(fn, *, name=None):
 
 @compose
 def shape(x):
+    """Get the shape of an array as a tuple of int. This should be preferred
+    to calling `x.shape` directly, as it:
+
+        1. Allows customization (e.g. for torch and aesara which return
+           different types for shape - use `@shape.register(backend)` to
+           customize the behavior from this default implementation).
+        2. Can be used on nested lists and tuples, without calling numpy.
+
+    Parameters
+    ----------
+    x : array_like
+        The array to get the shape of. It can be an arbitrary nested list or
+        tuple of arrays and scalars, but is assumed not to be ragged.
+
+    Returns
+    -------
+    shape : tuple of int
+        The size of each dimension of the array.
+    """
     try:
         return x.shape
     except AttributeError:
@@ -904,6 +923,20 @@ def shape(x):
 
 @compose
 def ndim(x):
+    """Get the number of dimensions of an array. This should be preferred to
+    calling `x.ndim`, since not all backends implement that, and it can also be
+    called on nested lists and tuples.
+
+    Parameters
+    ----------
+    x : array_like
+        The array to get the number of dimensions of. It can be an arbitrary
+        nested list or tuple of arrays and scalars.
+
+    Returns
+    -------
+    ndim : int
+    """
     try:
         return x.ndim
     except AttributeError:
@@ -912,6 +945,20 @@ def ndim(x):
 
 @compose
 def size(x):
+    """Get the size, or number of elements, of an array. This should be
+    preferred to calling `x.size`, since not all backends implement that, and
+    it can also be called on nested lists and tuples.
+
+    Parameters
+    ----------
+    x : array_like
+        The array to get the size of. It can be an arbitrary nested list or
+        tuple of arrays and scalars.
+
+    Returns
+    -------
+    size : int
+    """
     try:
         return x.size
     except AttributeError:
