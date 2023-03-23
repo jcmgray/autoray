@@ -3,6 +3,7 @@
 
 import itertools
 import functools
+import importlib
 
 
 COLORING_SEED = 1  # 8, 10
@@ -125,13 +126,245 @@ def get_default_colors_dict(colors):
     return colors
 
 
+
+def rotate(xy, theta):
+    """Return a rotated set of points."""
+    import numpy as np
+
+    s = np.sin(theta)
+    c = np.cos(theta)
+
+    xyr = np.empty_like(xy)
+    xyr[:, 0] = c * xy[:, 0] - s * xy[:, 1]
+    xyr[:, 1] = s * xy[:, 0] + c * xy[:, 1]
+
+    return xyr
+
+
+def span(xy):
+    """Return the vertical span of the points."""
+    return xy[:, 1].max() - xy[:, 1].min()
+
+
+def massage_pos(pos, nangles=180, flatten=False):
+    """Rotate a position dict's points to cover a small vertical span"""
+    import numpy as np
+
+    xy = np.empty((len(pos), 2))
+    for i, (x, y) in enumerate(pos.values()):
+        xy[i, 0] = x
+        xy[i, 1] = y
+
+    thetas = np.linspace(0, 2 * np.pi, nangles, endpoint=False)
+    rxys = (rotate(xy, theta) for theta in thetas)
+    rxy0 = min(rxys, key=lambda rxy: span(rxy))
+
+    if flatten is True:
+        flatten = 2
+    if flatten:
+        rxy0[:, 1] /= flatten
+
+    return dict(zip(pos, rxy0))
+
+
+def layout_pygraphviz(
+    G,
+    prog="neato",
+    dim=2,
+    **kwargs,
+):
+    # TODO: fix nodes with pin attribute
+    # TODO: initial positions
+    # TODO: max iters
+    # TODO: spring parameter
+    import pygraphviz as pgv
+
+    aG = pgv.AGraph(directed=G.is_directed())
+    mapping = {}
+    for nodea, nodeb in G.edges():
+        s_nodea = str(nodea)
+        s_nodeb = str(nodeb)
+        mapping[s_nodea] = nodea
+        mapping[s_nodeb] = nodeb
+        aG.add_edge(s_nodea, s_nodeb)
+
+    kwargs = {}
+
+    if dim == 2.5:
+        kwargs["dim"] = 3
+        kwargs["dimen"] = 2
+    else:
+        kwargs["dim"] = kwargs["dimen"] = dim
+    args = " ".join(f"-G{k}={v}" for k, v in kwargs.items())
+
+    # run layout algorithm
+    aG.layout(prog=prog, args=args)
+
+    # extract layout
+    pos = {}
+    for snode, node in mapping.items():
+        spos = aG.get_node(snode).attr["pos"]
+        pos[node] = tuple(map(float, spos.split(",")))
+
+    # normalize to unit square
+    xmin = ymin = zmin = float("inf")
+    xmax = ymax = zmaz = float("-inf")
+    for x, y, *maybe_z in pos.values():
+        xmin = min(xmin, x)
+        xmax = max(xmax, x)
+        ymin = min(ymin, y)
+        ymax = max(ymax, y)
+        for z in maybe_z:
+            zmin = min(zmin, z)
+            zmaz = max(zmaz, z)
+
+    for node, (x, y, *maybe_z) in pos.items():
+        pos[node] = (
+            2 * (x - xmin) / (xmax - xmin) - 1,
+            2 * (y - ymin) / (ymax - ymin) - 1,
+            *(2 * (z - zmin) / (zmaz - zmin) - 1 for z in maybe_z),
+        )
+
+    return pos
+
+
+HAS_FA2 = importlib.util.find_spec("fa2") is not None
+HAS_PYGRAPHVIZ = importlib.util.find_spec("pygraphviz") is not None
+
+
+def get_nice_pos(
+    G,
+    *,
+    dim=2,
+    layout="auto",
+    initial_layout="auto",
+    iterations="auto",
+    k=None,
+    use_forceatlas2=False,
+    flatten=False,
+    **layout_opts
+):
+    if (layout == "auto") and HAS_PYGRAPHVIZ:
+        layout = "neato"
+
+    if layout in ("dot", "neato", "fdp", "sfdp"):
+        pos = layout_pygraphviz(G, prog=layout, dim=dim)
+        if layout != "dot":
+            pos = massage_pos(pos, flatten=flatten)
+        return pos
+
+    import networkx as nx
+
+    if layout != "auto":
+        initial_layout = layout
+        iterations = 0
+
+    if initial_layout == "auto":
+        # automatically select
+        if len(G) <= 100:
+            # usually nicest
+            initial_layout = "kamada_kawai"
+        else:
+            # faster, but not as nice
+            initial_layout = "spectral"
+
+    if iterations == "auto":
+        # the smaller the graph, the more iterations we can afford
+        iterations = max(200, 1000 - len(G))
+
+    if dim == 2.5:
+        dim = 3
+        project_back_to_2d = True
+    else:
+        project_back_to_2d = False
+
+    # use spectral or other layout as starting point
+
+    if dim != 2:
+        layout_opts["dim"] = dim
+
+    pos0 = getattr(nx, initial_layout + "_layout")(G, **layout_opts)
+
+    # and then relax remaining using spring layout
+    if iterations:
+        if use_forceatlas2 is True:
+            # turn on for more than 1 node
+            use_forceatlas2 = 1
+        elif use_forceatlas2 in (0, False):
+            # never turn on
+            use_forceatlas2 = float("inf")
+
+        should_use_fa2 = HAS_FA2 and (len(G) > use_forceatlas2) and (dim == 2)
+
+        if should_use_fa2:
+            from fa2 import ForceAtlas2
+
+            # NB: some versions of fa2 don't support the `weight_attr` option
+            pos = ForceAtlas2(verbose=False).forceatlas2_networkx_layout(
+                G, pos=pos0, iterations=iterations
+            )
+        else:
+            pos = nx.spring_layout(
+                G,
+                pos=pos0,
+                k=k,
+                dim=dim,
+                iterations=iterations,
+            )
+    else:
+        pos = pos0
+
+    if project_back_to_2d:
+        # project back to 2d
+        pos = {k: v[:2] for k, v in pos.items()}
+        dim = 2
+
+    if dim == 2:
+        # finally rotate them to cover a small vertical span
+        pos = massage_pos(pos)
+
+    return pos
+
+
+# def get_nice_pos():
+#     """Get a nice layout for a graph.
+#     """
+
+#     # compute a layout for the graph
+#     if initial_layout == "layers":
+#         for layer, nodes in enumerate(nx.topological_generations(G)):
+#             for node in nodes:
+#                 G.nodes[node]["layer"] = layer
+
+#         layout_opts.setdefault("subset_key", "layer")
+#         layout_opts.setdefault("align", "vertical")
+#         pos = nx.multipartite_layout(G, **layout_opts)
+
+#         if layout_opts["align"] == "horizontal":
+#             dag_spread = 1 / dag_spread
+#         for k, (x, y) in pos.items():
+#             pos[k] = (x, dag_spread * y)
+
+#     else:
+#         if initial_layout == "spiral":
+#             layout_opts.setdefault("equidistant", True)
+
+#         pos = getattr(nx, initial_layout + "_layout")(G, **layout_opts)
+
+#     # further spring based refinement
+#     if iterations:
+#         pos = nx.layout.spring_layout(G, pos=pos, k=k, iterations=iterations)
+
+
 def plot_graph(
     self,
     variables=None,
-    initial_layout="kamada_kawai",
-    dag_spread=2,
-    iterations=0,
+    dim=2,
+    layout="auto",
+    initial_layout="auto",
+    iterations="auto",
     k=None,
+    use_forceatlas2=False,
     color_by="function",
     colors=None,
     connectionstyle="arc3,rad=-0.05",
@@ -179,66 +412,70 @@ def plot_graph(
     node_sizes = {}
     node_labels = {}
     node_markers = {}
-    for node in G.nodes:
+    for i, data in G.nodes(data=True):
         # set node color
-        if node is self:
-            node_markers[node] = "X"
+        if data['array'] is self:
+            node_markers[i] = "X"
 
         if color_by == "variables":
-            if node is self:
-                node_colors[node] = root_color
-            elif G.nodes[node]["variable"]:
-                node_colors[node] = var_color
+            if data['array'] is self:
+                node_colors[i] = root_color
+            elif data["variable"]:
+                node_colors[i] = var_color
             else:
-                node_colors[node] = const_color
+                node_colors[i] = const_color
 
         elif color_by == "function":
-            if node.fn_name in colors:
-                node_colors[node] = colors[node.fn_name]
+            if data['array'].fn_name in colors:
+                node_colors[i] = colors[data['array'].fn_name]
             else:
-                node_colors[node] = hash_to_color(node.fn_name)
+                node_colors[i] = hash_to_color(data['array'].fn_name)
 
         elif color_by == "id":
-            node_colors[node] = hash_to_color(str(id(node)))
+            node_colors[i] = hash_to_color(str(id(data['array'])))
 
         # set node size
-        node_sizes[node] = 6 * node_scale * (np.log2(node.size) + 1)
+        node_sizes[i] = 6 * node_scale * (np.log2(data['array'].size) + 1)
 
         # set node label and marker
-        if node.fn_name == "None":
-            node_markers.setdefault(node, "o")
-            node_labels[node] = ""
-        if node.fn_name == "getitem":
-            node_markers.setdefault(node, ".")
-            node_labels[node] = ""
+        if data['array'].fn_name == "None":
+            node_markers.setdefault(i, "o")
+            node_labels[i] = ""
+        if data['array'].fn_name == "getitem":
+            node_markers.setdefault(i, ".")
+            node_labels[i] = ""
         else:
-            node_labels[node] = node.fn_name
+            node_labels[i] = data['array'].fn_name
 
-        node_markers.setdefault(node, node_shape)
+        node_markers.setdefault(i, node_shape)
 
-    # compute a layout for the graph
     if initial_layout == "layers":
         for layer, nodes in enumerate(nx.topological_generations(G)):
             for node in nodes:
                 G.nodes[node]["layer"] = layer
 
+        layout_opts.setdefault("subset_key", "layer")
         layout_opts.setdefault("align", "vertical")
-        pos = nx.multipartite_layout(G, subset_key="layer", **layout_opts)
 
         if layout_opts["align"] == "horizontal":
-            dag_spread = 1 / dag_spread
-        for k, (x, y) in pos.items():
-            pos[k] = (x, dag_spread * y)
+            layout_opts.setdefault("flatten", 2)
+        else:
+            layout_opts.setdefault("flatten", 0.5)
+        layout = "multipartite"
 
-    else:
-        if initial_layout == "spiral":
-            layout_opts.setdefault("equidistant", True)
+    elif initial_layout == "spiral":
+        layout_opts.setdefault("equidistant", True)
 
-        pos = getattr(nx, initial_layout + "_layout")(G, **layout_opts)
-
-    # further spring based refinement
-    if iterations:
-        pos = nx.layout.spring_layout(G, pos=pos, k=k, iterations=iterations)
+    pos = get_nice_pos(
+        G,
+        dim=dim,
+        layout=layout,
+        initial_layout=initial_layout,
+        iterations=iterations,
+        k=k,
+        use_forceatlas2=use_forceatlas2,
+        **layout_opts,
+    )
 
     # draw edges!
     nx.draw_networkx_edges(

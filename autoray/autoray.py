@@ -670,6 +670,8 @@ class Leaf:
     unflattening.
     """
 
+    __slots__ = ()
+
     def __repr__(self):
         return "Leaf"
 

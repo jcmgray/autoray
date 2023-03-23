@@ -1,7 +1,10 @@
 from . import linalg
 
 from .core import (
+    ascend,
+    descend,
     compute,
+    get_source,
     Function,
     LazyArray,
     Variable,
@@ -62,7 +65,10 @@ from .core import max_ as max
 from .core import complex_ as complex
 
 __all__ = (
+    "ascend",
+    "descend",
     "compute",
+    "get_source",
     "Function",
     "LazyArray",
     "Variable",

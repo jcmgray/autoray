@@ -62,7 +62,7 @@ def descend(lz):
 def ascend(lz):
     """Generate each unique computational node, from leaves to root. I.e. a
     topological ordering of the computational graph. Moreover, the nodes
-    are visited 'shallowest first'.
+    are visited 'deepest first'.
 
     Parameters
     ----------
@@ -96,7 +96,9 @@ def ascend(lz):
 
 
 def compute(lz):
-    """Compute the value of one or more lazy arrays.
+    """Compute the value of one or more lazy arrays. All nodes that are
+    computed clear any references to their function, arguments and
+    dependencies, and store the result in their ``_data`` attribute.
 
     Parameters
     ----------
@@ -333,8 +335,47 @@ class Function:
 # --------------------------- computational nodes --------------------------- #
 
 
+class Placeholder:
+    """A singleton object to use as a placeholder in a LazyArray.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self):
+        return "Placeholder"
+
+
+PLACEHOLDER = Placeholder()
+
+
 class LazyArray:
-    """A lazy array representing a shaped node in a computational graph."""
+    """A lazy array representing a node in a computational graph.
+
+    Parameters
+    ----------
+    backend : str
+        The backend of the array were it to be computed. This can be ``None``
+        but this may cause problems when propagating information about which
+        functions to import to child nodes.
+    fn : callable
+        The function to call to compute the array, presumable imported from
+        ``backend``. This can be ``None`` if the array already has data (e.g.
+        is an input).
+    args : tuple
+        The positional arguments to pass to ``fn``, which might be
+        ``LazyArray`` instances.
+    kwargs : dict
+        The keyword arguments to pass to ``fn``, which might be
+        ``LazyArray`` instances.
+    shape : tuple
+        The shape of the array that ``fn(*args, **kwargs)`` will return, or
+        the shape of the array that ``data`` has.
+    deps : tuple, optional
+        The ``LazyArray`` instances that ``fn(*args, **kwargs)`` depends on.
+        If not specified, these will be automatically found from ``args`` and
+        ``kwargs``, specifying them manually is slightly more efficient.
+
+    """
 
     __slots__ = (
         "_backend",
@@ -402,7 +443,7 @@ class LazyArray:
         obj._backend = backend
         obj._fn = obj._args = obj._kwargs = None
         obj._shape = tuple(map(int, shape))
-        obj._data = "__PLACEHOLDER__"
+        obj._data = PLACEHOLDER
         obj._deps = ()
         obj._depth = 0
         return obj
@@ -451,7 +492,9 @@ class LazyArray:
     ascend = ascend
 
     def compute(self):
-        """Compute the value of this lazy array.
+        """Compute the value of this lazy array, clearing any references to the
+        function, arguments and dependencies, and storing the result in the
+        ``_data`` attribute as well as returning it.
 
         Unlike ``self._materialize()`` this avoids deep recursion.
         """
@@ -649,15 +692,19 @@ class LazyArray:
             variables = set(variables)
 
         G = nx.DiGraph()
-        for node in self.ascend():
+
+        nodemap = {}
+
+        for i, node in enumerate(self.ascend()):
+            nodemap[node] = i
             variable = (node in variables) or any(
                 child in variables for child in node.deps
             )
             if variable:
                 variables.add(node)
-            G.add_node(node, variable=variable)
+            G.add_node(i, array=node, variable=variable)
             for x in node.deps:
-                G.add_edge(x, node)
+                G.add_edge(nodemap[x], nodemap[node])
 
         return G
 
@@ -685,18 +732,26 @@ class LazyArray:
 
     @property
     def fn(self):
+        """The function to use to compute this array."""
         return self._fn
 
     @property
     def fn_name(self):
+        """The name of the function to use to compute this array."""
         return getattr(self._fn, "__name__", "None")
 
     @property
     def args(self):
+        """The positional arguments to the function to use to compute this
+        array.
+        """
         return self._args
 
     @property
     def kwargs(self):
+        """The keyword arguments to the function to use to compute this
+        array.
+        """
         return self._kwargs
 
     @property
@@ -717,10 +772,15 @@ class LazyArray:
 
     @property
     def deps(self):
+        """A tuple of the dependencies, other LazyArray instances, of this
+        array.
+        """
         return self._deps
 
     @property
     def depth(self):
+        """The maximum distance to any input array in the computational graph.
+        """
         return self._depth
 
     def __getitem__(self, key):
@@ -971,14 +1031,15 @@ def _remove_sharing_cache():
 def shared_intermediates(cache=None):
     """Context in which intermediate results are shared.
 
-    Note that intermediate computations will not be garbage collected until
+    Note that intermediate LazyArray instances (which can reference actual
+    data) will not be garbage collected until
     1. this context exits, and
     2. the yielded cache is garbage collected (if it was captured).
 
     Parameters
     ----------
     cache : dict
-        If specified, a user-stored dict in which intermediate results will
+        If specified, a user-stored dict in which intermediate lazy arrays will
         be stored. This can be used to interleave sharing contexts.
 
     Returns
