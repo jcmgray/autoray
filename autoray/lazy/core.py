@@ -1377,7 +1377,10 @@ def matmul(x1, x2):
 
     shape1 = shape(x1)
     shape2 = shape(x2)
-    newshape = (*shape1[:-2], shape1[-2], shape2[-1])
+    if len(shape2) == 1:
+        newshape = shape1[:-1]
+    else:
+        newshape = (*shape1[:-1], shape2[-1])
 
     return LazyArray(
         backend=backend,
