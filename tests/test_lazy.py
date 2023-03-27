@@ -4,7 +4,7 @@ import re
 import pytest
 
 from autoray import do, lazy, to_numpy, infer_backend, astype, shape
-from numpy.testing import assert_allclose
+from numpy.testing import assert_allclose, assert_raises
 
 from .test_autoray import BACKENDS, gen_rand
 
@@ -552,3 +552,36 @@ def test_getitem(indices, shape):
     lazy_func_shape = fn([a]).shape
     assert_allclose(np_shape, lazy_shape)
     assert_allclose(np_shape, lazy_func_shape)
+
+
+@pytest.mark.parametrize(
+    "shape1",
+    [(3,), (3,), (6, 5, 4, 3), (7, 6, 5, 4)],
+    "shape2",
+    [(3,), (3, 2), (3,), (7, 6, 4, 3)]
+)
+def test_matmul_shape(shape1, shape2):
+    a = lazy.Variable(shape=shape1)
+    b = lazy.Variable(shape=shape2)
+    np_a = do("random.uniform", size=shape1, like="numpy")
+    np_b = do("random.uniform", size=shape2, like="numpy")
+
+    lazy_shape = (a @ b).shape
+    np_shape = (np_a @ np_b).shape
+    assert lazy_shape == np_shape
+
+
+@pytest.mark.parametrize(
+    "shape1",
+    [(3,), (3,), (3,), (2, 2, 3, 4), (6, 5, 4)],
+    "shape2",
+    [(1,), (4, 3), (3, 2, 1), (1, 2, 4, 5,), (6, 3, 3)]
+)
+def test_matmul_shape_error(shape1, shape2):
+    a = lazy.Variable(shape=shape1)
+    b = lazy.Variable(shape=shape2)
+
+    def f(x, y):
+        return x @ y
+
+    assert_raises(ValueError, f, a, b)

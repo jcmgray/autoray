@@ -1378,8 +1378,31 @@ def matmul(x1, x2):
     shape1 = shape(x1)
     shape2 = shape(x2)
     if len(shape2) == 1:
+        if shape1[-1] != shape2[-1]:
+            raise ValueError(
+                'matmul: Input operand 1 has a mismatch in its core dimension 0, '
+                'with gufunc signature (n?,k),(k,m?)->(n?,m?)'
+            )
         newshape = shape1[:-1]
+    elif len(shape1) == 1:
+        if len(shape2) > 2 or shape1[-1] != shape2[-2]:
+            raise ValueError(
+                'matmul: Input operand 1 has a mismatch in its core dimension 0, '
+                'with gufunc signature (n?,k),(k,m?)->(n?,m?)'
+            )
+        newshape = shape2[-1:]
     else:
+        if shape2[:-2] != shape1[:-2]:
+            raise ValueError(
+                'operands could not be broadcast together with remapped shapes '
+                f'[original->remapped]: {shape1}->({shape1[:-2]},newaxis,newaxis) '
+                f'{shape2}->({shape2[:-2]},newaxis,newaxis)  and requested shape ({shape1[-2], shape2[-1]})'
+            )
+        if shape1[-1] != shape2[-2]:
+            raise ValueError(
+                'matmul: Input operand 1 has a mismatch in its core dimension 0, '
+                'with gufunc signature (n?,k),(k,m?)->(n?,m?)'
+            )
         newshape = (*shape1[:-1], shape2[-1])
 
     return LazyArray(
