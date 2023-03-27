@@ -555,10 +555,13 @@ def test_getitem(indices, shape):
 
 
 @pytest.mark.parametrize(
-    "shape1",
-    [(3,), (3,), (6, 5, 4, 3), (7, 6, 5, 4)],
-    "shape2",
-    [(3,), (3, 2), (3,), (7, 6, 4, 3)]
+    "shape1, shape2",
+    [
+        ((3,), (3,)),
+        ((3,), (3, 2)),
+        ((6, 5, 4, 3), (3,)),
+        ((7, 6, 5, 4), (7, 6, 4, 3))
+    ],
 )
 def test_matmul_shape(shape1, shape2):
     a = lazy.Variable(shape=shape1)
@@ -568,14 +571,17 @@ def test_matmul_shape(shape1, shape2):
 
     lazy_shape = (a @ b).shape
     np_shape = (np_a @ np_b).shape
-    assert lazy_shape == np_shape
+    assert_allclose(lazy_shape, np_shape)
 
 
 @pytest.mark.parametrize(
-    "shape1",
-    [(3,), (3,), (3,), (2, 2, 3, 4), (6, 5, 4)],
-    "shape2",
-    [(1,), (4, 3), (3, 2, 1), (1, 2, 4, 5,), (6, 3, 3)]
+    "shape1, shape2",
+    [((3,), (1,)),
+     ((3,), (4, 3)),
+     ((3,), (3, 2, 1)),
+     ((2, 2, 3, 4), (1, 2, 4, 5,)),
+     ((6, 5, 4), (6, 3, 3))
+     ]
 )
 def test_matmul_shape_error(shape1, shape2):
     a = lazy.Variable(shape=shape1)
