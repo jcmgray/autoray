@@ -1154,9 +1154,9 @@ def find_broadcast_shape(xshape, yshape):
     xndim = len(xshape)
     yndim = len(yshape)
     if xndim < yndim:
-        xshape = (1,) * (yndim - xndim)
+        xshape = (1,) * (yndim - xndim) + xshape
     elif yndim < xndim:
-        yshape = (1,) * (xndim - yndim)
+        yshape = (1,) * (xndim - yndim) + yshape
     return tuple(max(d1, d2) for d1, d2 in zip(xshape, yshape))
 
 
@@ -1253,6 +1253,11 @@ def getitem_hasher(_, a, key):
     return f"getitem-{hash((id(a), hkey))}"
 
 
+@functools.lru_cache(2**12)
+def get_sliced_size(d, start, stop, step):
+    return len(range(d)[slice(start, stop, step)])
+
+
 @lazy_cache("getitem", hasher=getitem_hasher)
 def getitem(a, key):
     a = ensure_lazy(a)
@@ -1262,33 +1267,81 @@ def getitem(a, key):
     if not isinstance(key, tuple):
         key = (key,)
 
-    try:
-        # expand ellipsis
-        expand = key.index(...)
-        ndiff = a.ndim - len(key) + 1
-        key = key[:expand] + (slice(None),) * ndiff + key[expand + 1 :]
-    except ValueError:
-        # else pad trailing slices if necessary
-        ndiff = a.ndim - len(key)
-        if ndiff:
-            key = key + (slice(None),) * ndiff
+    nexpand = a.ndim
+    expand = None
+    for i, k in enumerate(key):
+        if k is not None:
+            if k is Ellipsis:
+                expand = i
+            else:
+                nexpand -= 1
 
+    if expand is not None:
+        # ellipsis somewhere
+        key = key[:expand] + (slice(None),) * nexpand + key[expand + 1 :]
+    elif nexpand:
+        # need to pad trailing dimensions
+        key = key + (slice(None),) * nexpand
+
+    adv_idx_shape = adv_idx_loc = None
+    adv_idx_locs = []
+
+    shape = iter(a.shape)
     newshape = []
-    for k, d in zip(key, shape(a)):
-        if isinstance(k, LazyArray):
-            newshape.append(k.size)
-            deps += (k,)
-        elif isinstance(k, slice):
-            newshape.append(len(range(d)[k]))
+    for i, k in enumerate(key):
+
+        if k is None:
+            # (newaxis) -> new dimension of size 1
+            newshape.append(1)
+            # don't want to iterate shape
+            continue
+
+        d = next(shape)
+
+        if isinstance(k, slice):
+            # range of values
+            newshape.append(get_sliced_size(d, k.start, k.stop, k.step))
+
+        elif hasattr(k, "shape") or isinstance(k, (tuple, list)):
+
+            if adv_idx_shape is None:
+                # first advanced index
+                adv_idx_shape = _get_py_shape(k)
+                adv_idx_loc = len(newshape)
+                adv_idx_locs.append(i)
+            else:
+                # check if broadcast shape matches
+                adv_idx_shape = find_broadcast_shape(
+                    adv_idx_shape, _get_py_shape(k)
+                )
+                # advanced indexing location is only retained when
+                # all advanced indices are adjacent -> need to track
+                adv_idx_locs.append(i)
+
+            if isinstance(k, LazyArray):
+                # add to dependencies
+                deps += (k,)
+
         else:
-            try:
-                newshape = _get_py_shape(k)
-            except TypeError:
-                pass
+            # else assume integer -> doesn't contribute to new shape,
+            # but does count as an advanced index when it comes to
+            # determining the location of the advanced index shape
+            adv_idx_locs.append(i)
 
-    # TODO: np.newaxis == None
+    if adv_idx_shape is not None:
+        if not all(i + 1 == j for i, j in zip(adv_idx_locs, adv_idx_locs[1:])):
+            # 'move to front' advanced indexing
+            newshape = (*adv_idx_shape, *newshape)
+        else:
+            # 'keep in place' advanced indexing
+            newshape = (
+                *newshape[:adv_idx_loc],
+                *adv_idx_shape,
+                *newshape[adv_idx_loc:]
+            )
+    else:
+        newshape = tuple(newshape)
 
-    newshape = tuple(newshape)
     return a.to(operator.getitem, (a, key), shape=newshape, deps=deps)
 
 
@@ -1532,10 +1585,10 @@ def where(condition, x, y):
 def _get_py_shape(x):
     """Infer the shape of a possibly nested list/tuple object."""
     if hasattr(x, "shape"):
-        return list(x.shape)
+        return tuple(x.shape)
     if isinstance(x, (tuple, list)):
-        return [len(x)] + _get_py_shape(x[0])
-    return []
+        return (len(x),) + _get_py_shape(x[0])
+    return ()
 
 
 @lazy_cache("take")

@@ -554,6 +554,89 @@ def test_getitem(indices, shape):
     assert_allclose(np_shape, lazy_func_shape)
 
 
+def random_indexer(ndim_min=0, ndim_max=10, d_min=1, d_max=5, seed=None):
+    """Generate a random shape and valid indexing object into that shape.
+    """
+    import numpy as np
+    rng = np.random.default_rng(seed=seed)
+
+    ndim = rng.integers(ndim_min, ndim_max + 1)
+
+    # if we have a advanced indexing arrays, the shape of the array
+    adv_ix_ndim = rng.integers(1, 4)
+    adv_ix_shape = tuple(rng.integers(d_min, d_max + 1, size=adv_ix_ndim))
+
+    def rand_adv_ix_broadcastable_shape():
+        # get a random shape that broadcast matches adv_ix_shape
+        ndim = rng.integers(1, adv_ix_ndim + 1)
+        matching_shape = adv_ix_shape[-ndim:]
+        return tuple(rng.choice([d, 1]) for d in matching_shape)
+
+    shape = []
+    indexer = []
+    choices = ['index', 'slice', 'ellipsis', 'array', 'list', 'newaxis']
+
+    i = 0
+    while i < ndim:
+        kind = rng.choice(choices)
+
+        if kind == 'newaxis':
+            indexer.append(None)
+            continue
+
+        d = rng.integers(d_min, d_max + 1)
+        shape.append(d)
+
+        if kind == 'index':
+            ix = rng.integers(-d, d)
+            if rng.random() > 0.5:
+                # randomly supply integers and numpy ints
+                ix = int(ix)
+
+        elif kind == 'ellipsis':
+            # only one ellipsis allowed
+            ix = ...
+            choices.remove('ellipsis')
+            # how many dims ellipsis should expand to
+            i += rng.integers(0, 4)
+
+        elif kind == 'slice':
+            start = rng.integers(-d - 2, d + 2)
+            stop = rng.integers(-d - 2, d - 2)
+            step = rng.choice([-3, -2, -1, 1, 2, 3])
+            ix = slice(start, stop, step)
+
+        elif kind == 'array':
+            ai_shape = rand_adv_ix_broadcastable_shape()
+            ix = rng.integers(-d, d, size=ai_shape)
+
+        elif kind == 'list':
+            ai_shape = rand_adv_ix_broadcastable_shape()
+            ix = rng.integers(-d, d, size=ai_shape).tolist()
+
+        indexer.append(ix)
+        i += 1
+
+    if (len(indexer) == 1) and (rng.random() > 0.5):
+        # return the raw object
+        indexer, = indexer
+    else:
+        indexer = tuple(indexer)
+
+    return tuple(shape), indexer
+
+
+@pytest.mark.parametrize("seed", range(1000))
+def test_lazy_getitem_random(seed):
+    shape, indexer = random_indexer()
+    a = do("random.uniform", size=shape, like="numpy")
+    ai = a[indexer]
+    b = lazy.array(a)
+    bi = b[indexer]
+    assert bi.shape == ai.shape
+    assert_allclose(bi.compute(), ai)
+
+
 @pytest.mark.parametrize(
     "shape1, shape2",
     [
