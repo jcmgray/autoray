@@ -237,10 +237,8 @@ class AutoCompiled:
 
 
 def autojit(fn=None, *, backend=None, compiler_opts=None):
-    """Just-in-time compile an ``autoray`` function, which should have
-    signature::
-
-        fn(*arrays) -> array
+    """Just-in-time compile an ``autoray`` function, automatically choosing
+    the backend based on the input arrays, or via keyword argument.
 
     The backend used to do the compilation can be set in three ways:
 
