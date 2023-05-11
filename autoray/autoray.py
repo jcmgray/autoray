@@ -833,7 +833,10 @@ class Composed:
     def make_function(self, backend):
         """Make a new function for the specific ``backend``."""
         if self._supply_backend:
-            fn = functools.partial(self._default_fn, backend=backend)
+            # make sure it inherits __name__ etc
+            fn = functools.wraps(self._default_fn)(
+                functools.partial(self._default_fn, backend=backend)
+            )
         else:
             fn = self._default_fn
         self.register(backend, fn)
