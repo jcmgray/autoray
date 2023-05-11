@@ -811,7 +811,7 @@ def plot_history_functions(
     fn=None,
     log=None,
     colors=None,
-    kind="lines",
+    kind="scatter",
     scatter_size=5,
     scatter_marker="s",
     lines_width=5,
