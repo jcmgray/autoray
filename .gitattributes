@@ -1,1 +1,4 @@
 autoray/_version.py export-subst
+
+# make autoray appear as a python project on github
+*.ipynb linguist-language=Python
