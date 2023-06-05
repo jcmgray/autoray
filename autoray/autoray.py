@@ -696,7 +696,7 @@ def tree_flatten(tree, is_leaf=is_not_container, get_ref=False):
         A function to determine if an object is a leaf, only objects for which
         ``is_leaf(x)`` returns ``True`` are returned in the flattened list.
     get_ref : bool
-        If ``True``, a reference tree is returned which can be used to
+        If ``True``, a reference tree is also returned which can be used to
         reconstruct the original tree from a flattened list.
 
     Returns

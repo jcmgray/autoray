@@ -251,7 +251,7 @@ ly.history_max_size()
 # 25
 
 # --> traverse the unique computational nodes, e.g. to estimate FLOP cost
-len([node for node in ly])
+len([node for node in ly.descend()])
 # 57
 
 # --> traverse in topological/computational order
@@ -293,7 +293,7 @@ with lazy.shared_intermediates():
     ly = modified_gram_schmidt(lx)
 
 # --> a few nodes can be reused here (c.f. 57 previously)
-len(tuple(ly))
+ly.history_num_nodes()
 # 51
 ```
 this caches the computational nodes as they are created based on a hash of their input arguments (note this uses ``id`` for array like things, i.e. assumes they are immutable). Unlike eagerly caching function calls in real time, which might consume large amounts of memory, now when the computation runs (i.e. ``ly.compute()`` is called) data is only kept as long as its needed.

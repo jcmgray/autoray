@@ -14,6 +14,10 @@ from ..autoray import (
     multi_class_priorities,
     register_backend,
     register_function,
+    tree_flatten,
+    tree_map,
+    tree_iter,
+    tree_unflatten,
 )
 from .draw import (
     plot_graph,
@@ -26,9 +30,27 @@ from .draw import (
 
 _EMPTY_DICT = {}
 get_depth = operator.attrgetter("_depth")
+get_data = operator.attrgetter("_data")
 
 
 # ------------------------ traversal and computation ------------------------ #
+
+
+def is_lazy_array(x):
+    """Check if ``x`` is a lazy array."""
+    return isinstance(x, LazyArray)
+
+
+def to_queue(lz):
+    """Parse a pytree of lazy arrays into a queue of nodes, sorted by depth.
+    This is useful for traversing the computational graph of multiple outputs
+    in topological order.
+    """
+    if isinstance(lz, LazyArray):
+        return [lz]
+    queue = tree_flatten(lz, is_lazy_array)
+    queue.sort(key=get_depth)
+    return queue
 
 
 def descend(lz):
@@ -37,18 +59,14 @@ def descend(lz):
 
     Parameters
     ----------
-    lz : LazyArray or sequence of LazyArray
+    lz : pytree of LazyArray
         The output node(s) of the computational graph to descend.
 
     Yields
     ------
     LazyArray
     """
-    if isinstance(lz, LazyArray):
-        queue = [lz]
-    else:
-        queue = sorted(lz, key=get_depth)
-
+    queue = to_queue(lz)
     seen = set()
     while queue:
         node = queue.pop()
@@ -66,18 +84,14 @@ def ascend(lz):
 
     Parameters
     ----------
-    lz : LazyArray or sequence of LazyArray
+    lz : pytree of LazyArray
         The output node(s) of the computational graph to ascend to.
 
     Yields
     ------
     LazyArray
     """
-    if isinstance(lz, LazyArray):
-        queue = [lz]
-    else:
-        queue = sorted(lz, key=get_depth)
-
+    queue = to_queue(lz)
     seen = set()
     ready = set()
     while queue:
@@ -102,7 +116,7 @@ def compute(lz):
 
     Parameters
     ----------
-    lz : LazyArray or sequence of LazyArray
+    lz : pytree of LazyArray
         The output node(s) of the computational graph to compute.
 
     Returns
@@ -112,11 +126,7 @@ def compute(lz):
     """
     for node in ascend(lz):
         node._materialize()
-
-    if isinstance(lz, LazyArray):
-        return lz._data
-
-    return tuple(node._data for node in lz)
+    return tree_map(get_data, lz, is_lazy_array)
 
 
 def compute_constants(lz, variables):
@@ -125,16 +135,13 @@ def compute_constants(lz, variables):
 
     Parameters
     ----------
-    lz : LazyArray or sequence of LazyArray
+    lz : pytree of LazyArray
         The output node(s) of the computational graph.
-    variables : LazyArray or sequence of LazyArray
+    variables : pytree of LazyArray
         Nodes that should be treated as variable. I.e. any descendants will
         not be folded into the graph.
     """
-    if isinstance(variables, LazyArray):
-        variables = {variables}
-    else:
-        variables = set(variables)
+    variables = set(tree_iter(variables, is_lazy_array))
 
     # must ascend
     for node in ascend(lz):
@@ -201,9 +208,9 @@ class Function:
 
     Parameters
     ----------
-    inputs : LazyArray or sequence of LazyArray
+    inputs : pytree of LazyArray
         The input node(s) of the computational graph.
-    outputs : LazyArray or sequence of LazyArray
+    outputs : pytree of LazyArray
         The output node(s) of the computational graph.
     fold_constants : bool, optional
         If True, fold constant arrays (those with no dependence on ``inputs``)
@@ -217,11 +224,10 @@ class Function:
     __slots__ = (
         "_in_names",
         "_out_names",
+        "_out_tree",
         "_source",
         "_code",
-        "_params",
-        "_is_single_in",
-        "_is_single_out",
+        "_locals",
     )
 
     def __init__(self, inputs, outputs, fold_constants=True):
@@ -229,10 +235,10 @@ class Function:
             # compute everything not dependent on inputs
             compute_constants(outputs, variables=inputs)
 
-        # write source and populate locals mapping that function will run under
-        # params will include the functions and other constant objects
-        self._params = {}
-        self._source = get_source(outputs, params=self._params)
+        # write source and populate locals mapping that function will run
+        # under, locals will include the functions and other constant objects
+        self._locals = {}
+        self._source = get_source(outputs, params=self._locals)
 
         # compile source
         self._code = compile(
@@ -243,67 +249,45 @@ class Function:
         )
 
         # get names to inject and extract arrays into and from locals
-        self._is_single_in = isinstance(inputs, LazyArray)
-        if self._is_single_in:
-            self._in_names = f"x{id(inputs)}"
-        else:
-            self._in_names = tuple(f"x{id(v)}" for v in inputs)
+        self._in_names = tuple(f"x{id(v)}" for v in tree_iter(inputs))
+        outs_flat, self._out_tree = tree_flatten(outputs, get_ref=True)
+        self._out_names = tuple(f"x{id(v)}" for v in outs_flat)
 
-        self._is_single_out = isinstance(outputs, LazyArray)
-        if self._is_single_out:
-            self._out_names = f"x{id(outputs)}"
-        else:
-            self._out_names = tuple(f"x{id(v)}" for v in outputs)
-
-    def __call__(self, arrays, *args):
-
-        # allow fn(arrays) or fn(*arrays)
-        if args:
-            arrays = (arrays,) + args
-
-        # inject the new array(s)
-        if self._is_single_in:
-            self._params[self._in_names] = arrays
-        else:
-            for name, array in zip(self._in_names, arrays):
-                self._params[name] = array
+    def __call__(self, *args):
+        # this allows any matching zipped tree
+        for name, array in zip(self._in_names, tree_iter(args)):
+            self._locals[name] = array
 
         # run the byte-compiled function with the updated locals
-        exec(self._code, None, self._params)
+        exec(self._code, None, self._locals)
 
-        if self._is_single_in:
-            # remove the input array(s) from the locals
-            del self._params[self._in_names]
-        else:
-            for name in self._in_names:
-                del self._params[name]
+        # remove inputs from locals
+        for name in self._in_names:
+            del self._locals[name]
 
-        if self._is_single_out:
-            # return the result, whilst removing it from the locals
-            return self._params.pop(self._out_names)
+        # pop outputs from locals
+        outs = tuple(self._locals.pop(name) for name in self._out_names)
 
-        # return the results, whilst removing them from the locals
-        return tuple(self._params.pop(name) for name in self._out_names)
+        # return the outputs in the original tree structure
+        return tree_unflatten(outs, self._out_tree)
 
     def __getstate__(self):
         # can't pickle the code object -> recompile in setstate
         return (
             self._in_names,
             self._out_names,
+            self._out_tree,
             self._source,
-            self._params,
-            self._is_single_in,
-            self._is_single_out,
+            self._locals,
         )
 
     def __setstate__(self, state):
         (
             self._in_names,
             self._out_names,
+            self._out_tree,
             self._source,
-            self._params,
-            self._is_single_in,
-            self._is_single_out,
+            self._locals,
         ) = state
 
         # recompile the source
@@ -319,16 +303,8 @@ class Function:
         print(self._source)
 
     def __repr__(self):
-        if self._is_single_in:
-            insig = "array_like"
-        else:
-            insig = "Sequence[array_like]"
-
-        if self._is_single_out:
-            outsig = "array_like"
-        else:
-            outsig = "Tuple[array_like]"
-
+        insig = f"{len(self._in_names)} input(s)"
+        outsig = f"{len(self._out_names)} output(s) "
         return f"<Function({insig}) -> {outsig}>"
 
 
@@ -336,8 +312,7 @@ class Function:
 
 
 class Placeholder:
-    """A singleton object to use as a placeholder in a LazyArray.
-    """
+    """A singleton object to use as a placeholder in a LazyArray."""
 
     __slots__ = ()
 
@@ -488,7 +463,7 @@ class LazyArray:
 
         return self._data
 
-    __iter__ = descend = descend
+    descend = descend
     ascend = ascend
 
     def compute(self):
@@ -598,41 +573,70 @@ class LazyArray:
                 for islast, d in zip(islasts, deps):
                     queue.append((d, columns + (islast,)))
 
+    def history_num_nodes(self):
+        """Return the number of unique computational nodes in the history of
+        this ``LazyArray``.
+        """
+        num_nodes = 0
+        for _ in self.descend():
+            num_nodes += 1
+        return num_nodes
+
     def history_max_size(self):
         """Get the largest single tensor size appearing in this computation."""
-        return max(node.size for node in self)
+        return max(node.size for node in self.descend())
 
-    def history_size_footprint(self):
+    def history_size_footprint(self, include_inputs=True):
         """Get the combined size of intermediates at each step of the
         computation. Note this assumes that intermediates are immediately
         garbage collected when they are no longer required.
+
+        Parameters
+        ----------
+        include_inputs : bool, optional
+            Whether to include the size of the inputs in the computation. If
+            ``True`` It is assumed they can be garbage collected once used but
+            are all present at the beginning of the computation.
         """
         delete_checked = set()
         sizes = []
+        input_size = 0
         for node in reversed(tuple(self.ascend())):
             for c in node._deps:
                 if c not in delete_checked:
                     # last time a dependency is seen, subtract the size
-                    if c._deps:
+                    if include_inputs or c._deps:
                         sizes.append(-c.size)
                     delete_checked.add(c)
 
             if node._data is None:
                 # this is a new intermediate, add the size
                 sizes.append(+node.size)
+            elif include_inputs:
+                # this is an input, size is added at beginning
+                input_size += node.size
 
+        sizes.append(input_size)
         sizes.reverse()
         return list(itertools.accumulate(sizes))
 
-    def history_peak_size(self):
-        """Get the peak combined intermediate size of this computation."""
-        return max(self.history_size_footprint())
+    def history_peak_size(self, include_inputs=True):
+        """Get the peak combined intermediate size of this computation.
+
+        Parameters
+        ----------
+        include_inputs : bool, optional
+            Whether to include the size of the inputs in the computation. If
+            ``True`` It is assumed they can be garbage collected once used but
+            are all present at the beginning of the computation.
+        """
+        return max(self.history_size_footprint(include_inputs=include_inputs))
 
     def history_total_size(self):
         """The the total size of all unique arrays in the computational graph,
         possibly relevant e.g. for back-propagation algorithms.
         """
-        return sum(node.size for node in self)
+        return sum(node.size for node in self.descend())
 
     def history_stats(self, fn):
         """Compute aggregate statistics about the computational graph.
@@ -667,7 +671,7 @@ class LazyArray:
                     return node.size
 
         stats = collections.defaultdict(int)
-        for node in self:
+        for node in self.descend():
             node_cost = fn(node)
             if node_cost is not None:
                 stats[node.fn_name] += fn(node)
@@ -757,6 +761,20 @@ class LazyArray:
     @property
     def shape(self):
         return self._shape
+
+    def __len__(self):
+        return self.shape[0]
+
+    def __iter__(self):
+        import warnings
+
+        warnings.warn(
+            "Iterating over LazyArray to get the computational graph nodes is "
+            "deprecated - use `LazyArray.descend()` instead. Eventually "
+            "`iter(lz)` will iterate over first axis slices."
+        )
+
+        return self.descend()
 
     @property
     def ndim(self):
@@ -1289,7 +1307,6 @@ def getitem(a, key):
     shape = iter(a.shape)
     newshape = []
     for i, k in enumerate(key):
-
         if k is None:
             # (newaxis) -> new dimension of size 1
             newshape.append(1)
@@ -1303,7 +1320,6 @@ def getitem(a, key):
             newshape.append(get_sliced_size(d, k.start, k.stop, k.step))
 
         elif hasattr(k, "shape") or isinstance(k, (tuple, list)):
-
             if adv_idx_shape is None:
                 # first advanced index
                 adv_idx_shape = _get_py_shape(k)
@@ -1337,7 +1353,7 @@ def getitem(a, key):
             newshape = (
                 *newshape[:adv_idx_loc],
                 *adv_idx_shape,
-                *newshape[adv_idx_loc:]
+                *newshape[adv_idx_loc:],
             )
     else:
         newshape = tuple(newshape)
@@ -1433,28 +1449,30 @@ def matmul(x1, x2):
     if len(shape2) == 1:
         if shape1[-1] != shape2[-1]:
             raise ValueError(
-                'matmul: Input operand 1 has a mismatch in its core dimension 0, '
-                'with gufunc signature (n?,k),(k,m?)->(n?,m?)'
+                "matmul: Input operand 1 has a mismatch in its core dimension "
+                "0, with gufunc signature (n?,k),(k,m?)->(n?,m?)"
             )
         newshape = shape1[:-1]
     elif len(shape1) == 1:
         if len(shape2) > 2 or shape1[-1] != shape2[-2]:
             raise ValueError(
-                'matmul: Input operand 1 has a mismatch in its core dimension 0, '
-                'with gufunc signature (n?,k),(k,m?)->(n?,m?)'
+                "matmul: Input operand 1 has a mismatch in its core dimension "
+                "0, with gufunc signature (n?,k),(k,m?)->(n?,m?)"
             )
         newshape = shape2[-1:]
     else:
         if shape2[:-2] != shape1[:-2]:
             raise ValueError(
-                'operands could not be broadcast together with remapped shapes '
-                f'[original->remapped]: {shape1}->({shape1[:-2]},newaxis,newaxis) '
-                f'{shape2}->({shape2[:-2]},newaxis,newaxis)  and requested shape ({shape1[-2], shape2[-1]})'
+                "operands could not be broadcast together with remapped "
+                f"shapes [original->remapped]: {shape1}->({shape1[:-2]},"
+                "newaxis,newaxis) "
+                f"{shape2}->({shape2[:-2]},newaxis,newaxis)  and requested "
+                f"shape ({shape1[-2], shape2[-1]})"
             )
         if shape1[-1] != shape2[-2]:
             raise ValueError(
-                'matmul: Input operand 1 has a mismatch in its core dimension 0, '
-                'with gufunc signature (n?,k),(k,m?)->(n?,m?)'
+                "matmul: Input operand 1 has a mismatch in its core dimension "
+                "0, with gufunc signature (n?,k),(k,m?)->(n?,m?)"
             )
         newshape = (*shape1[:-1], shape2[-1])
 

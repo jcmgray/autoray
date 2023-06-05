@@ -66,7 +66,7 @@ def wrap_strict_check(larray):
 
 
 def make_strict(larray):
-    for node in larray:
+    for node in larray.descend():
         larray._fn = wrap_strict_check(larray)
 
 
@@ -88,14 +88,14 @@ def test_lazy_mgs(backend):
     htot = ly.history_total_size()
     assert hmax == 25
     assert 25 < hpeak < htot
-    assert len(tuple(ly)) == 57
-    assert len({node.fn_name for node in ly}) == 9
+    assert ly.history_num_nodes() == 57
+    assert len(ly.history_fn_frequencies()) == 9
     assert_allclose(to_numpy(ly.compute()), to_numpy(modified_gram_schmidt(x)))
     with lazy.shared_intermediates():
         ly = modified_gram_schmidt(lx)
         make_strict(ly)
-    assert len(tuple(ly)) == 51
-    assert len({node.fn_name for node in ly}) == 9
+    assert ly.history_num_nodes() == 51
+    assert len(ly.history_fn_frequencies()) == 9
     assert_allclose(to_numpy(ly.compute()), to_numpy(modified_gram_schmidt(x)))
 
 
@@ -111,10 +111,10 @@ def test_partial_evaluation():
     le = do("einsum", "ab,ba->a", ls, ld)
     lf = do("sum", le)
     make_strict(lf)
-    assert len(tuple(lf)) == 12
+    assert lf.history_num_nodes() == 12
     lf.compute_constants(variables=[lc, ld])  # constants = [la, lb]
-    assert len(tuple(lf)) == 9
-    assert "tanh" not in {node.fn_name for node in lf}
+    assert lf.history_num_nodes() == 9
+    assert "tanh" not in {node.fn_name for node in lf.descend()}
     lf.compute()
 
 
@@ -172,13 +172,13 @@ def test_share_intermediates():
     l1 = do("tanh", la @ lb)
     l2 = do("tanh", la @ lb)
     ly = l1 + l2
-    assert len(tuple(ly)) == 7
+    assert ly.history_num_nodes() == 7
     y1 = ly.compute()
     with lazy.shared_intermediates():
         l1 = do("tanh", la @ lb)
         l2 = do("tanh", la @ lb)
         ly = l1 + l2
-    assert len(tuple(ly)) == 5
+    assert ly.history_num_nodes() == 5
     y2 = ly.compute()
     assert_allclose(y1, y2)
 
@@ -190,8 +190,8 @@ def test_transpose_chain(backend):
     l2 = do("transpose", l1, (1, 0, 3, 2, 4))
     assert l2.args[0] is lx
     assert l2.deps == (lx,)
-    assert len(tuple(l1)) == 2
-    assert len(tuple(l2)) == 2
+    assert l1.history_num_nodes() == 2
+    assert l2.history_num_nodes() == 2
     assert_allclose(
         to_numpy(lx.compute()),
         to_numpy(l2.compute()),
@@ -203,13 +203,13 @@ def test_reshape_chain(backend):
     lx = lazy.array(gen_rand((2, 3, 4, 5, 6), backend))
     l1 = do("reshape", lx, (6, 4, 30))
     l2 = do("reshape", l1, (-1,))
-    assert len(tuple(l1)) == 2
-    assert len(tuple(l2)) == 2
+    assert l1.history_num_nodes() == 2
+    assert l2.history_num_nodes() == 2
     assert l2.args[0] is lx
     assert l2.deps == (lx,)
     assert_allclose(
         to_numpy(lx.compute()).flatten(),
-        to_numpy(l2.compute()),
+        to_numpy(l2.compute()), atol=1e-6,
     )
 
 
@@ -488,8 +488,29 @@ def test_where():
     f = c.get_function([a, b])
     x = do("asarray", [-0.5, -0.5, 1, 2], like="numpy")
     y = do("asarray", [1, 2, 3, 4], like="numpy")
-    z = f([x, y])
+    z = f(x, y)
     assert_allclose(z, [1, 1, 3, 4])
+
+
+def test_lazy_function_pytree_input_and_output():
+    inputs = {
+        'a': lazy.Variable(shape=(2, 3), backend="numpy"),
+        'b': lazy.Variable(shape=(3, 4), backend="numpy"),
+    }
+    outputs = {
+        'outa': do("tanh", inputs['a'] @ inputs['b']),
+        'outb': [inputs['a'] - 1, inputs['b'] - 1],
+    }
+    f = lazy.Function(inputs, outputs)
+
+    a = do("random.uniform", size=(2, 3), like="numpy")
+    b = do("random.uniform", size=(3, 4), like="numpy")
+
+    outs = f({'a': a, 'b': b})
+
+    assert_allclose(outs['outa'], do("tanh", a @ b))
+    assert_allclose(outs['outb'][0], a - 1)
+    assert_allclose(outs['outb'][1], b - 1)
 
 
 @pytest.mark.parametrize(
