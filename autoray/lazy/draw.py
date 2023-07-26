@@ -3,7 +3,7 @@
 
 import itertools
 import functools
-import importlib
+import importlib.util
 
 
 COLORING_SEED = 1  # 8, 10
