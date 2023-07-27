@@ -25,4 +25,5 @@ new release:
 4. If all goes well, create a release on github and publish to trigger building
    and uploading a package to the [PyPI **production** server](https://pypi.org/project/autoray/).
 5. The [`conda-forge/autoray-feedstock`](https://github.com/conda-forge/autoray-feedstock)
-   repo should automatically pick up the new PyPI release and build a new conda package.
+   repo should automatically pick up the new PyPI release and build a new
+   [conda package](https://anaconda.org/conda-forge/autoray).
