@@ -1,3 +1,5 @@
+"""Core lazy array functionality.
+"""
 import operator
 import threading
 import functools
@@ -545,7 +547,8 @@ class LazyArray:
             prefix = ""
             if columns:
                 # work out various lines we need to draw based on whether the
-                # sequence of parents are themselves the last child of their parent
+                # sequence of parents are themselves the last child of their
+                # parent
                 prefix += "".join(
                     bar if not p else space for p in columns[:-1]
                 )
@@ -1672,11 +1675,13 @@ def complex_(re, im):
     )
 
 
-def make_unary_func(name, to_real=False):
+def make_unary_func(name):
     @lazy_cache(name)
     def unary_func(x):
         x = ensure_lazy(x)
         return x.to(fn=get_lib_fn(x.backend, name))
+
+    unary_func.__name__ = name
 
     return unary_func
 
@@ -1700,10 +1705,10 @@ log2 = make_unary_func("log2")
 log10 = make_unary_func("log10")
 conj = make_unary_func("conj")
 sign = make_unary_func("sign")
-abs_ = make_unary_func("abs", to_real=True)
-angle = make_unary_func("angle", to_real=True)
-real = make_unary_func("real", to_real=True)
-imag = make_unary_func("imag", to_real=True)
+abs_ = make_unary_func("abs")
+angle = make_unary_func("angle")
+real = make_unary_func("real")
+imag = make_unary_func("imag")
 
 
 def make_reduction_func(name):
