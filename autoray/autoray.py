@@ -2003,6 +2003,7 @@ _FUNC_ALIASES["torch", "take"] = "index_select"
 _FUNC_ALIASES["torch", "linalg.expm"] = "matrix_exp"
 _FUNC_ALIASES["torch", "conjugate"] = "conj"
 _FUNC_ALIASES["torch", "split"] = "tensor_split"
+_FUNC_ALIASES["torch", "expand_dims"] = "unsqueeze"
 
 _SUBMODULE_ALIASES["torch", "linalg.expm"] = "torch"
 _SUBMODULE_ALIASES["torch", "random.normal"] = "torch"
@@ -2033,6 +2034,9 @@ _CUSTOM_WRAPPERS["torch", "eye"] = torch_eye_wrap
 _CUSTOM_WRAPPERS["torch", "empty"] = make_translator([("shape", ("size",))])
 _CUSTOM_WRAPPERS["torch", "take"] = make_translator(
     [("a", ("input",)), ("indices", ("index",)), ("axis", ("dim",))]
+)
+_CUSTOM_WRAPPERS["torch", "expand_dims"] = make_translator(
+    [("a", ("input",)), ("axis", ("dim",))]
 )
 
 # for older versions of torch, can provide some alternative implementations
