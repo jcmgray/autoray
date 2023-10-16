@@ -19,19 +19,19 @@ jobs:
         env: [base]
         include:
         - os: macos-latest
-          python-version: 3.9
+          python-version: '3.11'
           env: base
         - os: windows-latest
-          python-version: 3.9
+          python-version: '3.11'
           env: base
         - os: ubuntu-latest
-          python-version: 3.9
+          python-version: '3.11'
           env: torch
         - os: ubuntu-latest
-          python-version: 3.9
+          python-version: '3.11'
           env: jax
         - os: ubuntu-latest
-          python-version: 3.9
+          python-version: '3.11'
           env: tensorflow
 
     steps:

@@ -1386,19 +1386,51 @@ def tensordot(a, b, axes=2):
     )
 
 
+def _basic_einsum_parse_input(operands):
+    # handle the basic, fully specified equation format
+    eq, *arrays = operands
+    lhs, rhs = eq.split('->')
+    return lhs, rhs, arrays
+
+
+@functools.lru_cache(None)
+def _get_parse_einsum_input():
+    try:
+        from cotengra.utils import parse_einsum_input
+
+        return parse_einsum_input
+    except ImportError:
+        pass
+
+    try:
+        from opt_einsum.parser import parse_einsum_input
+
+        return parse_einsum_input
+    except ImportError:
+        pass
+
+    import warnings
+
+    warnings.warn(
+        "Could not find a full input parser for einsum expressions. "
+        "Please install either cotengra or opt_einsum for advanced "
+        "input formats (interleaved, ellipses, no-output)."
+    )
+
+    return _basic_einsum_parse_input
+
+
 @lazy_cache("einsum")
 def einsum(*operands):
-    from opt_einsum.parser import parse_einsum_input
-
-    deps, output, larrays = parse_einsum_input(operands)
+    lhs, rhs, larrays = _get_parse_einsum_input()(operands)
 
     size_dict = {}
-    for term, op in zip(deps.split(","), larrays):
+    for term, op in zip(lhs.split(","), larrays):
         op_shape = shape(op)
         for i, char in enumerate(term):
             size_dict[char] = max(size_dict.get(char, 1), op_shape[i])
-    eq = deps + "->" + output
-    newshape = tuple(size_dict[char] for char in output)
+    eq = f"{lhs}->{rhs}"
+    newshape = tuple(size_dict[char] for char in rhs)
 
     backend = find_common_backend(*larrays)
     fn_einsum = get_lib_fn(backend, "einsum")
