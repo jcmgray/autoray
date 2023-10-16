@@ -209,7 +209,8 @@ def test_reshape_chain(backend):
     assert l2.deps == (lx,)
     assert_allclose(
         to_numpy(lx.compute()).flatten(),
-        to_numpy(l2.compute()), atol=1e-6,
+        to_numpy(l2.compute()),
+        atol=1e-6,
     )
 
 
@@ -494,23 +495,23 @@ def test_where():
 
 def test_lazy_function_pytree_input_and_output():
     inputs = {
-        'a': lazy.Variable(shape=(2, 3), backend="numpy"),
-        'b': lazy.Variable(shape=(3, 4), backend="numpy"),
+        "a": lazy.Variable(shape=(2, 3), backend="numpy"),
+        "b": lazy.Variable(shape=(3, 4), backend="numpy"),
     }
     outputs = {
-        'outa': do("tanh", inputs['a'] @ inputs['b']),
-        'outb': [inputs['a'] - 1, inputs['b'] - 1],
+        "outa": do("tanh", inputs["a"] @ inputs["b"]),
+        "outb": [inputs["a"] - 1, inputs["b"] - 1],
     }
     f = lazy.Function(inputs, outputs)
 
     a = do("random.uniform", size=(2, 3), like="numpy")
     b = do("random.uniform", size=(3, 4), like="numpy")
 
-    outs = f({'a': a, 'b': b})
+    outs = f({"a": a, "b": b})
 
-    assert_allclose(outs['outa'], do("tanh", a @ b))
-    assert_allclose(outs['outb'][0], a - 1)
-    assert_allclose(outs['outb'][1], b - 1)
+    assert_allclose(outs["outa"], do("tanh", a @ b))
+    assert_allclose(outs["outb"][0], a - 1)
+    assert_allclose(outs["outb"][1], b - 1)
 
 
 @pytest.mark.parametrize(
@@ -576,9 +577,9 @@ def test_getitem(indices, shape):
 
 
 def random_indexer(ndim_min=0, ndim_max=10, d_min=1, d_max=5, seed=None):
-    """Generate a random shape and valid indexing object into that shape.
-    """
+    """Generate a random shape and valid indexing object into that shape."""
     import numpy as np
+
     rng = np.random.default_rng(seed=seed)
 
     ndim = rng.integers(ndim_min, ndim_max + 1)
@@ -595,43 +596,43 @@ def random_indexer(ndim_min=0, ndim_max=10, d_min=1, d_max=5, seed=None):
 
     shape = []
     indexer = []
-    choices = ['index', 'slice', 'ellipsis', 'array', 'list', 'newaxis']
+    choices = ["index", "slice", "ellipsis", "array", "list", "newaxis"]
 
     i = 0
     while i < ndim:
         kind = rng.choice(choices)
 
-        if kind == 'newaxis':
+        if kind == "newaxis":
             indexer.append(None)
             continue
 
         d = rng.integers(d_min, d_max + 1)
         shape.append(d)
 
-        if kind == 'index':
+        if kind == "index":
             ix = rng.integers(-d, d)
             if rng.random() > 0.5:
                 # randomly supply integers and numpy ints
                 ix = int(ix)
 
-        elif kind == 'ellipsis':
+        elif kind == "ellipsis":
             # only one ellipsis allowed
             ix = ...
-            choices.remove('ellipsis')
+            choices.remove("ellipsis")
             # how many dims ellipsis should expand to
             i += rng.integers(0, 4)
 
-        elif kind == 'slice':
+        elif kind == "slice":
             start = rng.integers(-d - 2, d + 2)
             stop = rng.integers(-d - 2, d - 2)
             step = rng.choice([-3, -2, -1, 1, 2, 3])
             ix = slice(start, stop, step)
 
-        elif kind == 'array':
+        elif kind == "array":
             ai_shape = rand_adv_ix_broadcastable_shape()
             ix = rng.integers(-d, d, size=ai_shape)
 
-        elif kind == 'list':
+        elif kind == "list":
             ai_shape = rand_adv_ix_broadcastable_shape()
             ix = rng.integers(-d, d, size=ai_shape).tolist()
 
@@ -640,7 +641,7 @@ def random_indexer(ndim_min=0, ndim_max=10, d_min=1, d_max=5, seed=None):
 
     if (len(indexer) == 1) and (rng.random() > 0.5):
         # return the raw object
-        indexer, = indexer
+        (indexer,) = indexer
     else:
         indexer = tuple(indexer)
 
@@ -664,7 +665,7 @@ def test_lazy_getitem_random(seed):
         ((3,), (3,)),
         ((3,), (3, 2)),
         ((6, 5, 4, 3), (3,)),
-        ((7, 6, 5, 4), (7, 6, 4, 3))
+        ((7, 6, 5, 4), (7, 6, 4, 3)),
     ],
 )
 def test_matmul_shape(shape1, shape2):
@@ -680,12 +681,21 @@ def test_matmul_shape(shape1, shape2):
 
 @pytest.mark.parametrize(
     "shape1, shape2",
-    [((3,), (1,)),
-     ((3,), (4, 3)),
-     ((3,), (3, 2, 1)),
-     ((2, 2, 3, 4), (1, 2, 4, 5,)),
-     ((6, 5, 4), (6, 3, 3))
-     ]
+    [
+        ((3,), (1,)),
+        ((3,), (4, 3)),
+        ((3,), (3, 2, 1)),
+        (
+            (2, 2, 3, 4),
+            (
+                1,
+                2,
+                4,
+                5,
+            ),
+        ),
+        ((6, 5, 4), (6, 3, 3)),
+    ],
 )
 def test_matmul_shape_error(shape1, shape2):
     a = lazy.Variable(shape=shape1)
@@ -701,10 +711,10 @@ def test_pytree_compute():
     x = do("random.uniform", size=(5, 6), like="numpy")
     lx = lazy.array(x)
     lu, ls, lv = do("linalg.svd", lx)
-    lresults = {'u': lu,'s': ls,'v': lv}
+    lresults = {"u": lu, "s": ls, "v": lv}
     results = lazy.compute(lresults)
     assert isinstance(results, dict)
-    assert infer_backend(results['s']) == infer_backend(x)
+    assert infer_backend(results["s"]) == infer_backend(x)
 
 
 def test_kron():
@@ -728,7 +738,7 @@ def test_kron():
     assert lxy.shape == xy.shape
     assert_allclose(lxy.compute(), xy)
 
-    x = do("random.uniform", size=(3 ,4, 5), like="numpy")
+    x = do("random.uniform", size=(3, 4, 5), like="numpy")
     y = do("random.uniform", size=(3,), like="numpy")
     xy = do("kron", x, y)
 
@@ -740,9 +750,9 @@ def test_kron():
 
 
 def test_concatenate():
-    x = do("random.uniform", size=(3 ,4, 5), like="numpy")
-    y = do("random.uniform", size=(3 ,1, 5), like="numpy")
-    z = do("random.uniform", size=(3 ,7, 5), like="numpy")
+    x = do("random.uniform", size=(3, 4, 5), like="numpy")
+    y = do("random.uniform", size=(3, 1, 5), like="numpy")
+    z = do("random.uniform", size=(3, 7, 5), like="numpy")
     xyz = do("concatenate", (x, y, z), axis=1)
 
     lx = lazy.array(x)
@@ -752,4 +762,3 @@ def test_concatenate():
 
     assert lxyz.shape == xyz.shape
     assert_allclose(lxyz.compute(), xyz)
-

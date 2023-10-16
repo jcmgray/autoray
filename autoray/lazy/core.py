@@ -1389,7 +1389,7 @@ def tensordot(a, b, axes=2):
 def _basic_einsum_parse_input(operands):
     # handle the basic, fully specified equation format
     eq, *arrays = operands
-    lhs, rhs = eq.split('->')
+    lhs, rhs = eq.split("->")
     return lhs, rhs, arrays
 
 
