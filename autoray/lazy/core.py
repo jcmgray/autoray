@@ -1526,6 +1526,16 @@ def kron(x1, x2):
     backend = find_common_backend(x1, x2)
     shape1 = shape(x1)
     shape2 = shape(x2)
+
+    ndim1 = len(shape1)
+    ndim2 = len(shape2)
+
+    diff = ndim1 - ndim2
+    if diff > 0:
+        shape2 = (1,) * diff + shape2
+    elif diff < 0:
+        shape1 = (1,) * -diff + shape1
+
     newshape = tuple(d1 * d2 for d1, d2 in zip(shape1, shape2))
     fn_kron = get_lib_fn(backend, "kron")
     return LazyArray(
@@ -1591,7 +1601,7 @@ def concatenate(arrays, axis=0):
     newshape = list(arrays[0].shape)
     newshape[axis] = sum(shape(a)[axis] for a in arrays)
 
-    backend = infer_backend(arrays[0])
+    backend = find_common_backend(*arrays)
     fn = get_lib_fn(backend, "concatenate")
     return LazyArray(
         backend=backend,

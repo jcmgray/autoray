@@ -695,3 +695,61 @@ def test_matmul_shape_error(shape1, shape2):
         return x @ y
 
     assert_raises(ValueError, f, a, b)
+
+
+def test_pytree_compute():
+    x = do("random.uniform", size=(5, 6), like="numpy")
+    lx = lazy.array(x)
+    lu, ls, lv = do("linalg.svd", lx)
+    lresults = {'u': lu,'s': ls,'v': lv}
+    results = lazy.compute(lresults)
+    assert isinstance(results, dict)
+    assert infer_backend(results['s']) == infer_backend(x)
+
+
+def test_kron():
+    x = do("random.uniform", size=(2, 3), like="numpy")
+    y = do("random.uniform", size=(2, 3), like="numpy")
+    xy = do("kron", x, y)
+
+    lx = lazy.array(x)
+    ly = lazy.array(y)
+    lxy = do("kron", lx, ly)
+    assert lxy.shape == xy.shape
+    assert_allclose(lxy.compute(), xy)
+
+    x = do("random.uniform", size=(3,), like="numpy")
+    y = do("random.uniform", size=(3, 4, 5), like="numpy")
+    xy = do("kron", x, y)
+
+    lx = lazy.array(x)
+    ly = lazy.array(y)
+    lxy = do("kron", lx, ly)
+    assert lxy.shape == xy.shape
+    assert_allclose(lxy.compute(), xy)
+
+    x = do("random.uniform", size=(3 ,4, 5), like="numpy")
+    y = do("random.uniform", size=(3,), like="numpy")
+    xy = do("kron", x, y)
+
+    lx = lazy.array(x)
+    ly = lazy.array(y)
+    lxy = do("kron", lx, ly)
+    assert lxy.shape == xy.shape
+    assert_allclose(lxy.compute(), xy)
+
+
+def test_concatenate():
+    x = do("random.uniform", size=(3 ,4, 5), like="numpy")
+    y = do("random.uniform", size=(3 ,1, 5), like="numpy")
+    z = do("random.uniform", size=(3 ,7, 5), like="numpy")
+    xyz = do("concatenate", (x, y, z), axis=1)
+
+    lx = lazy.array(x)
+    ly = lazy.array(y)
+    lz = lazy.array(z)
+    lxyz = do("concatenate", (lx, ly, lz), axis=1)
+
+    assert lxyz.shape == xyz.shape
+    assert_allclose(lxyz.compute(), xyz)
+
