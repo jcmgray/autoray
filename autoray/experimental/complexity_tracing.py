@@ -97,6 +97,7 @@ COSTS = {
     "svd_truncated": cost_svd,
     "svd_truncated_numba": cost_svd,
     "eigh": cost_eigh,
+    "linalg_eigh": cost_eigh,
     "tensordot": cost_tensordot,
     "matmul": cost_matmul,
     "einsum": cost_einsum,
@@ -119,6 +120,7 @@ COSTS = {
     "clip": cost_linear,
     "transpose": cost_linear,
     "torch_transpose": cost_linear,
+    "clamp": cost_linear,
     "getitem": cost_nothing,
     "None": cost_nothing,
 }
@@ -136,7 +138,7 @@ def cost_node(x, allow_missed=True):
 def compute_cost(z, print_missed=True):
     C = 0
     missed = {}
-    for node in z:
+    for node in z.descend():
         f = node.fn_name
         if f in COSTS:
             C += COSTS[f](node)
@@ -234,7 +236,7 @@ def compute_cost_scalings(z, factor_map, print_missed=True):
     counts = {}
     missed = {}
 
-    for node in z:
+    for node in z.descend():
         f = node.fn_name
 
         if f in COST_SCALINGS:
