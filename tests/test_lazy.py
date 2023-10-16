@@ -164,6 +164,7 @@ def test_plot():
     lf.plot_history_functions_scatter()
     lf.plot_history_functions_lines(log=2)
     lf.plot_history_functions_image(rasterize=True)
+    lf.plot_history_stats()
 
 
 def test_share_intermediates():
