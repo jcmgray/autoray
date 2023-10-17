@@ -1,6 +1,11 @@
 ![autoray-header](https://github.com/jcmgray/autoray/assets/8982598/c5cb89bf-cc16-4345-8796-e0bd98dc2a15)
 
-[![tests](https://github.com/jcmgray/autoray/actions/workflows/tests.yml/badge.svg)](https://github.com/jcmgray/autoray/actions/workflows/tests.yml) [![codecov](https://codecov.io/gh/jcmgray/autoray/branch/main/graph/badge.svg?token=Q5evNiuT9S)](https://codecov.io/gh/jcmgray/autoray) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/ba896d74c4954dd58da01df30c7bf326)](https://app.codacy.com/gh/jcmgray/autoray/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade) [![PyPI](https://img.shields.io/pypi/v/autoray?color=teal)](https://pypi.org/project/autoray/) [![Anaconda-Server Badge](https://anaconda.org/conda-forge/autoray/badges/version.svg)](https://anaconda.org/conda-forge/autoray)
+[![tests](https://github.com/jcmgray/autoray/actions/workflows/tests.yml/badge.svg)](https://github.com/jcmgray/autoray/actions/workflows/tests.yml)
+[![codecov](https://codecov.io/gh/jcmgray/autoray/branch/main/graph/badge.svg?token=Q5evNiuT9S)](https://codecov.io/gh/jcmgray/autoray)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/ba896d74c4954dd58da01df30c7bf326)](https://app.codacy.com/gh/jcmgray/autoray/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
+[![Docs](https://readthedocs.org/projects/autoray/badge/?version=latest)](https://autoray.readthedocs.io)
+[![PyPI](https://img.shields.io/pypi/v/autoray?color=teal)](https://pypi.org/project/autoray/)
+[![Anaconda-Server Badge](https://anaconda.org/conda-forge/autoray/badges/version.svg)](https://anaconda.org/conda-forge/autoray)
 
 [`autoray`](https://autoray.readthedocs.io/en/latest) is a lightweight python AUTOmatic-arRAY library for
 abstracting your tensor operations. Primarily it provides an
