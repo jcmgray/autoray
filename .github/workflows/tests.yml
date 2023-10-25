@@ -1,4 +1,4 @@
-name: Test autoray
+name: Tests
 
 on:
   workflow_dispatch:
@@ -15,7 +15,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        python-version: [3.8, 3.9, '3.10', '3.11']
+        python-version: ['3.8', '3.9', '3.10', '3.11']
         env: [base]
         include:
         - os: macos-latest
@@ -35,15 +35,16 @@ jobs:
           env: tensorflow
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Install micromamba
-      uses: mamba-org/provision-with-micromamba@v15
+      uses: mamba-org/setup-micromamba@v1
       with:
         environment-file: ci/requirements/py-${{ matrix.env }}.yml
         environment-name: test-env
-        extra-specs: python=${{ matrix.python-version }}
-        cache-env: true
+        create-args: >-
+          python=${{ matrix.python-version }}
+        cache-environment: true
 
     - name: Test with pytest
       run: pytest --cov=autoray tests/ --cov-report=xml tests
