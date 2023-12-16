@@ -74,7 +74,7 @@ html_theme_options = {
 
 html_css_files = ["my-styles.css"]
 html_static_path = ['_static']
-# html_favicon = "_static/logo-favicon.ico"
+html_favicon = "_static/autoray.ico"
 
 pygments_style = '_pygments_light.MarianaLight'
 pygments_dark_style = "_pygments_dark.MarianaDark"
