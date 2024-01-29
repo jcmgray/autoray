@@ -765,3 +765,11 @@ def test_shape_ndim_builtins():
     for x in xs:
         assert ar.shape(x) == np.shape(x)
         assert ar.ndim(x) == np.ndim(x)
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_scipy_dispatching(backend):
+    if backend not in ["numpy", "cupy", "jax"]:
+        pytest.xfail("backend doens't suport scipy.")
+    x = gen_rand((3, 3), backend=backend)
+    ar.do("scipy.linalg.expm", x)
