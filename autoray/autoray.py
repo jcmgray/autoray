@@ -1994,17 +1994,19 @@ _FUNCS["torch", "transpose"] = torch_transpose
 _FUNCS["torch", "count_nonzero"] = torch_count_nonzero
 _FUNCS["torch", "get_dtype_name"] = torch_get_dtype_name
 
-_FUNC_ALIASES["torch", "clip"] = "clamp"
-_FUNC_ALIASES["torch", "power"] = "pow"
 _FUNC_ALIASES["torch", "array"] = "tensor"
+_FUNC_ALIASES["torch", "clip"] = "clamp"
 _FUNC_ALIASES["torch", "concatenate"] = "cat"
+_FUNC_ALIASES["torch", "conjugate"] = "conj"
+_FUNC_ALIASES["torch", "expand_dims"] = "unsqueeze"
+_FUNC_ALIASES["torch", "linalg.expm"] = "matrix_exp"
+_FUNC_ALIASES["torch", "max"] = "amax"
+_FUNC_ALIASES["torch", "min"] = "amin"
+_FUNC_ALIASES["torch", "power"] = "pow"
 _FUNC_ALIASES["torch", "random.normal"] = "randn"
 _FUNC_ALIASES["torch", "random.uniform"] = "rand"
-_FUNC_ALIASES["torch", "take"] = "index_select"
-_FUNC_ALIASES["torch", "linalg.expm"] = "matrix_exp"
-_FUNC_ALIASES["torch", "conjugate"] = "conj"
 _FUNC_ALIASES["torch", "split"] = "tensor_split"
-_FUNC_ALIASES["torch", "expand_dims"] = "unsqueeze"
+_FUNC_ALIASES["torch", "take"] = "index_select"
 
 _SUBMODULE_ALIASES["torch", "linalg.expm"] = "torch"
 _SUBMODULE_ALIASES["torch", "random.normal"] = "torch"
