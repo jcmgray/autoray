@@ -115,7 +115,7 @@ class CompileJax:
     def __call__(self, *args, array_backend=None, **kwargs):
         if self._jit_fn is None:
             self.setup()
-        out = self._jit_fn(*args, *kwargs)
+        out = self._jit_fn(*args, **kwargs)
         if array_backend != "jax":
             out = do("asarray", out, like=array_backend)
         return out
