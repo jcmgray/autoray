@@ -14,10 +14,10 @@ for lib in ["cupy", "dask", "tensorflow", "torch", "mars", "jax", "sparse"]:
 
         if lib == "jax":
             import os
-            from jax.config import config
+            import jax
 
-            config.update("jax_enable_x64", True)
-            config.update("jax_platform_name", "cpu")
+            jax.config.update("jax_enable_x64", True)
+            jax.config.update("jax_platform_name", "cpu")
             os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
     else:
         BACKENDS.append(

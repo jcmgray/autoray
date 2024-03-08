@@ -100,14 +100,14 @@ class CompileJax:
         import jax
 
         if self._enable_x64 is not None:
-            from jax.config import config
+            import jax
 
-            config.update("jax_enable_x64", self._enable_x64)
+            jax.config.update("jax_enable_x64", self._enable_x64)
 
         if self._platform_name is not None:
-            from jax.config import config
+            import jax
 
-            config.update("jax_platform_name", self._platform_name)
+            jax.config.update("jax_platform_name", self._platform_name)
 
         self._jit_fn = jax.jit(self._fn, **self._jit_kwargs)
         self._fn = None
