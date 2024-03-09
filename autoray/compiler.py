@@ -5,8 +5,9 @@ from .autoray import (
     infer_backend,
     backend_like,
     tree_map,
-    tree_apply,
     tree_iter,
+    tree_flatten,
+    tree_unflatten,
     is_array,
 )
 from . import lazy
@@ -15,9 +16,7 @@ from . import lazy
 class CompilePython:
     """A simple compiler that unravels all autoray calls, optionally sharing
     intermediates and folding constants, converts this to a code object using
-    ``compile``, then executes this using ``exec``. Non-array function
-    arguments are treated as static, with a new function compiled for each
-    unique hash of their values.
+    ``compile``, then executes this using ``exec``.
 
     Parameters
     ----------
@@ -39,31 +38,20 @@ class CompilePython:
         self._fn = fn
         self._fold_constants = fold_constants
         self._share_intermediates = share_intermediates
-        self._fns = {}
+        self._jit_fn = None
 
-    def _trace_fn(self, *args, **kwargs):
+    def setup(self, args, kwargs):
         """Convert the example arrays to lazy variables and trace them through
         the function.
         """
-        variables = []
-
-        def _collect_variable(x):
-            lx = lazy.array(x)
-            variables.append(lx)
-            return lx
-
-        def _run_lazy():
-            lz_args, lz_kwargs = tree_map(
-                _collect_variable, (args, kwargs), is_array
-            )
-            return self._fn(*lz_args, **lz_kwargs)
+        variables = tree_map(lazy.array, (args, kwargs))
 
         if self._share_intermediates:
             with backend_like("autoray.lazy"), lazy.shared_intermediates():
-                outs = _run_lazy()
+                outs = self._fn(*variables[0], **variables[1])
         else:
             with backend_like("autoray.lazy"):
-                outs = _run_lazy()
+                outs = self._fn(*variables[0], **variables[1])
 
         return lazy.Function(
             variables, outs, fold_constants=self._fold_constants
@@ -71,19 +59,10 @@ class CompilePython:
 
     def __call__(self, *args, array_backend=None, **kwargs):
         """If necessary, build, then call the compiled function."""
-        # separate variable arrays from constant kwargs
-        arrays = []
-        constants = []
-        tree_apply(
-            lambda x: (arrays if is_array(x) else constants).append(x),
-            (args, kwargs),
-        )
-        key = hash(tuple(constants))
-        try:
-            return self._fns[key](arrays)
-        except KeyError:
-            fn = self._fns[key] = self._trace_fn(*args, **kwargs)
-            return fn(arrays)
+        if self._jit_fn is None:
+            self._jit_fn = self.setup(args, kwargs)
+
+        return self._jit_fn(args, kwargs)
 
 
 class CompileJax:
@@ -159,19 +138,27 @@ class CompileTorch:
 
         self._fn = fn
         self._jit_fn = None
+        kwargs.setdefault("check_trace", False)
         self._jit_kwargs = kwargs
 
-    def setup(self, args):
-        self._jit_fn = self.torch.jit.trace(self._fn, args, **self._jit_kwargs)
-        self._fn = None
+    def setup(self, *args, **kwargs):
+        flat_tensors, ref_tree = tree_flatten((args, kwargs), get_ref=True)
+
+        def flat_fn(flat_tensors):
+            args, kwargs = tree_unflatten(flat_tensors, ref_tree)
+            return self._fn(*args, **kwargs)
+
+        self._jit_fn = self.torch.jit.trace(
+            flat_fn, [flat_tensors], **self._jit_kwargs
+        )
 
     def __call__(self, *args, array_backend=None, **kwargs):
         if array_backend != "torch":
             # torch doesn't handle numpy arrays itself
             args = tree_map(self.torch.as_tensor, args, is_array)
         if self._jit_fn is None:
-            self.setup(args)
-        out = self._jit_fn(*args, **kwargs)
+            self.setup(*args, **kwargs)
+        out = self._jit_fn(tree_flatten((args, kwargs)))
         if array_backend != "torch":
             out = do("asarray", out, like=array_backend)
         return out

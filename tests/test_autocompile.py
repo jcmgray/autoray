@@ -87,25 +87,3 @@ def test_multi_output():
 
     assert_allclose(x, a - b.sum() + 1)
     assert_allclose(y, b - (a - b.sum()).sum() - 1)
-
-
-def test_static_kwargs_change():
-    @autojit
-    def foo(a, b, c):
-        if c == "sum":
-            return a + b
-        elif c == "sub":
-            return a - b
-
-    assert (
-        foo(
-            do("array", 100, like="numpy"), do("array", 1, like="numpy"), "sum"
-        )
-        == 101
-    )
-    assert (
-        foo(
-            do("array", 100, like="numpy"), do("array", 1, like="numpy"), "sub"
-        )
-        == 99
-    )
