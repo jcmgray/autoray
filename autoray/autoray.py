@@ -1892,6 +1892,7 @@ _FUNC_ALIASES["tensorflow", "array"] = "convert_to_tensor"
 _FUNC_ALIASES["tensorflow", "astype"] = "cast"
 _FUNC_ALIASES["tensorflow", "power"] = "pow"
 _FUNC_ALIASES["tensorflow", "take"] = "gather"
+_FUNC_ALIASES["tensorflow", "identity"] = "eye"
 
 _CUSTOM_WRAPPERS["tensorflow", "linalg.svd"] = svd_sUV_to_UsVH_wrapper
 _CUSTOM_WRAPPERS["tensorflow", "linalg.qr"] = qr_allow_fat
@@ -1923,6 +1924,8 @@ _CUSTOM_WRAPPERS["tensorflow", "clip"] = make_translator(
         ("a_max", ("clip_value_max",)),
     ]
 )
+
+register_creation_routine("tensorflow", "linspace", inject_dtype=False)
 
 
 # ---------------------------------- torch ---------------------------------- #

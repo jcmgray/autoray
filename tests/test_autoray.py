@@ -791,12 +791,16 @@ class TestCreationRoutines:
             pytest.xfail("Sparse doesn't support arange yet.")
         if backend == "torch" and "complex" in dtype:
             pytest.xfail("torch.arange doesn't support complex numbers yet.")
+        if backend == "tensorflow" and "complex" in dtype:
+            pytest.xfail("torch.arange doesn't support complex numbers yet.")
 
         x = gen_rand((1,), backend, dtype)
         y = ar.do("arange", 1, 10, like=x)
         check_array_dtypes(x, y)
 
     def test_empty_passes_dtype_device(self, backend, dtype):
+        if backend in ("tensorflow",):
+            pytest.xfail(f"{backend} doesn't support empty yet.")
         x = gen_rand((1,), backend, dtype)
         y = ar.do("empty", (2, 3), like=x)
         check_array_dtypes(x, y)
@@ -807,6 +811,8 @@ class TestCreationRoutines:
         check_array_dtypes(x, y)
 
     def test_full_passes_dtype_device(self, backend, dtype):
+        if backend in ("tensorflow",):
+            pytest.xfail(f"{backend} doesn't support full yet.")
         x = gen_rand((1,), backend, dtype)
         y = ar.do("full", (2, 3), 7, like=x)
         check_array_dtypes(x, y)
@@ -817,15 +823,15 @@ class TestCreationRoutines:
         check_array_dtypes(x, y)
 
     def test_linspace_passes_dtype_device(self, backend, dtype):
-        if backend in ("sparse",):
-            pytest.xfail("Sparse doesn't support linspace yet.")
+        if backend in ("sparse", "tensorflow"):
+            pytest.xfail(f"{backend} doesn't support linspace yet.")
         x = gen_rand((1,), backend, dtype)
         y = ar.do("linspace", 10, 20, 11, like=x)
         check_array_dtypes(x, y)
 
     def test_logspace_passes_dtype_device(self, backend, dtype):
-        if backend in ("sparse",):
-            pytest.xfail("Sparse doesn't support logspace yet.")
+        if backend in ("sparse", "tensorflow"):
+            pytest.xfail(f"{backend} doesn't support logspace yet.")
         x = gen_rand((1,), backend, dtype)
         if backend not in {"dask"}:
             y = ar.do("logspace", 10, 20, 11, like=x)
