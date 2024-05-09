@@ -17,14 +17,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import math
-import importlib
-import functools
-import itertools
-import threading
 import contextlib
-from inspect import signature
+import functools
+import importlib
+import itertools
+import math
+import threading
 from collections import OrderedDict, defaultdict
+from inspect import signature
 
 
 def do(fn, *args, like=None, **kwargs):
@@ -76,8 +76,9 @@ def do(fn, *args, like=None, **kwargs):
         >>> do('eye', 3, like=x_tf)
         <tf.Tensor: id=91, shape=(3, 3), dtype=float32>
     """
-    backend = choose_backend(fn, *args, like=like, **kwargs)
-    return get_lib_fn(backend, fn)(*args, **kwargs)
+    backend = _choose_backend(fn, args, kwargs, like=like)
+    func = get_lib_fn(backend, fn)
+    return func(*args, **kwargs)
 
 
 # ------------------------- efficiently dispatching ------------------------- #
@@ -109,16 +110,16 @@ _importing_thrid = threading.get_ident()
 _backend_lock = threading.Lock()
 
 
-def _default_infer_from_sig_threadaware(fn, *args, **kwargs):
+def _default_infer_from_sig_threadaware(fn, args, kwargs):
     # check for a thread aware inferrer, default to the global inferrer
     thrid = threading.get_ident()
     return _inferrers_threadaware.get(thrid, _inferrer_global)(
-        fn, *args, **kwargs
+        fn, args, kwargs
     )
 
 
-def _always_the_same(*args, x, **kwargs):
-    return x
+def _always_the_same(fn, args, kwargs, backend):
+    return backend
 
 
 def get_backend(get_globally="auto"):
@@ -181,10 +182,10 @@ def set_backend(like, set_globally="auto"):
         inferrer = _default_infer_from_sig
     elif isinstance(like, str):
         backend = like
-        inferrer = functools.partial(_always_the_same, x=backend)
+        inferrer = functools.partial(_always_the_same, backend=backend)
     else:
         backend = infer_backend(like)
-        inferrer = functools.partial(_always_the_same, x=backend)
+        inferrer = functools.partial(_always_the_same, backend=backend)
 
     if set_globally == "auto":
         set_globally = threading.get_ident() == _importing_thrid
@@ -334,6 +335,84 @@ def infer_backend_multi(*arrays):
     )
 
 
+# the set of functions that create new arrays, with `dtype` and possibly
+# `device` kwargs, that should be inferred from the like argument
+_CREATION_ROUTINES = {
+    "arange",
+    "empty",
+    "eye",
+    "full",
+    "geomspace",
+    "identity",
+    "linspace",
+    "logspace",
+    "ones",
+    "zeros",
+}
+
+# cache for whether backends have a device attribute
+_CREATION_INJECT = {}
+
+
+def register_creation_routine(
+    backend, fn, inject_dtype=True, inject_device=False
+):
+    """Register a function that creates a new array, with `dtype` and possibly
+    `device` kwargs, that should be inferred from the like argument. This is
+    not necessary for array creation routines that don't accept either.
+
+    Parameters
+    ----------
+    backend : str
+        The backend to register the function for.
+    fn : str
+        The name of the function to register.
+    inject_dtype : bool, optional
+        Whether to inject a `dtype` argument based on the `like` argument.
+    inject_device : bool, optional
+        Whether to inject a `device` argument based on the `like` argument.
+    """
+    _CREATION_INJECT[backend, fn] = (inject_dtype, inject_device)
+
+
+def _maybe_inject_dtype_device(backend, fn, args, kwargs, like):
+    try:
+        inject_dtype, inject_device = _CREATION_INJECT[backend, fn]
+    except KeyError:
+        # default to just dtype (e.g. for numpy)
+        inject_dtype = True
+        inject_device = False
+        _CREATION_INJECT[backend, fn] = (inject_dtype, inject_device)
+
+    if inject_dtype:
+        kwargs.setdefault("dtype", like.dtype)
+    if inject_device:
+        kwargs.setdefault("device", like.device)
+
+
+def _choose_backend(fn, args, kwargs, like=None):
+    """Private function to choose a backend based on function name and
+    signature, which passes args and kwargs by reference for performance and
+    also to allow injection of dtype and device arguments for array creation
+    routines.
+    """
+    if like is None:
+        # infer from function call (or global backend)
+        return _infer_auto(fn, args, kwargs)
+    elif isinstance(like, str):
+        # explicit backend
+        return like
+    else:
+        # explicit example array
+        backend = infer_backend(like)
+
+        # check if we should set some extra defaults based on the example array
+        if fn in _CREATION_ROUTINES:
+            _maybe_inject_dtype_device(backend, fn, args, kwargs, like)
+
+        return backend
+
+
 def choose_backend(fn, *args, like=None, **kwargs):
     """Choose a backend based on function name, arguments, and the ``like``
     keyword argument. The default, if ``like`` is not specified, is to infer
@@ -342,12 +421,7 @@ def choose_backend(fn, *args, like=None, **kwargs):
     backend is chosen based on the ``like`` argument - which can be an explicit
     backend name or an arbitrary object.
     """
-    if like is None:
-        return _infer_auto(fn, *args, **kwargs)
-    elif isinstance(like, str):
-        return like
-    else:
-        return infer_backend(like)
+    return _choose_backend(fn, args, kwargs, like=like)
 
 
 # ------------------- importing and caching the function -------------------- #
@@ -844,7 +918,7 @@ class Composed:
         return fn
 
     def __call__(self, *args, like=None, **kwargs):
-        backend = choose_backend(self._name, *args, like=like, **kwargs)
+        backend = _choose_backend(self._name, args, kwargs, like=like)
         # `get_lib_fn` will call `make_function` if the function doesn't exist
         fn = get_lib_fn(backend, self._name)
         return fn(*args, **kwargs)
@@ -1273,16 +1347,44 @@ def allclose(x, y, rtol=1e-05, atol=1e-08):
 # ----------------------------- Custom dispatchers -------------------------- #
 
 
-def register_dispatch(fun, dispatcher):
-    """Register a new dispatcher.
+def wrap_args_kwargs_from_raw(fn):
+    """Take a function with signature ``(*args, **kwargs)`` and wrap it to
+    accept a single tuple of args and a dict of kwargs.
+    """
+
+    @functools.wraps(fn)
+    def wrapped(args, kwargs):
+        return fn(*args, **kwargs)
+
+    return wrapped
+
+
+def register_dispatch(fun, dispatcher, raw_signature=True):
+    """Register a new dispatcher, a function that takes the arguments and
+    keyword arguments of a function and returns the backend to use, when the
+    backend is not explicitly given.
 
     This is useful in case the backend to be used by a function cannot be
     inferred from the first argument.
+
+    Parameters
+    ----------
+    fun : str
+        The name of the function to register the dispatcher for.
+    dispatcher : callable
+        The dispatcher function to use. This should take the arguments and
+        keyword arguments of the function and return the backend to use.
+    raw_signature : bool, optional
+        The ``dispatcher`` has signature ``(*args, **kwargs)`` if ``True``,
+        otherwise it has signature ``(args, kwargs)``.
     """
+    if raw_signature:
+        dispatcher = wrap_args_kwargs_from_raw(dispatcher)
+
     _DISPATCHERS[fun] = dispatcher
 
 
-def default_dispatcher(*args, **kwargs):
+def default_dispatcher(args, kwargs):
     """Try to infer backend from first argument passed to function."""
     return infer_backend(args[0])
 
@@ -1292,7 +1394,7 @@ def default_dispatcher(*args, **kwargs):
 _DISPATCHERS = defaultdict(lambda: default_dispatcher)
 
 
-def join_array_dispatcher(*args, **kwargs):
+def join_array_dispatcher(args, kwargs):
     """Dispatcher for functions where first argument is a sequence."""
     try:
         return infer_backend(args[0][0])
@@ -1303,17 +1405,17 @@ def join_array_dispatcher(*args, **kwargs):
 
 
 # List of functions listed in numpy API as array joining operations
-register_dispatch("concatenate", join_array_dispatcher)
-register_dispatch("stack", join_array_dispatcher)
-register_dispatch("block", join_array_dispatcher)
-register_dispatch("vstack", join_array_dispatcher)
-register_dispatch("hstack", join_array_dispatcher)
-register_dispatch("dstack", join_array_dispatcher)
-register_dispatch("column_stack", join_array_dispatcher)
-register_dispatch("row_stack", join_array_dispatcher)
+register_dispatch("concatenate", join_array_dispatcher, raw_signature=False)
+register_dispatch("stack", join_array_dispatcher, raw_signature=False)
+register_dispatch("block", join_array_dispatcher, raw_signature=False)
+register_dispatch("vstack", join_array_dispatcher, raw_signature=False)
+register_dispatch("hstack", join_array_dispatcher, raw_signature=False)
+register_dispatch("dstack", join_array_dispatcher, raw_signature=False)
+register_dispatch("column_stack", join_array_dispatcher, raw_signature=False)
+register_dispatch("row_stack", join_array_dispatcher, raw_signature=False)
 
 
-def einsum_dispatcher(*args, **_):
+def einsum_dispatcher(args, kwargs):
     """Dispatcher for handling einsum.
 
     einsum can be called with a str equation as the first argument, or with
@@ -1323,23 +1425,23 @@ def einsum_dispatcher(*args, **_):
     return infer_backend_multi(*args)
 
 
-register_dispatch("einsum", einsum_dispatcher)
+register_dispatch("einsum", einsum_dispatcher, raw_signature=False)
 
 
-def binary_dispatcher(*args, **_):
+def binary_dispatcher(args, kwargs):
     """There are cases when we want to take into account both backends of two
     arguments, e.g. a lazy variable and a constant array.
     """
     return infer_backend_multi(*args[:2])
 
 
-register_dispatch("tensordot", binary_dispatcher)
-register_dispatch("matmul", binary_dispatcher)
-register_dispatch("multiply", binary_dispatcher)
-register_dispatch("divide", binary_dispatcher)
-register_dispatch("true_divide", binary_dispatcher)
-register_dispatch("add", binary_dispatcher)
-register_dispatch("subtract", binary_dispatcher)
+register_dispatch("tensordot", binary_dispatcher, raw_signature=False)
+register_dispatch("matmul", binary_dispatcher, raw_signature=False)
+register_dispatch("multiply", binary_dispatcher, raw_signature=False)
+register_dispatch("divide", binary_dispatcher, raw_signature=False)
+register_dispatch("true_divide", binary_dispatcher, raw_signature=False)
+register_dispatch("add", binary_dispatcher, raw_signature=False)
+register_dispatch("subtract", binary_dispatcher, raw_signature=False)
 
 # TODO: register other binary functions?
 
@@ -1437,7 +1539,6 @@ _FUNCS["cupy", "to_numpy"] = cupy_to_numpy
 _FUNCS["cupy", "complex"] = complex_add_re_im
 _CUSTOM_WRAPPERS["cupy", "linalg.svd"] = svd_not_full_matrices_wrapper
 
-
 # ----------------------------------- jax ----------------------------------- #
 
 
@@ -1451,9 +1552,7 @@ def jax_random_seed(seed=None):
     if seed is None:
         from random import SystemRandom
 
-        seed = SystemRandom().randint(
-            -(2**63), 2**63 - 1
-        )  # inclusive high
+        seed = SystemRandom().randint(-(2**63), 2**63 - 1)  # inclusive high
     _JAX_RANDOM_KEY = PRNGKey(seed)
 
 
@@ -1546,6 +1645,7 @@ def dask_eye_wrapper(fn):
 _FUNCS["dask", "to_numpy"] = dask_to_numpy
 _FUNCS["dask", "complex"] = complex_add_re_im
 _FUNC_ALIASES["dask", "abs"] = "absolute"
+_FUNC_ALIASES["dask", "identity"] = "eye"
 _MODULE_ALIASES["dask"] = "dask.array"
 _CUSTOM_WRAPPERS["dask", "linalg.svd"] = svd_manual_full_matrices_kwarg
 _CUSTOM_WRAPPERS["dask", "linalg.cholesky"] = cholesky_lower
@@ -1681,6 +1781,8 @@ _FUNCS["sparse", "complex"] = complex_add_re_im
 _FUNCS["sparse", "count_nonzero"] = sparse_count_nonzero
 _FUNCS["sparse", "random.uniform"] = sparse_random_uniform
 _FUNCS["sparse", "random.normal"] = sparse_random_normal
+
+_FUNC_ALIASES["sparse", "identity"] = "eye"
 
 # sparse uses numpys __array_func__ interface
 for f in (
@@ -2007,6 +2109,7 @@ _FUNC_ALIASES["torch", "random.normal"] = "randn"
 _FUNC_ALIASES["torch", "random.uniform"] = "rand"
 _FUNC_ALIASES["torch", "split"] = "tensor_split"
 _FUNC_ALIASES["torch", "take"] = "index_select"
+_FUNC_ALIASES["torch", "identity"] = "eye"
 
 _SUBMODULE_ALIASES["torch", "linalg.expm"] = "torch"
 _SUBMODULE_ALIASES["torch", "random.normal"] = "torch"
@@ -2058,6 +2161,8 @@ _CUSTOM_WRAPPERS["torch[alt]", "linalg.svd"] = svd_UsV_to_UsVH_wrapper
 _CUSTOM_WRAPPERS["torch[alt]", "linalg.qr"] = qr_allow_fat
 _CUSTOM_WRAPPERS["torch[alt]", "linalg.solve"] = torch_linalg_solve_wrap
 
+for f in _CREATION_ROUTINES:
+    register_creation_routine("torch", f, inject_device=True)
 
 # ---------------------------------- mxnet ---------------------------------- #
 

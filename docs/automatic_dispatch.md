@@ -43,7 +43,9 @@ do('random.normal', size=(2, 3, 4), like=x)
 ```
 
 Here the backend is inferred from another array and can thus be implicitly
-propagated, even when functions take no array arguments.
+propagated, even when functions take no array arguments. Some creation routines
+such as ``"eye"`` and ``"zeros"`` will also set the default ``dtype`` and / or
+device to match ``like`` in this case.
 
 ***3. Explicit backend:***
 
