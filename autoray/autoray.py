@@ -338,16 +338,17 @@ def infer_backend_multi(*arrays):
 # the set of functions that create new arrays, with `dtype` and possibly
 # `device` kwargs, that should be inferred from the like argument
 _CREATION_ROUTINES = {
-    "arange",
     "empty",
     "eye",
     "full",
-    "geomspace",
     "identity",
-    "linspace",
-    "logspace",
     "ones",
     "zeros",
+    # TODO: should these be included?
+    # "arange",
+    # "geomspace",
+    # "linspace",
+    # "logspace",
 }
 
 # cache for whether backends have a device attribute
