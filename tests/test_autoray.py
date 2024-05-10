@@ -158,6 +158,19 @@ def modified_gram_schmidt_np_mimic(X):
     return np.stack(Q, axis=0)
 
 
+def test_numpy_mimic_dunder_methods():
+    from abc import ABC
+    from autoray import numpy as np
+
+    class Base(ABC):
+        pass
+
+    assert isinstance(np, object)
+    assert not isinstance(np, Base)
+    print(np)
+    dir(np)
+
+
 @pytest.mark.parametrize("backend", BACKENDS)
 def test_mgs_np_mimic(backend):
     if backend == "sparse":

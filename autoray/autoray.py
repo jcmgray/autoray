@@ -1448,7 +1448,25 @@ register_dispatch("subtract", binary_dispatcher, raw_signature=False)
 
 # --------------- object to act as drop-in replace for numpy ---------------- #
 
-_partial_functions = {}
+
+def _get_mimic_function_or_attribute(self, fn):
+    # respect all 'dunder' special methods and attributes
+    if (fn[:2] == "__") and (fn[-2:] == "__"):
+        return object.__getattribute__(self, fn)
+
+    # look out for certain submodules which are not functions
+    if fn == "linalg":
+        return NumpyMimic("linalg")
+
+    if fn == "random":
+        return NumpyMimic("random")
+
+    # if this is the e.g. linalg mimic, preprend 'linalg.'
+    submod = object.__getattribute__(self, "submodule")
+    if submod is not None:
+        fn = ".".join((submod, fn))
+
+    return functools.partial(do, fn)
 
 
 class NumpyMimic:
@@ -1457,23 +1475,13 @@ class NumpyMimic:
     def __init__(self, submodule=None):
         self.submodule = submodule
 
-    def __getattribute__(self, fn):
-        # look out for certain submodules which are not functions
-        if fn == "linalg":
-            return numpy_linalg
-        if fn == "random":
-            return numpy_random
-
-        # if this is the e.g. linalg mimic, preprend 'linalg.'
-        submod = object.__getattribute__(self, "submodule")
-        if submod is not None:
-            fn = ".".join((submod, fn))
-
-        # cache the correct partial function
+    def __getattribute__(self, attr):
+        # cache the correct partial function (or special method/attribute)
+        d = object.__getattribute__(self, "__dict__")
         try:
-            pfn = _partial_functions[fn]
+            pfn = d[attr]
         except KeyError:
-            pfn = _partial_functions[fn] = functools.partial(do, fn)
+            pfn = d[attr] = _get_mimic_function_or_attribute(self, attr)
 
         return pfn
 
@@ -1483,8 +1491,6 @@ class NumpyMimic:
 
 
 numpy = NumpyMimic()
-numpy_linalg = NumpyMimic("linalg")
-numpy_random = NumpyMimic("random")
 
 
 # --------------------------------------------------------------------------- #
