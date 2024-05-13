@@ -4,6 +4,7 @@ import pytest
 
 import autoray as ar
 from autoray import shape
+import numpy as np
 
 
 # find backends to tests
@@ -783,7 +784,7 @@ def test_shape_ndim_builtins():
 @pytest.mark.parametrize("backend", BACKENDS)
 def test_scipy_dispatching(backend):
     if backend not in ["numpy", "cupy", "jax"]:
-        pytest.xfail("backend doens't suport scipy.")
+        pytest.xfail("backend doesn't suport scipy.")
     x = gen_rand((3, 3), backend=backend)
     ar.do("scipy.linalg.expm", x)
 
@@ -867,3 +868,27 @@ class TestCreationRoutines:
     #     if backend not in {"dask"}:
     #         y = ar.do("logspace", 10, 20, 11, like=x)
     #         check_array_dtypes(x, y)
+
+
+creation_funcs_with_args = [
+    ("empty", ((2, 3),)),
+    ("eye", (4,)),
+    ("full", ((2, 3), 7)),
+    ("identity", (4,)),
+    ("ones", ((2, 3),)),
+    ("zeros", ((2, 3),)),
+]
+
+creation_builtins = [
+    (float, [np.float64]),
+    (int, [np.int32, np.int64]),  # np.int32 on Windows and np.int64 else
+    (complex, [np.complex128]),
+]
+
+
+@pytest.mark.parametrize("fn, args", creation_funcs_with_args)
+@pytest.mark.parametrize("dtype, expected", creation_builtins)
+def test_creation_with_builtins(fn, args, dtype, expected):
+    x = dtype(4)
+    y = ar.do(fn, *args, like=x)
+    assert y.dtype in expected
