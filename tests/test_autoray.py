@@ -869,10 +869,25 @@ class TestCreationRoutines:
     #         y = ar.do("logspace", 10, 20, 11, like=x)
     #         check_array_dtypes(x, y)
 
-@pytest.mark.parametrize("fn, args", [("empty", ((2, 3),)), ("eye", (4,)), ("full", ((2, 3), 7)), ("identity", (4,)), ("ones", ((2, 3),)), ("zeros", ((2, 3),))])
-@pytest.mark.parametrize("dtype, expected", [(float, np.float64), (int, np.int64), (complex, np.complex128)])
+
+creation_funcs_with_args = [
+    ("empty", ((2, 3),)),
+    ("eye", (4,)),
+    ("full", ((2, 3), 7)),
+    ("identity", (4,)),
+    ("ones", ((2, 3),)),
+    ("zeros", ((2, 3),)),
+]
+
+creation_builtins = [
+    (float, np.float64),
+    (int, np.int64),
+    (complex, np.complex128),
+]
+
+@pytest.mark.parametrize("fn, args", creation_funcs_with_args)
+@pytest.mark.parametrize("dtype, expected", creation_builtins)
 def test_creation_with_builtins(fn, args, dtype, expected):
     x = dtype(4)
     y = ar.do(fn, *args, like=x)
     assert y.dtype == expected
-
