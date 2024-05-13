@@ -800,7 +800,6 @@ def check_array_dtypes(x, y):
     "dtype", ["float32", "float64", "complex64", "complex128"]
 )
 class TestCreationRoutines:
-    
     def test_empty_passes_dtype_device(self, backend, dtype):
         if backend in ("tensorflow",):
             pytest.xfail(f"{backend} doesn't support empty yet.")
@@ -834,7 +833,6 @@ class TestCreationRoutines:
         x = gen_rand((1,), backend, dtype)
         y = ar.do("zeros", (2, 3), like=x)
         check_array_dtypes(x, y)
-
 
     # def test_arange_passes_dtype_device(self, backend, dtype):
     #     if backend in ("sparse",):
