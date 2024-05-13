@@ -881,7 +881,7 @@ creation_funcs_with_args = [
 
 creation_builtins = [
     (float, [np.float64]),
-    (int, [np.int32, np.int64]), # np.int32 on Windows and np.int64 else
+    (int, [np.int32, np.int64]),  # np.int32 on Windows and np.int64 else
     (complex, [np.complex128]),
 ]
 
