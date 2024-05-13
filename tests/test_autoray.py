@@ -4,6 +4,7 @@ import pytest
 
 import autoray as ar
 from autoray import shape
+import numpy as np
 
 
 # find backends to tests
@@ -783,7 +784,7 @@ def test_shape_ndim_builtins():
 @pytest.mark.parametrize("backend", BACKENDS)
 def test_scipy_dispatching(backend):
     if backend not in ["numpy", "cupy", "jax"]:
-        pytest.xfail("backend doens't suport scipy.")
+        pytest.xfail("backend doesn't suport scipy.")
     x = gen_rand((3, 3), backend=backend)
     ar.do("scipy.linalg.expm", x)
 
@@ -799,6 +800,7 @@ def check_array_dtypes(x, y):
     "dtype", ["float32", "float64", "complex64", "complex128"]
 )
 class TestCreationRoutines:
+    
     def test_empty_passes_dtype_device(self, backend, dtype):
         if backend in ("tensorflow",):
             pytest.xfail(f"{backend} doesn't support empty yet.")
@@ -832,6 +834,7 @@ class TestCreationRoutines:
         x = gen_rand((1,), backend, dtype)
         y = ar.do("zeros", (2, 3), like=x)
         check_array_dtypes(x, y)
+
 
     # def test_arange_passes_dtype_device(self, backend, dtype):
     #     if backend in ("sparse",):
@@ -867,3 +870,11 @@ class TestCreationRoutines:
     #     if backend not in {"dask"}:
     #         y = ar.do("logspace", 10, 20, 11, like=x)
     #         check_array_dtypes(x, y)
+
+@pytest.mark.parametrize("fn, args", [("empty", ((2, 3),)), ("eye", (4,)), ("full", ((2, 3), 7)), ("identity", (4,)), ("ones", ((2, 3),)), ("zeros", ((2, 3),))])
+@pytest.mark.parametrize("dtype, expected", [(float, np.float64), (int, np.int64), (complex, np.complex128)])
+def test_creation_with_builtins(fn, args, dtype, expected):
+    x = dtype(4)
+    y = ar.do(fn, *args, like=x)
+    assert y.dtype == expected
+
