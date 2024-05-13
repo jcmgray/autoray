@@ -386,7 +386,7 @@ def _maybe_inject_dtype_device(backend, fn, args, kwargs, like):
         _CREATION_INJECT[backend, fn] = (inject_dtype, inject_device)
 
     if inject_dtype:
-        kwargs.setdefault("dtype", like.dtype)
+        kwargs.setdefault("dtype", getattr(like, "dtype", type(like)))
     if inject_device:
         kwargs.setdefault("device", like.device)
 
