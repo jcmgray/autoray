@@ -880,9 +880,9 @@ creation_funcs_with_args = [
 ]
 
 creation_builtins = [
-    (float, np.float64),
-    (int, np.int64),
-    (complex, np.complex128),
+    (float, [np.float64]),
+    (int, [np.int32, np.int64]), # np.int32 on Windows and np.int64 else
+    (complex, [np.complex128]),
 ]
 
 
@@ -891,4 +891,4 @@ creation_builtins = [
 def test_creation_with_builtins(fn, args, dtype, expected):
     x = dtype(4)
     y = ar.do(fn, *args, like=x)
-    assert y.dtype == expected
+    assert y.dtype in expected
