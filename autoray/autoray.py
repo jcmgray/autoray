@@ -1871,12 +1871,12 @@ def tensorflow_split_wrap(fn):
     return numpy_like
 
 
-def tensorflow_diag(x):
+def tensorflow_diag(x, **kwargs):
     nd = ndim(x)
     if nd == 2:
-        return do("linalg.diag_part", x)
+        return do("linalg.diag_part", x, **kwargs)
     elif nd == 1:
-        return do("linalg.diag", x)
+        return do("linalg.diag", x, **kwargs)
     else:
         raise ValueError("Input must be 1- or 2-d.")
 
