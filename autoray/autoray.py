@@ -1829,7 +1829,7 @@ def tensorflow_to_numpy(x):
 def tensorflow_indices(dimensions):
     _meshgrid = get_lib_fn("tensorflow", "meshgrid")
     _arange = get_lib_fn("tensorflow", "arange")
-    return _meshgrid(*map(_arange, dimensions))
+    return _meshgrid(*map(_arange, dimensions), indexing="ij")
 
 
 _MODULE_ALIASES["tensorflow.linalg"] = "tensorflow.linalg"

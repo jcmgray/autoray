@@ -964,3 +964,13 @@ def test_creation_with_builtins(fn, args, dtype, expected):
     x = dtype(4)
     y = ar.do(fn, *args, like=x)
     assert y.dtype in expected
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_indices(backend):
+    from numpy.testing import assert_array_equal
+
+    x = ar.do("indices", (3, 4), like=backend)
+    xn = ar.to_numpy(x)
+    xe = ar.do("indices", (3, 4), like="numpy")
+    assert_array_equal(xn, xe)
