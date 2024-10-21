@@ -66,6 +66,76 @@ def gen_rand(shape, backend, dtype="float64"):
     return x
 
 
+@pytest.mark.parametrize(
+    "f,args",
+    (
+        ("all", ()),
+        ("clip", (0.2, 0.7)),
+        ("conj", ()),
+        ("cos", ()),
+        ("cosh", ()),
+        ("count_nonzero", ()),
+        ("cumsum", (0,)),
+        ("exp", ()),
+        ("imag", ()),
+        ("log", ()),
+        ("log10", ()),
+        ("max", (-1,)),
+        ("max", ()),
+        ("mean", ()),
+        ("mean", (0,)),
+        ("min", ()),
+        ("power", (2,)),
+        ("prod", ()),
+        ("ravel", ()),
+        ("real", ()),
+        ("sin", ()),
+        ("sinh", ()),
+        ("sqrt", ()),
+        ("sum", ()),
+        ("sum", (1,)),
+        ("tan", ()),
+        ("tanh", ()),
+        ("trace", ()),
+        ("tril", ()),
+        ("triu", ()),
+    ),
+)
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_unary_functions(f, args, backend):
+    xn = ar.do("random.uniform", size=(2, 3), like="numpy")
+    yn = ar.do(f, xn, *args)
+    x = ar.do("asarray", xn, like=backend)
+    y = ar.do(f, x, *args)
+    yt = ar.do("to_numpy", y)
+    assert ar.do("allclose", yt, yn)
+
+
+@pytest.mark.parametrize(
+    "f,args",
+    (
+        ("add", ()),
+        ("allclose", ()),
+        ("divide", ()),
+        ("matmul", ()),
+        ("multiply", ()),
+        ("subtract", ()),
+    ),
+)
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_binary_functions(f, args, backend):
+    xan = ar.do("random.uniform", size=(3, 3), like="numpy")
+    xbn = ar.do("random.uniform", size=(3, 3), like="numpy")
+    yn = ar.do(f, xan, xbn, *args)
+
+    xa = ar.do("asarray", xan, like=backend)
+    xb = ar.do("asarray", xbn, like=backend)
+    y = ar.do(f, xa, xb, *args)
+    yt = ar.do("to_numpy", y)
+
+    assert ar.do("allclose", yt, yn)
+
+
 @pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize("fn", ["sqrt", "exp", "sum"])
 def test_basic(backend, fn):

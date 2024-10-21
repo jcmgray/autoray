@@ -1826,108 +1826,22 @@ def tensorflow_to_numpy(x):
     return x.numpy()
 
 
-def tensorflow_pad_wrap(tf_pad):
-    def numpy_like(array, pad_width, mode="constant", constant_values=0):
-        if mode != "constant":
-            raise NotImplementedError
-
-        try:
-            if len(pad_width) == 1:
-                pad_width = pad_width * ndim(array)
-        except TypeError:
-            pad_width = ((pad_width, pad_width),) * ndim(array)
-
-        return tf_pad(
-            array, pad_width, mode="CONSTANT", constant_values=constant_values
-        )
-
-    return numpy_like
-
-
-def tensorflow_where_wrap(fn):
-    @functools.wraps(fn)
-    def numpy_like(condition, x=None, y=None, **kwargs):
-        return tuple(transpose(fn(condition, x, y, **kwargs)))
-
-    return numpy_like
-
-
-def tensorflow_split_wrap(fn):
-    @functools.wraps(fn)
-    def numpy_like(ary, indices_or_sections, axis=0, **kwargs):
-        if isinstance(indices_or_sections, int):
-            return fn(ary, indices_or_sections, axis=axis, **kwargs)
-        else:
-            diff = do(
-                "diff",
-                indices_or_sections,
-                prepend=0,
-                append=shape(ary)[axis],
-                like="numpy",
-            )
-            diff = list(diff)
-            return fn(ary, diff, axis=axis)
-
-    return numpy_like
-
-
-def tensorflow_diag(x, **kwargs):
-    nd = ndim(x)
-    if nd == 2:
-        return do("linalg.diag_part", x, **kwargs)
-    elif nd == 1:
-        return do("linalg.diag", x, **kwargs)
-    else:
-        raise ValueError("Input must be 1- or 2-d.")
-
-
 def tensorflow_indices(dimensions):
     _meshgrid = get_lib_fn("tensorflow", "meshgrid")
     _arange = get_lib_fn("tensorflow", "arange")
     return _meshgrid(*map(_arange, dimensions))
 
 
+_MODULE_ALIASES["tensorflow.linalg"] = "tensorflow.linalg"
+_MODULE_ALIASES["tensorflow"] = "tensorflow.experimental.numpy"
+
 _FUNCS["tensorflow", "to_numpy"] = tensorflow_to_numpy
-_FUNCS["tensorflow", "diag"] = tensorflow_diag
 _FUNCS["tensorflow", "indices"] = tensorflow_indices
 
-_SUBMODULE_ALIASES["tensorflow", "log"] = "tensorflow.math"
-_SUBMODULE_ALIASES["tensorflow", "conj"] = "tensorflow.math"
-_SUBMODULE_ALIASES["tensorflow", "real"] = "tensorflow.math"
-_SUBMODULE_ALIASES["tensorflow", "imag"] = "tensorflow.math"
-_SUBMODULE_ALIASES["tensorflow", "power"] = "tensorflow.math"
-_SUBMODULE_ALIASES["tensorflow", "count_nonzero"] = "tensorflow.math"
-_SUBMODULE_ALIASES["tensorflow", "trace"] = "tensorflow.linalg"
-_SUBMODULE_ALIASES["tensorflow", "tril"] = "tensorflow.linalg"
-_SUBMODULE_ALIASES["tensorflow", "triu"] = "tensorflow.linalg"
-_SUBMODULE_ALIASES["tensorflow", "allclose"] = "tensorflow.experimental.numpy"
-
-_FUNC_ALIASES["tensorflow", "sum"] = "reduce_sum"
-_FUNC_ALIASES["tensorflow", "min"] = "reduce_min"
-_FUNC_ALIASES["tensorflow", "max"] = "reduce_max"
-_FUNC_ALIASES["tensorflow", "mean"] = "reduce_mean"
-_FUNC_ALIASES["tensorflow", "prod"] = "reduce_prod"
-_FUNC_ALIASES["tensorflow", "concatenate"] = "concat"
-_FUNC_ALIASES["tensorflow", "clip"] = "clip_by_value"
-_FUNC_ALIASES["tensorflow", "arange"] = "range"
-_FUNC_ALIASES["tensorflow", "tril"] = "band_part"
-_FUNC_ALIASES["tensorflow", "triu"] = "band_part"
-_FUNC_ALIASES["tensorflow", "array"] = "convert_to_tensor"
-_FUNC_ALIASES["tensorflow", "asarray"] = "convert_to_tensor"
 _FUNC_ALIASES["tensorflow", "astype"] = "cast"
-_FUNC_ALIASES["tensorflow", "power"] = "pow"
-_FUNC_ALIASES["tensorflow", "take"] = "gather"
-_FUNC_ALIASES["tensorflow", "identity"] = "eye"
 
 _CUSTOM_WRAPPERS["tensorflow", "linalg.svd"] = svd_sUV_to_UsVH_wrapper
-_CUSTOM_WRAPPERS["tensorflow", "linalg.qr"] = qr_allow_fat
 _CUSTOM_WRAPPERS["tensorflow", "linalg.solve"] = binary_allow_1d_rhs_wrap
-_CUSTOM_WRAPPERS["tensorflow", "matmul"] = binary_allow_1d_rhs_wrap
-_CUSTOM_WRAPPERS["tensorflow", "tril"] = tril_to_band_part
-_CUSTOM_WRAPPERS["tensorflow", "triu"] = triu_to_band_part
-_CUSTOM_WRAPPERS["tensorflow", "pad"] = tensorflow_pad_wrap
-_CUSTOM_WRAPPERS["tensorflow", "where"] = tensorflow_where_wrap
-_CUSTOM_WRAPPERS["tensorflow", "split"] = tensorflow_split_wrap
 _CUSTOM_WRAPPERS["tensorflow", "random.uniform"] = make_translator(
     [
         ("low", ("minval", 0.0)),
@@ -1940,13 +1854,6 @@ _CUSTOM_WRAPPERS["tensorflow", "random.normal"] = make_translator(
         ("loc", ("mean", 0.0)),
         ("scale", ("stddev", 1.0)),
         ("size", ("shape", ())),
-    ]
-)
-_CUSTOM_WRAPPERS["tensorflow", "clip"] = make_translator(
-    [
-        ("a", ("t", 0.0)),
-        ("a_min", ("clip_value_min",)),
-        ("a_max", ("clip_value_max",)),
     ]
 )
 

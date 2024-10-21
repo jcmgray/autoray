@@ -33,7 +33,7 @@ from .draw import (
 _EMPTY_DICT = {}
 get_depth = operator.attrgetter("_depth")
 get_data = operator.attrgetter("_data")
-
+get_dtype = operator.attrgetter("dtype")
 
 # ------------------------ traversal and computation ------------------------ #
 
@@ -886,6 +886,10 @@ class LazyArray:
 
     def astype(self, dtype_name):
         return lazy_astype(self, dtype_name)
+
+    @property
+    def dtype(self):
+        return self.to(get_dtype, shape=())
 
     @property
     def real(self):
@@ -1781,11 +1785,79 @@ min_ = make_reduction_func("min")
 max_ = make_reduction_func("max")
 
 # # XXX: still missing
-# allclose, complex, diag
-# dot, vdot, kron, inner, outer
+# allclose
+# dot, vdot, inner, outer
 # pad, eye
 # squeeze, expand_dims
 # to_numpy
+
+
+# ----------------------------- array creation ------------------------------ #
+
+
+def empty(shape, *, backend="numpy", **kwargs):
+    """Lazy creation of an empty array with a given shape.
+    """
+    return LazyArray(
+        backend=backend,
+        fn=get_lib_fn(backend, "empty"),
+        args=(shape,),
+        kwargs=kwargs,
+        shape=shape,
+        deps=(),
+    )
+
+
+def zeros(shape, *, backend="numpy", **kwargs):
+    """Lazy creation of an array filled with zeros with a given shape.
+    """
+    return LazyArray(
+        backend=backend,
+        fn=get_lib_fn(backend, "zeros"),
+        args=(shape,),
+        kwargs=kwargs,
+        shape=shape,
+        deps=(),
+    )
+
+
+def ones(shape, *, backend="numpy", **kwargs):
+    """Lazy creation of an array filled with ones with a given shape.
+    """
+    return LazyArray(
+        backend=backend,
+        fn=get_lib_fn(backend, "ones"),
+        args=(shape,),
+        kwargs=kwargs,
+        shape=shape,
+        deps=(),
+    )
+
+
+def eye(N, *, backend="numpy", **kwargs):
+    """Lazy creation of the identity matrix of size N.
+    """
+    return LazyArray(
+        backend=backend,
+        fn=get_lib_fn(backend, "eye"),
+        args=(N,),
+        kwargs=kwargs,
+        shape=(N, N),
+        deps=(),
+    )
+
+
+def identity(n, *, backend="numpy", **kwargs):
+    """Lazy creation of the identity matrix of size n.
+    """
+    return LazyArray(
+        backend=backend,
+        fn=get_lib_fn(backend, "identity"),
+        args=(n,),
+        kwargs=kwargs,
+        shape=(n, n),
+        deps=(),
+    )
 
 
 # ---------------------------- autoray specials ----------------------------- #
