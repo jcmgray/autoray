@@ -98,7 +98,11 @@ def gen_rand(shape, backend, dtype="float64"):
         ("tanh", (), ()),
         ("trace", (), ("sparse",)),
         ("tril", (), ()),
+        ("tril", (), (1,)),
+        ("tril", (), (-1,)),
         ("triu", (), ()),
+        ("triu", (), (1,)),
+        ("triu", (), (-1,)),
     ),
 )
 @pytest.mark.parametrize("backend", BACKENDS)
@@ -106,7 +110,7 @@ def test_unary_functions(f, args, xfail_backends, backend):
     if backend in xfail_backends:
         pytest.xfail(f"{backend} doesn't support {f}.")
 
-    xn = ar.do("random.uniform", size=(2, 3), like="numpy")
+    xn = ar.do("random.uniform", size=(4, 5), like="numpy")
     yn = ar.do(f, xn, *args)
     x = ar.do("asarray", xn, like=backend)
     y = ar.do(f, x, *args)
@@ -348,10 +352,6 @@ def test_tril(backend):
         # this won't work for sparse because density < 1
         assert (xln > 0.0).sum() == 13
 
-    if backend == "tensorflow":
-        with pytest.raises(ValueError):
-            ar.do("tril", x, -1)
-
 
 @pytest.mark.parametrize("backend", BACKENDS)
 def test_triu(backend):
@@ -371,10 +371,6 @@ def test_triu(backend):
     if backend != "sparse":
         # this won't work for sparse because density < 1
         assert (xln > 0.0).sum() == 13
-
-    if backend == "tensorflow":
-        with pytest.raises(ValueError):
-            ar.do("triu", x, 1)
 
 
 @pytest.mark.parametrize("backend", BACKENDS)

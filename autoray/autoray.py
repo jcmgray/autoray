@@ -1833,12 +1833,15 @@ def tensorflow_indices(dimensions):
 
 
 _MODULE_ALIASES["tensorflow.linalg"] = "tensorflow.linalg"
+_MODULE_ALIASES["tensorflow.random"] = "tensorflow.random"
 _MODULE_ALIASES["tensorflow"] = "tensorflow.experimental.numpy"
 
 _FUNCS["tensorflow", "to_numpy"] = tensorflow_to_numpy
 _FUNCS["tensorflow", "indices"] = tensorflow_indices
 
 _FUNC_ALIASES["tensorflow", "astype"] = "cast"
+_SUBMODULE_ALIASES["tensorflow", "astype"] = "tensorflow"
+_SUBMODULE_ALIASES["tensorflow", "complex"] = "tensorflow"
 
 _CUSTOM_WRAPPERS["tensorflow", "linalg.svd"] = svd_sUV_to_UsVH_wrapper
 _CUSTOM_WRAPPERS["tensorflow", "linalg.solve"] = binary_allow_1d_rhs_wrap
@@ -1856,6 +1859,29 @@ _CUSTOM_WRAPPERS["tensorflow", "random.normal"] = make_translator(
         ("size", ("shape", ())),
     ]
 )
+
+
+def tensorflow_pad_wrap(tf_pad):
+    def numpy_like(array, pad_width, mode="constant", constant_values=0):
+        if mode != "constant":
+            raise NotImplementedError
+
+        try:
+            if len(pad_width) == 1:
+                pad_width = pad_width * ndim(array)
+        except TypeError:
+            pad_width = ((pad_width, pad_width),) * ndim(array)
+
+        return tf_pad(
+            array, pad_width, mode="CONSTANT", constant_values=constant_values
+        )
+
+    return numpy_like
+
+
+_CUSTOM_WRAPPERS["tensorflow", "pad"] = tensorflow_pad_wrap
+_SUBMODULE_ALIASES["tensorflow", "pad"] = "tensorflow"
+
 
 register_creation_routine("tensorflow", "linspace", inject_dtype=False)
 
