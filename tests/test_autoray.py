@@ -67,42 +67,45 @@ def gen_rand(shape, backend, dtype="float64"):
 
 
 @pytest.mark.parametrize(
-    "f,args",
+    "f,args,xfail_backends",
     (
-        ("all", ()),
-        ("clip", (0.2, 0.7)),
-        ("conj", ()),
-        ("cos", ()),
-        ("cosh", ()),
-        ("count_nonzero", ()),
-        ("cumsum", (0,)),
-        ("exp", ()),
-        ("imag", ()),
-        ("log", ()),
-        ("log10", ()),
-        ("max", (-1,)),
-        ("max", ()),
-        ("mean", ()),
-        ("mean", (0,)),
-        ("min", ()),
-        ("power", (2,)),
-        ("prod", ()),
-        ("ravel", ()),
-        ("real", ()),
-        ("sin", ()),
-        ("sinh", ()),
-        ("sqrt", ()),
-        ("sum", ()),
-        ("sum", (1,)),
-        ("tan", ()),
-        ("tanh", ()),
-        ("trace", ()),
-        ("tril", ()),
-        ("triu", ()),
+        ("all", (), ()),
+        ("clip", (0.2, 0.7), ()),
+        ("conj", (), ()),
+        ("cos", (), ()),
+        ("cosh", (), ()),
+        ("count_nonzero", (), ()),
+        ("cumsum", (0,), ("sparse",)),
+        ("exp", (), ()),
+        ("imag", (), ()),
+        ("log", (), ()),
+        ("log10", (), ()),
+        ("max", (-1,), ("sparse",)),
+        ("max", (), ()),
+        ("mean", (), ()),
+        ("mean", (0,), ("sparse",)),
+        ("min", (), ()),
+        ("power", (2,), ("sparse",)),
+        ("prod", (), ()),
+        ("ravel", (), ("sparse",)),
+        ("real", (), ()),
+        ("sin", (), ()),
+        ("sinh", (), ()),
+        ("sqrt", (), ()),
+        ("sum", (), ()),
+        ("sum", (1,), ()),
+        ("tan", (), ()),
+        ("tanh", (), ()),
+        ("trace", (), ("sparse",)),
+        ("tril", (), ()),
+        ("triu", (), ()),
     ),
 )
 @pytest.mark.parametrize("backend", BACKENDS)
-def test_unary_functions(f, args, backend):
+def test_unary_functions(f, args, xfail_backends, backend):
+    if backend in xfail_backends:
+        pytest.xfail(f"{backend} doesn't support {f}.")
+
     xn = ar.do("random.uniform", size=(2, 3), like="numpy")
     yn = ar.do(f, xn, *args)
     x = ar.do("asarray", xn, like=backend)
@@ -112,18 +115,21 @@ def test_unary_functions(f, args, backend):
 
 
 @pytest.mark.parametrize(
-    "f,args",
+    "f,args,xfail_backends",
     (
-        ("add", ()),
-        ("allclose", ()),
-        ("divide", ()),
-        ("matmul", ()),
-        ("multiply", ()),
-        ("subtract", ()),
+        ("add", (), ()),
+        ("allclose", (), ("sparse",)),
+        ("divide", (), ()),
+        ("matmul", (), ()),
+        ("multiply", (), ()),
+        ("subtract", (), ()),
     ),
 )
 @pytest.mark.parametrize("backend", BACKENDS)
-def test_binary_functions(f, args, backend):
+def test_binary_functions(f, args, xfail_backends, backend):
+    if backend in xfail_backends:
+        pytest.xfail(f"{backend} doesn't support {f}.")
+
     xan = ar.do("random.uniform", size=(3, 3), like="numpy")
     xbn = ar.do("random.uniform", size=(3, 3), like="numpy")
     yn = ar.do(f, xan, xbn, *args)
