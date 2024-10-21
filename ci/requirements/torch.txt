@@ -1,0 +1,11 @@
+coverage
+matplotlib
+networkx
+numpy
+opt_einsum
+pytest
+pytest-cov
+scipy
+
+--index-url https://download.pytorch.org/whl/cpu
+torch

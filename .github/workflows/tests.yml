@@ -35,21 +35,27 @@ jobs:
           env: tensorflow
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Install micromamba
-      uses: mamba-org/setup-micromamba@v1
-      with:
-        environment-file: ci/requirements/py-${{ matrix.env }}.yml
-        environment-name: test-env
-        create-args: >-
-          python=${{ matrix.python-version }}
-        cache-environment: true
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.4.20"
 
-    - name: Test with pytest
-      run: pytest --cov=autoray tests/ --cov-report=xml tests
+      - name: Install python
+        run: uv python install ${{ matrix.python-version }}
 
-    - name: Report to codecov
-      uses: codecov/codecov-action@v4
-      with:
-        token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Setup uv project
+        run: uv sync
+
+      - name: Install dependencies
+        run: uv pip install -r ci/requirements/${{ matrix.env }}.txt
+
+      - name: Test with pytest
+        run: uv run pytest --cov=autoray tests/ --cov-report=xml tests
+
+      - name: Report to codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+

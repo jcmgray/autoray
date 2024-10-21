@@ -1,0 +1,11 @@
+coverage
+dask
+matplotlib
+networkx
+numba>=0.56
+numpy
+opt_einsum
+pytest
+pytest-cov
+scipy
+sparse

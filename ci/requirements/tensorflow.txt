@@ -1,0 +1,9 @@
+coverage
+matplotlib
+networkx
+numpy
+opt_einsum
+pytest
+pytest-cov
+scipy
+tensorflow
