@@ -1866,7 +1866,7 @@ register_creation_routine("tensorflow", "linspace", inject_dtype=False)
 @shape.register("torch")
 def torch_shape(x):
     # torch returns a Size object, we want tuple[int]
-    return tuple(x.shape)
+    return tuple(map(int, x.shape))
 
 
 @size.register("torch")
@@ -2003,7 +2003,7 @@ def torch_zeros_ones_wrap(fn):
     def numpy_like(shape, dtype=None, **kwargs):
         if dtype is not None:
             dtype = to_backend_dtype(dtype, like="torch")
-        return fn(shape, dtype=dtype)
+        return fn(shape, dtype=dtype, **kwargs)
 
     return numpy_like
 
@@ -2017,6 +2017,14 @@ def torch_eye_wrap(fn):
             return fn(N, m=M, dtype=dtype, **kwargs)
         else:
             return fn(N, dtype=dtype, **kwargs)
+
+    return numpy_like
+
+
+def torch_sort_wrap(fn):
+    @functools.wraps(fn)
+    def numpy_like(a, axis=-1):
+        return fn(a, dim=axis)[0]
 
     return numpy_like
 
@@ -2045,6 +2053,7 @@ _FUNC_ALIASES["torch", "concatenate"] = "cat"
 _FUNC_ALIASES["torch", "conjugate"] = "conj"
 _FUNC_ALIASES["torch", "expand_dims"] = "unsqueeze"
 _FUNC_ALIASES["torch", "linalg.expm"] = "matrix_exp"
+_FUNC_ALIASES["torch", "scipy.linalg.expm"] = "matrix_exp"
 _FUNC_ALIASES["torch", "max"] = "amax"
 _FUNC_ALIASES["torch", "min"] = "amin"
 _FUNC_ALIASES["torch", "power"] = "pow"
@@ -2055,6 +2064,7 @@ _FUNC_ALIASES["torch", "take"] = "index_select"
 _FUNC_ALIASES["torch", "identity"] = "eye"
 
 _SUBMODULE_ALIASES["torch", "linalg.expm"] = "torch"
+_SUBMODULE_ALIASES["torch", "scipy.linalg.expm"] = "torch"
 _SUBMODULE_ALIASES["torch", "random.normal"] = "torch"
 _SUBMODULE_ALIASES["torch", "random.uniform"] = "torch"
 
@@ -2087,6 +2097,7 @@ _CUSTOM_WRAPPERS["torch", "take"] = make_translator(
 _CUSTOM_WRAPPERS["torch", "expand_dims"] = make_translator(
     [("a", ("input",)), ("axis", ("dim",))]
 )
+_CUSTOM_WRAPPERS["torch", "sort"] = torch_sort_wrap
 
 # for older versions of torch, can provide some alternative implementations
 _MODULE_ALIASES["torch[alt]"] = "torch"
