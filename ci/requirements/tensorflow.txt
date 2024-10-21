@@ -1,7 +1,7 @@
 coverage
 matplotlib
 networkx
-numpy
+numpy<2
 opt_einsum
 pytest
 pytest-cov
