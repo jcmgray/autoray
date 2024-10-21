@@ -968,6 +968,9 @@ def test_creation_with_builtins(fn, args, dtype, expected):
 
 @pytest.mark.parametrize("backend", BACKENDS)
 def test_indices(backend):
+    if backend == "sparse":
+        pytest.xfail("Sparse doesn't support `indices` function yet.")
+
     from numpy.testing import assert_array_equal
 
     x = ar.do("indices", (3, 4), like=backend)
