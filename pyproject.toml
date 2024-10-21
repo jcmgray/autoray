@@ -2,7 +2,6 @@
 name = "autoray"
 description = "Abstract your array operations."
 readme = { file = "README.md", content-type = "text/markdown" }
-url = "http://github.com/jcmgray/autoray"
 dynamic = ["version"]
 authors = [{ name = "Johnnie Gray", email = "johnniemcgray@gmail.com" }]
 license = { text = "Apache" }
