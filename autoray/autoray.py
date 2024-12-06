@@ -1840,6 +1840,7 @@ _FUNCS["tensorflow", "to_numpy"] = tensorflow_to_numpy
 _FUNCS["tensorflow", "indices"] = tensorflow_indices
 
 _FUNC_ALIASES["tensorflow", "astype"] = "cast"
+_SUBMODULE_ALIASES["tensorflow", "cast"] = "tensorflow"
 _SUBMODULE_ALIASES["tensorflow", "astype"] = "tensorflow"
 _SUBMODULE_ALIASES["tensorflow", "complex"] = "tensorflow"
 
