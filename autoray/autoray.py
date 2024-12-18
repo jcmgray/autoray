@@ -2062,6 +2062,20 @@ def torch_indices(dimensions):
     return _meshgrid(*map(_arange, dimensions), indexing="ij")
 
 
+def torch_flip_wrap(torch_flip):
+    def numpy_like(x, axis=None):
+        if axis is None:
+            dims = tuple(range(x.ndimension()))
+        elif isinstance(axis, int):
+            dims = (axis,)
+        else:
+            # already tuple/list
+            dims = axis
+        return torch_flip(x, dims)
+
+    return numpy_like
+
+
 _FUNCS["torch", "pad"] = torch_pad
 _FUNCS["torch", "real"] = torch_real
 _FUNCS["torch", "imag"] = torch_imag
@@ -2125,6 +2139,7 @@ _CUSTOM_WRAPPERS["torch", "expand_dims"] = make_translator(
     [("a", ("input",)), ("axis", ("dim",))]
 )
 _CUSTOM_WRAPPERS["torch", "sort"] = torch_sort_wrap
+_CUSTOM_WRAPPERS["torch", "flip"] = torch_flip_wrap
 
 # for older versions of torch, can provide some alternative implementations
 _MODULE_ALIASES["torch[alt]"] = "torch"
