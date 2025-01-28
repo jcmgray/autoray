@@ -45,7 +45,7 @@ name followed by `*args` and `**kwargs`, and automatically looks up (and
 caches) the correct function to match the equivalent numpy call:
 
 ```python
-from autoray as ar
+import autoray as ar
 
 def noised_svd(x):
     # automatic dispatch based on supplied array
