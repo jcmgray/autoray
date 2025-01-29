@@ -2145,6 +2145,13 @@ _CUSTOM_WRAPPERS["torch", "expand_dims"] = make_translator(
 )
 _CUSTOM_WRAPPERS["torch", "sort"] = torch_sort_wrap
 _CUSTOM_WRAPPERS["torch", "flip"] = torch_flip_wrap
+_torch_reduce_translation = [
+    ("a", ("input",)), ("axis", ("dim", None)), ("keepdims", ("keepdim", False))
+]
+_CUSTOM_WRAPPERS["torch", "sum"] = make_translator(_torch_reduce_translation)
+_CUSTOM_WRAPPERS["torch", "max"] = make_translator(_torch_reduce_translation)
+_CUSTOM_WRAPPERS["torch", "min"] = make_translator(_torch_reduce_translation)
+_CUSTOM_WRAPPERS["torch", "prod"] = make_translator(_torch_reduce_translation)
 
 # for older versions of torch, can provide some alternative implementations
 _MODULE_ALIASES["torch[alt]"] = "torch"
