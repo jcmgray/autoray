@@ -1312,12 +1312,12 @@ def translate_wrapper(fn, translator):
         new_kwargs = {}
         translation = translator.copy()
 
-        # convert args
+        # convert args, pairing them off with kwargs
         for arg_value in args:
             new_arg_name = translation.popitem(last=False)[1][0]
             new_kwargs[new_arg_name] = arg_value
 
-        # convert kwargs -  but only those in the translation
+        # convert kwargs - but only those in the translation
         for key, value in kwargs.items():
             try:
                 new_kwargs[translation.pop(key)[0]] = value
@@ -1325,8 +1325,11 @@ def translate_wrapper(fn, translator):
                 new_kwargs[key] = value
 
         # set remaining default kwargs
-        for key, value in translation.items():
-            new_kwargs[value[0]] = value[1]
+        for opt in translation.values():
+            if len(opt) == 2:
+                # backend_name, default_value
+                new_kwargs[opt[0]] = opt[1]
+            # else, no default value -> don't inject
 
         return fn(**new_kwargs)
 
@@ -2146,12 +2149,13 @@ _CUSTOM_WRAPPERS["torch", "expand_dims"] = make_translator(
 _CUSTOM_WRAPPERS["torch", "sort"] = torch_sort_wrap
 _CUSTOM_WRAPPERS["torch", "flip"] = torch_flip_wrap
 _torch_reduce_translation = [
-    ("a", ("input",)), ("axis", ("dim", None)), ("keepdims", ("keepdim", False))
+    ("a", ("input",)),
+    ("axis", ("dim",)),
+    ("keepdims", ("keepdim",)),
 ]
-_CUSTOM_WRAPPERS["torch", "sum"] = make_translator(_torch_reduce_translation)
-_CUSTOM_WRAPPERS["torch", "max"] = make_translator(_torch_reduce_translation)
-_CUSTOM_WRAPPERS["torch", "min"] = make_translator(_torch_reduce_translation)
-_CUSTOM_WRAPPERS["torch", "prod"] = make_translator(_torch_reduce_translation)
+for f in ("sum", "max", "min", "prod", "mean", "median", "std", "var"):
+    # TODO: search "keepdim" in torch docs to find more
+    _CUSTOM_WRAPPERS["torch", f] = make_translator(_torch_reduce_translation)
 
 # for older versions of torch, can provide some alternative implementations
 _MODULE_ALIASES["torch[alt]"] = "torch"

@@ -149,6 +149,42 @@ def test_binary_functions(f, args, xfail_backends, backend):
     assert ar.do("allclose", yt, yn)
 
 
+@pytest.mark.parametrize(
+    "f",
+    [
+        "sum",
+        "prod",
+        "max",
+        "min",
+        "mean",
+    ],
+)
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {},
+        {"axis": 1},
+        {"axis": 1, "keepdims": True},
+        {"axis": (0, 2)},
+    ],
+)
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_reduce_functions(f, kwargs, backend):
+    if (
+        backend == "torch"
+        and f == "prod"
+        and isinstance(kwargs.get("axis"), tuple)
+    ):
+        pytest.xfail("Pytorch doesn't support prod with tuple axis.")
+
+    x = ar.do("random.normal", size=(2, 3, 4), like="numpy")
+    y = ar.do(f, x, **kwargs)
+    xb = ar.do("asarray", x, like=backend)
+    yb = ar.do(f, xb, **kwargs)
+    yt = ar.do("to_numpy", yb)
+    assert ar.do("allclose", yt, y)
+
+
 @pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize("fn", ["sqrt", "exp", "sum"])
 def test_basic(backend, fn):
