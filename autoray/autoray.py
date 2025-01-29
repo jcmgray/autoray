@@ -1905,6 +1905,10 @@ def torch_to_numpy(x):
     return x.detach().cpu().numpy()
 
 
+def torch_copy(x):
+    return x.detach().clone()
+
+
 def torch_transpose(x, axes=None):
     if axes is None:
         axes = reversed(range(0, x.ndimension()))
@@ -2080,6 +2084,7 @@ _FUNCS["torch", "pad"] = torch_pad
 _FUNCS["torch", "real"] = torch_real
 _FUNCS["torch", "imag"] = torch_imag
 _FUNCS["torch", "astype"] = torch_astype
+_FUNCS["torch", "copy"] = torch_copy
 _FUNCS["torch", "to_numpy"] = torch_to_numpy
 _FUNCS["torch", "complex"] = complex_add_re_im
 _FUNCS["torch", "transpose"] = torch_transpose
