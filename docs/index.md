@@ -20,6 +20,7 @@ write backend agnostic code that works for:
 * [autograd](https://github.com/HIPS/autograd)
 * [tensorflow](https://github.com/tensorflow/tensorflow)
 * [sparse](https://sparse.pydata.org/)
+* [paddle](https://github.com/paddlepaddle/paddle)
 * [mars](https://github.com/mars-project/mars)
 * ... and indeed **any** library that provides a numpy-*ish* api, even if it
   knows nothing about `autoray`.

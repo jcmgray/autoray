@@ -1061,7 +1061,8 @@ def dag(x):
     try:
         return x.H
     except AttributeError:
-        return do("conj", do("transpose", x))
+        backend = infer_backend(x)
+        return do("conj", do("transpose", x, like=backend), like=backend)
 
 
 def real(x):
@@ -1093,13 +1094,10 @@ def to_backend_dtype(dtype_name, like):
         return dtype_name
 
 
+@compose
 def get_dtype_name(x):
     """Find string specifier ``dtype_name`` of array ``x``."""
-    try:
-        return x.dtype.name
-    except AttributeError:
-        # let modules provide their own
-        return do("get_dtype_name", x, like=x)
+    return x.dtype.name
 
 
 _COMPLEX_DTYPES = {"complex64", "complex128"}
@@ -1269,7 +1267,7 @@ def scale_random_normal_manually(fn):
         if size is None:
             size = ()
 
-        x = fn(size=size, **kwargs)
+        x = fn(size, **kwargs)
 
         if (loc != 0.0) or (scale != 1.0):
             x = scale * x + loc
@@ -1513,11 +1511,11 @@ _builtin_dtype_lookup = {
 }
 
 
+@get_dtype_name.register("builtins")
 def builtins_get_dtype_name(x):
     return _builtin_dtype_lookup[x.__class__]
 
 
-_FUNCS["builtins", "get_dtype_name"] = builtins_get_dtype_name
 _FUNCS["builtins", "complex"] = complex
 
 # ---------------------------------- numpy ---------------------------------- #
@@ -1691,6 +1689,7 @@ def ctf_count_nonzero(x):
     return (x != 0).astype(int).sum()
 
 
+@get_dtype_name.register("ctf")
 def ctf_get_dtype_name(x):
     return x.dtype.__name__
 
@@ -1700,7 +1699,6 @@ _FUNCS["ctf", "complex"] = complex_add_re_im
 _FUNCS["ctf", "allclose"] = allclose
 _FUNCS["ctf", "to_numpy"] = ctf_to_numpy
 _FUNCS["ctf", "count_nonzero"] = ctf_count_nonzero
-_FUNCS["ctf", "get_dtype_name"] = ctf_get_dtype_name
 
 _SUBMODULE_ALIASES["ctf", "float32"] = "numpy"
 _SUBMODULE_ALIASES["ctf", "float64"] = "numpy"
@@ -1931,6 +1929,7 @@ def _torch_get_dtype_name(dtype):
     return str(dtype).split(".")[-1]
 
 
+@get_dtype_name.register("torch")
 def torch_get_dtype_name(x):
     return _torch_get_dtype_name(x.dtype)
 
@@ -1952,7 +1951,7 @@ def torch_imag(x):
             return x.imag
     except AttributeError:
         pass
-    return do("zeros_like", x, like="torch")
+    return do("zeros_like", x)
 
 
 def torch_linalg_solve_wrap(fn):
@@ -2092,7 +2091,6 @@ _FUNCS["torch", "to_numpy"] = torch_to_numpy
 _FUNCS["torch", "complex"] = complex_add_re_im
 _FUNCS["torch", "transpose"] = torch_transpose
 _FUNCS["torch", "count_nonzero"] = torch_count_nonzero
-_FUNCS["torch", "get_dtype_name"] = torch_get_dtype_name
 _FUNCS["torch", "indices"] = torch_indices
 
 _FUNC_ALIASES["torch", "array"] = "tensor"
@@ -2185,3 +2183,161 @@ def mxnet_to_numpy(x):
 
 _MODULE_ALIASES["mxnet"] = "mxnet.numpy"
 _FUNCS["mxnet", "to_numpy"] = mxnet_to_numpy
+
+
+# --------------------------------- paddle ---------------------------------- #
+
+_paddle_dtype_name_conversion = {
+    "BOOL": "bool",
+    "INT8": "int8",
+    "INT16": "int16",
+    "INT32": "int32",
+    "INT64": "int64",
+    "FP16": "float16",
+    "FP32": "float32",
+    "FP64": "float64",
+    "COMPLEX64": "complex64",
+    "COMPLEX128": "complex128",
+}
+
+
+@get_dtype_name.register("paddle")
+def paddle_get_dtype_name(x):
+    return _paddle_dtype_name_conversion[x.dtype.name]
+
+
+@shape.register("paddle")
+def paddle_shape(x):
+    # convert from list
+    return tuple(x.shape)
+
+
+def paddle_to_numpy(x):
+    return x.numpy()
+
+
+def paddle_transpose(a, axes=None):
+    if axes is None:
+        axes = tuple(range(a.ndim - 1, -1, -1))
+    return a.transpose(perm=axes)
+
+
+def paddle_real(x):
+    # paddle doesn't support calling real on real arrays
+    try:
+        if x.is_complex():
+            return x.real()
+    except AttributeError:
+        pass
+    return x
+
+
+def paddle_imag(x):
+    # paddle doesn't support calling imag on real arrays
+    try:
+        if x.is_complex():
+            return x.imag()
+    except AttributeError:
+        pass
+    return do("zeros_like", x)
+
+
+def paddle_indices(dimensions):
+    _meshgrid = get_lib_fn("paddle", "meshgrid")
+    _arange = get_lib_fn("paddle", "arange")
+    return _meshgrid(*map(_arange, dimensions), indexing="ij")
+
+
+def paddle_ravel(x):
+    return x.reshape((-1,))
+
+
+def paddle_pad(array, pad_width, mode="constant", constant_values=0):
+    if mode != "constant":
+        raise NotImplementedError
+
+    try:
+        # numpy takes pads like ((0, 0), (1, 1), ... (n-1, n-1))
+        # paddle takes pads like (0, 0, 1, 1, 2, 2, ...)
+        pad = tuple(itertools.chain.from_iterable(pad_width))
+
+        # a single tuple was specified ((a, b),) - use for all axes
+        if len(pad) == 2:
+            pad = pad * array.ndim
+
+    except TypeError:
+        # assume int
+        pad = (pad_width,) * 2 * array.ndim
+
+    return do(
+        "nn.functional.pad",
+        array,
+        pad=pad,
+        mode=mode,
+        value=constant_values,
+        like="paddle",
+    )
+
+
+def paddle_wrap_reduction(fn):
+    def numpy_like(*args, **kwargs):
+        keepdims = kwargs.pop("keepdims", None)
+        if keepdims is not None:
+            kwargs["keepdim"] = keepdims
+        return fn(*args, **kwargs)
+
+    return numpy_like
+
+
+def paddle_split_wrap(fn):
+    # paddle doesn't seem to have `tensor_split always`
+
+    @functools.wraps(fn)
+    def numpy_like(ary, indices_or_sections, axis=0, **kwargs):
+        if isinstance(indices_or_sections, int):
+            return fn(ary, indices_or_sections, axis=axis, **kwargs)
+        else:
+            diff = do(
+                "diff",
+                indices_or_sections,
+                prepend=0,
+                append=shape(ary)[axis],
+                like="numpy",
+            )
+            diff = list(diff)
+            return fn(ary, diff, axis=axis)
+
+    return numpy_like
+
+_MODULE_ALIASES["paddle[alt]"] = "paddle"
+
+_FUNCS["paddle", "to_numpy"] = paddle_to_numpy
+_FUNCS["paddle", "transpose"] = paddle_transpose
+_FUNCS["paddle", "real"] = paddle_real
+_FUNCS["paddle", "imag"] = paddle_imag
+_FUNCS["paddle", "indices"] = paddle_indices
+_FUNCS["paddle", "ravel"] = paddle_ravel
+_FUNCS["paddle", "pad"] = paddle_pad
+
+_FUNC_ALIASES["paddle", "random.normal"] = "randn"
+_FUNC_ALIASES["paddle", "random.uniform"] = "rand"
+_FUNC_ALIASES["paddle", "asarray"] = "to_tensor"
+_FUNC_ALIASES["paddle", "concatenate"] = "concat"
+_FUNC_ALIASES["paddle", "power"] = "pow"
+_FUNC_ALIASES["paddle", "identity"] = "eye"
+_FUNC_ALIASES["paddle", "split"] = "tensor_split"
+
+_SUBMODULE_ALIASES["paddle", "random.normal"] = "paddle"
+_SUBMODULE_ALIASES["paddle", "random.uniform"] = "paddle"
+
+_CUSTOM_WRAPPERS["paddle", "random.normal"] = scale_random_normal_manually
+_CUSTOM_WRAPPERS["paddle", "random.uniform"] = scale_random_uniform_manually
+_CUSTOM_WRAPPERS["paddle[alt]", "split"] = paddle_split_wrap
+_CUSTOM_WRAPPERS["paddle", "tril"] = make_translator(
+    [("m", ("x",)), ("k", ("diagonal", 0))]
+)
+_CUSTOM_WRAPPERS["paddle", "triu"] = make_translator(
+    [("m", ("x",)), ("k", ("diagonal", 0))]
+)
+for f in ("sum", "max", "min", "prod", "mean", "std", "var"):
+    _CUSTOM_WRAPPERS["paddle", f] = paddle_wrap_reduction

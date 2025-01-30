@@ -80,7 +80,7 @@ def test_lazy_mgs(backend):
     ly.show()
     make_strict(ly)
     assert str(ly) == (
-        f"<LazyArray(fn=stack, shape=(5, 5), " f"backend='{backend}')>"
+        f"<LazyArray(fn=stack, shape=(5, 5), backend='{backend}')>"
     )
     assert isinstance(ly, lazy.LazyArray)
     hmax = ly.history_max_size()
@@ -220,6 +220,12 @@ def test_reshape_chain(backend):
 def test_svd(backend, dtype):
     if backend == "sparse":
         pytest.xfail("Sparse doesn't support 'linalg.svd' yet...")
+
+    if backend in ("paddle",) and "complex" in dtype:
+        pytest.xfail(
+            f"{backend} `linalg.solve` doesn't support complex dtype..."
+        )
+
     x = lazy.array(gen_rand((4, 5), backend, dtype))
     U, s, VH = do("linalg.svd", x)
     assert shape(U) == (4, 4)
@@ -253,7 +259,7 @@ def test_qr(backend):
 @pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize("dtype", ["float64", "complex128"])
 def test_eig_inv(backend, dtype):
-    if backend in ("cupy", "dask", "torch", "mars", "sparse"):
+    if backend in ("cupy", "dask", "torch", "mars", "sparse", "paddle"):
         pytest.xfail(f"{backend} doesn't support 'linalg.eig' yet...")
 
     # N.B. the prob that a real gaussian matrix has all real eigenvalues is
@@ -298,6 +304,10 @@ def test_eigh(backend, dtype):
 def test_cholesky(backend, dtype):
     if backend in ("sparse",):
         pytest.xfail(f"{backend} doesn't support 'linalg.cholesky' yet...")
+
+    if backend in ("paddle",) and "complex" in dtype:
+        pytest.xfail(f"{backend} doesn't support complex dtype...")
+
     x = lazy.array(gen_rand((5, 5), backend, dtype))
     x = x @ x.H
     C = do("linalg.cholesky", x)
@@ -315,6 +325,12 @@ def test_cholesky(backend, dtype):
 def test_solve(backend, dtype):
     if backend in ("sparse",):
         pytest.xfail(f"{backend} doesn't support 'linalg.solve' yet...")
+
+    if backend in ("paddle",) and "complex" in dtype:
+        pytest.xfail(
+            f"{backend} `linalg.solve` doesn't support complex dtype..."
+        )
+
     A = lazy.array(gen_rand((5, 5), backend, dtype))
     y = lazy.array(gen_rand((5,), backend, dtype))
 

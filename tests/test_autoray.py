@@ -9,7 +9,16 @@ import numpy as np
 
 # find backends to tests
 BACKENDS = [pytest.param("numpy")]
-for lib in ["cupy", "dask", "tensorflow", "torch", "mars", "jax", "sparse"]:
+for lib in [
+    "cupy",
+    "dask",
+    "tensorflow",
+    "torch",
+    "mars",
+    "jax",
+    "sparse",
+    "paddle",
+]:
     if importlib.util.find_spec(lib):
         BACKENDS.append(pytest.param(lib))
 
@@ -317,7 +326,7 @@ def test_linalg_svd_square(backend):
         == backend
     )
     y = U @ ar.do("diag", s, like=x) @ V
-    diff = ar.do("sum", abs(y - x))
+    diff = ar.do("sum", ar.do("abs", y - x))
     assert ar.to_numpy(diff) < 1e-8
 
 
@@ -435,11 +444,11 @@ def test_count_nonzero(backend, array_dtype):
         pytest.xfail("ctf doesn't support bool array dtype")
 
     if array_dtype == "int":
-        x = ar.do("array", [0, 1, 2, 0, 3], like=backend)
+        x = ar.do("asarray", [0, 1, 2, 0, 3], like=backend)
     elif array_dtype == "float":
-        x = ar.do("array", [0.0, 1.0, 2.0, 0.0, 3.0], like=backend)
+        x = ar.do("asarray", [0.0, 1.0, 2.0, 0.0, 3.0], like=backend)
     elif array_dtype == "bool":
-        x = ar.do("array", [False, True, True, False, True], like=backend)
+        x = ar.do("asarray", [False, True, True, False, True], like=backend)
     nz = ar.do("count_nonzero", x)
     assert ar.to_numpy(nz) == 3
 
@@ -537,6 +546,11 @@ def test_linalg_solve(backend, dtype):
     if backend == "sparse":
         pytest.xfail("Sparse doesn't support linear algebra yet...")
 
+    if backend == "paddle" and "complex" in dtype:
+        pytest.xfail(
+            "Paddle `linalg.solve` doesn't support complex numbers yet..."
+        )
+
     A = gen_rand((4, 4), backend, dtype)
     b = gen_rand((4, 1), backend, dtype)
     x = ar.do("linalg.solve", A, b)
@@ -616,8 +630,8 @@ def test_register_function(backend):
 
 @pytest.mark.parametrize("backend", BACKENDS)
 def test_take(backend):
-    if backend == "sparse":
-        pytest.xfail("sparse doesn't support take yet")
+    if backend in {"sparse", "paddle"}:
+        pytest.xfail(f"{backend} doesn't fully support take yet")
     num_inds = 4
     A = gen_rand((2, 3, 4), backend)
     if backend == "jax":  # gen_rand doesn't work with ints for JAX
@@ -669,13 +683,12 @@ def test_stack(backend):
 
 @pytest.mark.parametrize("backend", BACKENDS)
 def test_einsum(backend):
-    if backend == "sparse":
-        pytest.xfail("sparse doesn't support einsum yet")
     A = gen_rand((2, 3, 4), backend)
     B = gen_rand((3, 4, 2), backend)
     C1 = ar.do("einsum", "ijk,jkl->il", A, B, like=backend)
     C2 = ar.do("einsum", "ijk,jkl->il", A, B)
-    if backend not in ("torch", "tensorflow"):  # this syntax is not supported
+    if backend not in ("torch", "tensorflow", "paddle"):
+        # interleaved syntax is not supported
         C3 = ar.do("einsum", A, [0, 1, 2], B, [1, 2, 3], [0, 3])
     else:
         C3 = C1
@@ -695,7 +708,7 @@ def test_einsum(backend):
 
 
 @pytest.mark.parametrize("backend", BACKENDS)
-@pytest.mark.parametrize("int_or_section", ["int", "section"])
+@pytest.mark.parametrize("int_or_section", ["int", "section", "empty"])
 def test_split(backend, int_or_section):
     if backend == "sparse":
         pytest.xfail("sparse doesn't support split yet")
@@ -706,17 +719,21 @@ def test_split(backend, int_or_section):
         sections = [2, 4, 14]
         splits = ar.do("split", A, sections, axis=1)
         assert len(splits) == 4
-        assert splits[3].shape == (10, 6, 10)
+        assert ar.shape(splits[3]) == (10, 6, 10)
+    elif int_or_section == "empty":
+        splits = ar.do("split", A, [], axis=1)
+        assert len(splits) == 1
+        assert ar.shape(splits[0]) == (10, 20, 10)
     else:
         splits = ar.do("split", A, 5, axis=2)
         assert len(splits) == 5
-        assert splits[2].shape == (10, 20, 2)
+        assert ar.shape(splits[2]) == (10, 20, 2)
 
 
 @pytest.mark.parametrize("backend", BACKENDS)
 def test_where(backend):
-    if backend == "sparse":
-        pytest.xfail("sparse doesn't support where yet")
+    if backend in {"sparse", "paddle"}:
+        pytest.xfail(f"{backend} doesn't fully support `where` yet")
     A = ar.do("arange", 10, like=backend)
     B = ar.do("arange", 10, like=backend) + 1
     C = ar.do("stack", [A, B])
@@ -919,6 +936,8 @@ class TestCreationRoutines:
         check_array_dtypes(x, y)
 
     def test_eye_passes_dtype_device(self, backend, dtype):
+        if backend == "paddle" and "complex" in dtype:
+            pytest.xfail("Paddle doesn't support complex eye yet.")
         x = gen_rand((1,), backend, dtype)
         y = ar.do("eye", 3, like=x)
         check_array_dtypes(x, y)
@@ -931,6 +950,8 @@ class TestCreationRoutines:
         check_array_dtypes(x, y)
 
     def test_identity_passes_dtype_device(self, backend, dtype):
+        if backend == "paddle" and "complex" in dtype:
+            pytest.xfail("Paddle doesn't support complex identity yet.")
         x = gen_rand((1,), backend, dtype)
         y = ar.do("identity", 4, like=x)
         check_array_dtypes(x, y)
