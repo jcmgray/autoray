@@ -60,10 +60,13 @@ html_theme = 'furo'
 
 html_theme_options = {
     "sidebar_hide_name": True,
-    # "light_css_variables": {
+    "light_css_variables": {
     #     "color-brand-primary": "hsl(72, 75%, 40%)",
     #     "color-brand-content": "hsl(238, 50%, 60%)",
-    # },
+        "font-stack": "Atkinson Hyperlegible, sans-serif",
+        "font-stack--monospace": "Spline Sans Mono, monospace",
+        "font-stack--headings": "Spline Sans Mono, monospace",
+    },
     # "dark_css_variables": {
     #     "color-brand-primary": "hsl(72, 75%, 60%)",
     #     "color-brand-content": "hsl(238, 75%, 70%)",
