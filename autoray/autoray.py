@@ -1097,7 +1097,11 @@ def to_backend_dtype(dtype_name, like):
 @compose
 def get_dtype_name(x):
     """Find string specifier ``dtype_name`` of array ``x``."""
-    return x.dtype.name
+    dtype = x.dtype
+    try:
+        return dtype.name
+    except AttributeError:
+        return str(dtype)
 
 
 _COMPLEX_DTYPES = {"complex64", "complex128"}
@@ -2308,6 +2312,7 @@ def paddle_split_wrap(fn):
             return fn(ary, diff, axis=axis)
 
     return numpy_like
+
 
 _MODULE_ALIASES["paddle[alt]"] = "paddle"
 
