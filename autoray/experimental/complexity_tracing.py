@@ -121,6 +121,8 @@ COSTS = {
     "cupy_conjugate": cost_linear,
     "clip": cost_linear,
     "transpose": cost_linear,
+    "absolute": cost_linear,
+    "trace": cost_linear,
     "torch_transpose": cost_linear,
     "clamp": cost_linear,
     "getitem": cost_nothing,
@@ -181,6 +183,8 @@ COST_SCALINGS = {
     "conjugate": cost_linear,
     "clip": cost_linear,
     "transpose": cost_linear,
+    "absolute": cost_linear,
+    "trace": cost_linear,
     "getitem": cost_nothing,
     "None": cost_nothing,
 }
