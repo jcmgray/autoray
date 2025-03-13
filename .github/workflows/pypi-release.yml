@@ -5,7 +5,7 @@ on:
       - published
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 jobs:
   build-artifacts:
@@ -87,11 +87,10 @@ jobs:
           path: dist
       - name: Publish package to TestPyPI
         if: github.event_name == 'push'
-        uses: pypa/gh-action-pypi-publish@v1.8.14
+        uses: pypa/gh-action-pypi-publish@v1.12.4
         with:
           repository-url: https://test.pypi.org/legacy/
           verbose: true
-
 
   upload-to-pypi:
     needs: test-built-dist
@@ -110,6 +109,6 @@ jobs:
           name: releases
           path: dist
       - name: Publish package to PyPI
-        uses: pypa/gh-action-pypi-publish@v1.8.14
+        uses: pypa/gh-action-pypi-publish@v1.12.4
         with:
           verbose: true
