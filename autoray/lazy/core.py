@@ -94,21 +94,26 @@ def ascend(lz):
     LazyArray
     """
     queue = to_queue(lz)
-    seen = set()
-    ready = set()
+    visited = set()
+
     while queue:
         node = queue[-1]
-        need_to_visit = [c for c in node._deps if id(c) not in ready]
-        if need_to_visit:
-            need_to_visit.sort(key=get_depth)
-            queue.extend(need_to_visit)
-        else:
-            node = queue.pop()
+        unvisited_deps = [c for c in node._deps if id(c) not in visited]
+        k = len(unvisited_deps)
+        if k == 1:
+            # single unvisited dependency, add it to the queue
+            queue.append(unvisited_deps[0])
+        elif k >= 2:
+            # sort dependencies by depth and add them to the queue
+            unvisited_deps.sort(key=get_depth)
+            queue.extend(unvisited_deps)
+        else:  # k == 0:
+            # all dependencies visited, yield this node
+            queue.pop()
             nid = id(node)
-            ready.add(nid)
-            if nid not in seen:
+            if nid not in visited:
                 yield node
-                seen.add(nid)
+                visited.add(nid)
 
 
 def compute(lz):
