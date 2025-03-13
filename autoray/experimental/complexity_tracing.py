@@ -240,11 +240,12 @@ def frequencies(it):
 
 
 def compute_cost_scalings(z, factor_map, print_missed=True):
+    from autoray.lazy import descend
 
     counts = {}
     missed = {}
 
-    for node in z.descend():
+    for node in descend(z):
         f = node.fn_name
 
         if f in COST_SCALINGS:
