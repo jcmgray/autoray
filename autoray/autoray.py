@@ -1611,7 +1611,6 @@ _MODULE_ALIASES["jax"] = "jax.numpy"
 _SUBMODULE_ALIASES["jax", "complex"] = "jax.lax"
 _SUBMODULE_ALIASES["jax", "linalg.expm"] = "jax.scipy.linalg"
 _SUBMODULE_ALIASES["jax", "linalg.householder_product"] = "jax.lax.linalg"
-_CUSTOM_WRAPPERS["jax", "linalg.qr"] = qr_allow_fat
 _CUSTOM_WRAPPERS["jax", "linalg.svd"] = svd_not_full_matrices_wrapper
 _FUNCS["jax", "to_numpy"] = jax_to_numpy
 _FUNCS["jax", "random.seed"] = jax_random_seed
