@@ -2118,37 +2118,41 @@ _SUBMODULE_ALIASES["torch", "scipy.linalg.expm"] = "torch"
 _SUBMODULE_ALIASES["torch", "random.normal"] = "torch"
 _SUBMODULE_ALIASES["torch", "random.uniform"] = "torch"
 
-_CUSTOM_WRAPPERS["torch", "linalg.svd"] = svd_not_full_matrices_wrapper
-_CUSTOM_WRAPPERS["torch", "random.normal"] = scale_random_normal_manually
-_CUSTOM_WRAPPERS["torch", "random.uniform"] = scale_random_uniform_manually
-_CUSTOM_WRAPPERS["torch", "tensordot"] = torch_tensordot_wrap
-_CUSTOM_WRAPPERS["torch", "stack"] = make_translator(
-    [("arrays", ("tensors",)), ("axis", ("dim", 0))]
+_CUSTOM_WRAPPERS["torch", "clip"] = make_translator(
+    [("a", ("input",)), ("a_min", ("min",)), ("a_max", ("max",))]
 )
 _CUSTOM_WRAPPERS["torch", "concatenate"] = make_translator(
     [("arrays", ("tensors",)), ("axis", ("dim", 0))]
 )
+_CUSTOM_WRAPPERS["torch", "diagonal"] = make_translator(
+    [("a", ("input",)), ("axis1", ("dim1", 0)), ("axis2", ("dim2", 1))]
+)
+_CUSTOM_WRAPPERS["torch", "empty"] = make_translator([("shape", ("size",))])
+_CUSTOM_WRAPPERS["torch", "expand_dims"] = make_translator(
+    [("a", ("input",)), ("axis", ("dim",))]
+)
+_CUSTOM_WRAPPERS["torch", "eye"] = torch_eye_wrap
+_CUSTOM_WRAPPERS["torch", "flip"] = torch_flip_wrap
+_CUSTOM_WRAPPERS["torch", "linalg.svd"] = svd_not_full_matrices_wrapper
+_CUSTOM_WRAPPERS["torch", "ones"] = torch_zeros_ones_wrap
+_CUSTOM_WRAPPERS["torch", "random.normal"] = scale_random_normal_manually
+_CUSTOM_WRAPPERS["torch", "random.uniform"] = scale_random_uniform_manually
+_CUSTOM_WRAPPERS["torch", "sort"] = torch_sort_wrap
+_CUSTOM_WRAPPERS["torch", "stack"] = make_translator(
+    [("arrays", ("tensors",)), ("axis", ("dim", 0))]
+)
+_CUSTOM_WRAPPERS["torch", "take"] = make_translator(
+    [("a", ("input",)), ("indices", ("index",)), ("axis", ("dim",))]
+)
+_CUSTOM_WRAPPERS["torch", "tensordot"] = torch_tensordot_wrap
 _CUSTOM_WRAPPERS["torch", "tril"] = make_translator(
     [("m", ("input",)), ("k", ("diagonal", 0))]
 )
 _CUSTOM_WRAPPERS["torch", "triu"] = make_translator(
     [("m", ("input",)), ("k", ("diagonal", 0))]
 )
-_CUSTOM_WRAPPERS["torch", "clip"] = make_translator(
-    [("a", ("input",)), ("a_min", ("min",)), ("a_max", ("max",))]
-)
-_CUSTOM_WRAPPERS["torch", "ones"] = torch_zeros_ones_wrap
 _CUSTOM_WRAPPERS["torch", "zeros"] = torch_zeros_ones_wrap
-_CUSTOM_WRAPPERS["torch", "eye"] = torch_eye_wrap
-_CUSTOM_WRAPPERS["torch", "empty"] = make_translator([("shape", ("size",))])
-_CUSTOM_WRAPPERS["torch", "take"] = make_translator(
-    [("a", ("input",)), ("indices", ("index",)), ("axis", ("dim",))]
-)
-_CUSTOM_WRAPPERS["torch", "expand_dims"] = make_translator(
-    [("a", ("input",)), ("axis", ("dim",))]
-)
-_CUSTOM_WRAPPERS["torch", "sort"] = torch_sort_wrap
-_CUSTOM_WRAPPERS["torch", "flip"] = torch_flip_wrap
+
 _torch_reduce_translation = [
     ("a", ("input",)),
     ("axis", ("dim",)),
@@ -2164,15 +2168,15 @@ _MODULE_ALIASES["torch[alt]"] = "torch"
 _FUNCS["torch[alt]", "linalg.eigh"] = torch_linalg_eigh
 _FUNCS["torch[alt]", "linalg.eigvalsh"] = torch_linalg_eigvalsh
 
-_SUBMODULE_ALIASES["torch[alt]", "linalg.qr"] = "torch"
-_SUBMODULE_ALIASES["torch[alt]", "linalg.svd"] = "torch"
 _SUBMODULE_ALIASES["torch[alt]", "linalg.norm"] = "torch"
+_SUBMODULE_ALIASES["torch[alt]", "linalg.qr"] = "torch"
 _SUBMODULE_ALIASES["torch[alt]", "linalg.solve"] = "torch"
+_SUBMODULE_ALIASES["torch[alt]", "linalg.svd"] = "torch"
 
-_CUSTOM_WRAPPERS["torch[alt]", "split"] = torch_split_wrap
-_CUSTOM_WRAPPERS["torch[alt]", "linalg.svd"] = svd_UsV_to_UsVH_wrapper
 _CUSTOM_WRAPPERS["torch[alt]", "linalg.qr"] = qr_allow_fat
 _CUSTOM_WRAPPERS["torch[alt]", "linalg.solve"] = torch_linalg_solve_wrap
+_CUSTOM_WRAPPERS["torch[alt]", "linalg.svd"] = svd_UsV_to_UsVH_wrapper
+_CUSTOM_WRAPPERS["torch[alt]", "split"] = torch_split_wrap
 
 for f in _CREATION_ROUTINES:
     register_creation_routine("torch", f, inject_device=True)
