@@ -1,6 +1,7 @@
 """
 TODO: lstsq, pinv, eigvals, eigvalsh
 """
+
 import operator
 
 from ..autoray import get_lib_fn

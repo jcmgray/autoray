@@ -1,5 +1,4 @@
-"""Visualizations for ``LazyArray`` computational graphs.
-"""
+"""Visualizations for ``LazyArray`` computational graphs."""
 
 import itertools
 import functools
@@ -126,7 +125,6 @@ def get_default_colors_dict(colors):
     return colors
 
 
-
 def rotate(xy, theta):
     """Return a rotated set of points."""
     import numpy as np
@@ -242,7 +240,7 @@ def get_nice_pos(
     k=None,
     use_forceatlas2=False,
     flatten=False,
-    **layout_opts
+    **layout_opts,
 ):
     if (layout == "auto") and HAS_PYGRAPHVIZ:
         layout = "neato"
@@ -414,11 +412,11 @@ def plot_graph(
     node_markers = {}
     for i, data in G.nodes(data=True):
         # set node color
-        if data['array'] is self:
+        if data["array"] is self:
             node_markers[i] = "X"
 
         if color_by == "variables":
-            if data['array'] is self:
+            if data["array"] is self:
                 node_colors[i] = root_color
             elif data["variable"]:
                 node_colors[i] = var_color
@@ -426,26 +424,26 @@ def plot_graph(
                 node_colors[i] = const_color
 
         elif color_by == "function":
-            if data['array'].fn_name in colors:
-                node_colors[i] = colors[data['array'].fn_name]
+            if data["array"].fn_name in colors:
+                node_colors[i] = colors[data["array"].fn_name]
             else:
-                node_colors[i] = hash_to_color(data['array'].fn_name)
+                node_colors[i] = hash_to_color(data["array"].fn_name)
 
         elif color_by == "id":
-            node_colors[i] = hash_to_color(str(id(data['array'])))
+            node_colors[i] = hash_to_color(str(id(data["array"])))
 
         # set node size
-        node_sizes[i] = 6 * node_scale * (np.log2(data['array'].size) + 1)
+        node_sizes[i] = 6 * node_scale * (np.log2(data["array"].size) + 1)
 
         # set node label and marker
-        if data['array'].fn_name == "None":
+        if data["array"].fn_name == "None":
             node_markers.setdefault(i, "o")
             node_labels[i] = ""
-        if data['array'].fn_name == "getitem":
+        if data["array"].fn_name == "getitem":
             node_markers.setdefault(i, ".")
             node_labels[i] = ""
         else:
-            node_labels[i] = data['array'].fn_name
+            node_labels[i] = data["array"].fn_name
 
         node_markers.setdefault(i, node_shape)
 

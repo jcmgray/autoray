@@ -1,5 +1,5 @@
-"""Core lazy array functionality.
-"""
+"""Core lazy array functionality."""
+
 import operator
 import threading
 import functools
@@ -805,8 +805,7 @@ class LazyArray:
 
     @property
     def depth(self):
-        """The maximum distance to any input array in the computational graph.
-        """
+        """The maximum distance to any input array in the computational graph."""
         return self._depth
 
     def __getitem__(self, key):
@@ -1801,8 +1800,7 @@ max_ = make_reduction_func("max")
 
 
 def empty(shape, *, backend="numpy", **kwargs):
-    """Lazy creation of an empty array with a given shape.
-    """
+    """Lazy creation of an empty array with a given shape."""
     return LazyArray(
         backend=backend,
         fn=get_lib_fn(backend, "empty"),
@@ -1814,8 +1812,7 @@ def empty(shape, *, backend="numpy", **kwargs):
 
 
 def zeros(shape, *, backend="numpy", **kwargs):
-    """Lazy creation of an array filled with zeros with a given shape.
-    """
+    """Lazy creation of an array filled with zeros with a given shape."""
     return LazyArray(
         backend=backend,
         fn=get_lib_fn(backend, "zeros"),
@@ -1827,8 +1824,7 @@ def zeros(shape, *, backend="numpy", **kwargs):
 
 
 def ones(shape, *, backend="numpy", **kwargs):
-    """Lazy creation of an array filled with ones with a given shape.
-    """
+    """Lazy creation of an array filled with ones with a given shape."""
     return LazyArray(
         backend=backend,
         fn=get_lib_fn(backend, "ones"),
@@ -1840,8 +1836,7 @@ def ones(shape, *, backend="numpy", **kwargs):
 
 
 def eye(N, *, backend="numpy", **kwargs):
-    """Lazy creation of the identity matrix of size N.
-    """
+    """Lazy creation of the identity matrix of size N."""
     return LazyArray(
         backend=backend,
         fn=get_lib_fn(backend, "eye"),
@@ -1853,8 +1848,7 @@ def eye(N, *, backend="numpy", **kwargs):
 
 
 def identity(n, *, backend="numpy", **kwargs):
-    """Lazy creation of the identity matrix of size n.
-    """
+    """Lazy creation of the identity matrix of size n."""
     return LazyArray(
         backend=backend,
         fn=get_lib_fn(backend, "identity"),

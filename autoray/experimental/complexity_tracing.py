@@ -7,6 +7,7 @@ of a given operation, including sub-leading factors. There are also
 `cost_scaling_*` functions that only consider the leading factor of the cost,
 so that we can prime number decompose it and extract the scaling.
 """
+
 import math
 
 
@@ -68,8 +69,8 @@ cost_scaling_matmul = cost_matmul
 
 def cost_einsum(x):
     eq, *operands = x.args
-    lhs = eq.split('->')[0]
-    terms = lhs.split(',')
+    lhs = eq.split("->")[0]
+    terms = lhs.split(",")
     size_dict = {
         ix: d
         for term, x in zip(terms, operands)
@@ -129,6 +130,7 @@ COSTS = {
     "None": cost_nothing,
 }
 
+
 def cost_node(x, allow_missed=True):
     f = x.fn_name
     if f in COSTS:
@@ -151,6 +153,7 @@ def compute_cost(z, print_missed=True):
 
     if missed and print_missed:
         import warnings
+
         warnings.warn(f"Missed {missed} in cost computation.")
 
     return C
@@ -260,6 +263,7 @@ def compute_cost_scalings(z, factor_map, print_missed=True):
 
     if missed and print_missed:
         import warnings
+
         warnings.warn(f"Missed {missed} in cost scaling computation.")
 
     scalings = []
@@ -276,6 +280,7 @@ def compute_cost_scalings(z, factor_map, print_missed=True):
 
         if pf and print_missed:
             import warnings
+
             warnings.warn(
                 f"Missed prime factor(s) {pf} in cost scaling computation, "
                 f" for operation {op}."
