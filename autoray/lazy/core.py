@@ -808,6 +808,9 @@ class LazyArray:
         """The maximum distance to any input array in the computational graph."""
         return self._depth
 
+    def __hash__(self):
+        return id(self)
+
     def __getitem__(self, key):
         return getitem(self, key)
 
