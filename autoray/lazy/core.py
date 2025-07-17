@@ -844,6 +844,9 @@ class LazyArray:
     def __rtruediv__(self, other):
         return truedivide(other, self)
 
+    def __mod__(self, other):
+        return mod(self, other)
+
     def __pow__(self, other):
         return pow_(self, other)
 
@@ -861,6 +864,9 @@ class LazyArray:
 
     def __neg__(self):
         return self.to(operator.neg)
+
+    def __eq__(self, other):
+        return eq(self, other)
 
     def __ne__(self, other):
         return ne(self, other)
@@ -902,6 +908,12 @@ class LazyArray:
     @property
     def imag(self):
         return imag(self)
+
+    def __array_namespace__(self, api_version=None):
+        """Support array api namespace - https://data-apis.org/array-api/."""
+        from autoray import lazy as lazy_api
+
+        return lazy_api
 
     def __repr__(self):
         return (
@@ -1233,6 +1245,9 @@ def transpose(a, axes=None):
     return a.to(fn_transpose, (a, axes), shape=newshape)
 
 
+permute_dims = transpose
+
+
 @lazy_cache("reshape")
 def _reshape_tuple(a, newshape):
     a = ensure_lazy(a)
@@ -1270,6 +1285,35 @@ def reshape(a, newshape):
         return a
 
     return _reshape_tuple(a, newshape)
+
+
+@lazy_cache("expand_dims")
+def expand_dims(a, axis):
+    a = ensure_lazy(a)
+    fn_expand_dims = get_lib_fn(a.backend, "expand_dims")
+
+    if axis < 0:
+        axis += a.ndim + 1
+
+    new_shape = (
+        *a.shape[:axis],
+        1,
+        *a.shape[axis:],
+    )
+    return a.to(fn_expand_dims, (a, axis), shape=new_shape)
+
+
+@lazy_cache("broadcast_to")
+def broadcast_to(array, shape):
+    array = ensure_lazy(array)
+    shape = tuple(shape)
+    fn_broadcast_to = get_lib_fn(array.backend, "broadcast_to")
+
+    if array.shape == shape:
+        # no broadcasting required
+        return array
+
+    return array.to(fn_broadcast_to, (array, shape), shape=shape)
 
 
 def getitem_hasher(_, a, key):
@@ -1483,6 +1527,26 @@ def diag(a, k=0):
     )
 
 
+@lazy_cache("diagonal")
+def diagonal(a, offset=0, axis1=0, axis2=1):
+    a = ensure_lazy(a)
+    fn_diagonal = get_lib_fn(a.backend, "diagonal")
+
+    if axis1 < 0:
+        axis1 += a.ndim
+    if axis2 < 0:
+        axis2 += a.ndim
+
+    newshape = [d for ax, d in enumerate(a.shape) if ax not in (axis1, axis2)]
+    newshape.append(max(min(a.shape[axis1], a.shape[axis2]) - abs(offset), 0))
+
+    return a.to(
+        fn=fn_diagonal,
+        args=(a, offset, axis1, axis2),
+        shape=tuple(newshape),
+    )
+
+
 @lazy_cache("matmul")
 def matmul(x1, x2):
     backend = find_common_backend(x1, x2)
@@ -1577,11 +1641,12 @@ def sort(a, axis=-1):
 
 
 @lazy_cache("argsort")
-def argsort(a, axis=-1):
+def argsort(a, axis=-1, *, stable=None):
     a = ensure_lazy(a)
     return a.to(
         fn=get_lib_fn(a.backend, "argsort"),
         args=(a, axis),
+        kwargs={"stable": stable},
     )
 
 
@@ -1698,17 +1763,19 @@ def make_binary_func(name, fn):
     return binary_func
 
 
-multiply = make_binary_func("multiply", operator.mul)
 add = make_binary_func("add", operator.add)
-sub = make_binary_func("sub", operator.sub)
+eq = make_binary_func("eq", operator.eq)
 floordivide = make_binary_func("floordivide", operator.floordiv)
-truedivide = make_binary_func("truedivide", operator.truediv)
-pow_ = make_binary_func("pow", operator.pow)
-gt = make_binary_func("gt", operator.gt)
-ne = make_binary_func("ne", operator.ne)
-lt = make_binary_func("lt", operator.lt)
 ge = make_binary_func("ge", operator.ge)
+gt = make_binary_func("gt", operator.gt)
 le = make_binary_func("le", operator.le)
+lt = make_binary_func("lt", operator.lt)
+mod = make_binary_func("mod", operator.mod)
+multiply = make_binary_func("multiply", operator.mul)
+ne = make_binary_func("ne", operator.ne)
+pow_ = make_binary_func("pow", operator.pow)
+sub = make_binary_func("sub", operator.sub)
+truedivide = make_binary_func("truedivide", operator.truediv)
 
 
 def complex_(re, im):
