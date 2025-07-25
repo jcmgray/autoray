@@ -5,36 +5,40 @@
 
 import os
 import sys
+import datetime
+
 sys.path.append(os.path.abspath("./_pygments"))
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'autoray'
-copyright = '2019-2023, Johnnie Gray'
-author = 'Johnnie Gray'
+project = "autoray"
+copyright = f"2019-{datetime.date.today().year}, Johnnie Gray"
+author = "Johnnie Gray"
 
 try:
     from autoray import __version__
+
     release = __version__
 except ImportError:
     try:
         from importlib.metadata import version as _version
-        release = _version('autoray')
+
+        release = _version("autoray")
     except ImportError:
-        release = '0.0.0+unknown'
+        release = "0.0.0+unknown"
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
-    'myst_nb',
-    'sphinx.ext.intersphinx',
-    'sphinx.ext.extlinks',
-    'sphinx.ext.napoleon',
-    'sphinx.ext.linkcode',
-    'sphinx_copybutton',
-    'autoapi.extension',
+    "myst_nb",
+    "sphinx.ext.intersphinx",
+    "sphinx.ext.extlinks",
+    "sphinx.ext.napoleon",
+    "sphinx.ext.linkcode",
+    "sphinx_copybutton",
+    "autoapi.extension",
 ]
 
 nb_execution_mode = "off"
@@ -48,21 +52,21 @@ myst_enable_extensions = [
 ]
 
 # sphinx-autoapi
-autoapi_dirs = ['../autoray']
+autoapi_dirs = ["../autoray"]
 
-templates_path = ['_templates']
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '**.ipynb_checkpoints']
+templates_path = ["_templates"]
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**.ipynb_checkpoints"]
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_theme = 'furo'
+html_theme = "furo"
 
 html_theme_options = {
     "sidebar_hide_name": True,
     "light_css_variables": {
-    #     "color-brand-primary": "hsl(72, 75%, 40%)",
-    #     "color-brand-content": "hsl(238, 50%, 60%)",
+        #     "color-brand-primary": "hsl(72, 75%, 40%)",
+        #     "color-brand-content": "hsl(238, 50%, 60%)",
         "font-stack": "Atkinson Hyperlegible, sans-serif",
         "font-stack--monospace": "Spline Sans Mono, monospace",
         "font-stack--headings": "Spline Sans Mono, monospace",
@@ -76,10 +80,10 @@ html_theme_options = {
 }
 
 html_css_files = ["my-styles.css"]
-html_static_path = ['_static']
+html_static_path = ["_static"]
 html_favicon = "_static/autoray.ico"
 
-pygments_style = '_pygments_light.MarianaLight'
+pygments_style = "_pygments_light.MarianaLight"
 pygments_dark_style = "_pygments_dark.MarianaDark"
 
 
