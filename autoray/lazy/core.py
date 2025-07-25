@@ -497,7 +497,7 @@ class LazyArray:
             itertools.chain(
                 (stringify(x, params) for x in self._args),
                 (
-                    f"{k}: {stringify(v, params)}"
+                    f"{k}={stringify(v, params)}"
                     for k, v in self._kwargs.items()
                 ),
             )
