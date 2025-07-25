@@ -34,7 +34,7 @@ def test_manual_construct():
     assert y.deps == (x0, x1, x2, x3, x4)
     assert re.match(
         r"x\d+ = foo\d+\(\(x\d+, x\d+,\), "
-        r"{1: x\d+}, c: {sub: \(x\d+, x\d+,\)}\)",
+        r"{1: x\d+}, c={sub: \(x\d+, x\d+,\)}\)",
         y.get_source(),
     )
     assert_allclose(y.compute(), x.sum(0))
