@@ -894,8 +894,8 @@ class LazyArray:
     def H(self):
         return conj(transpose(self))
 
-    def reshape(self, shape):
-        return reshape(self, shape)
+    def reshape(self, shape, **kwargs):
+        return reshape(self, shape, **kwargs)
 
     def astype(self, dtype_name):
         return lazy_astype(self, dtype_name)
@@ -1106,6 +1106,8 @@ def shared_intermediates(cache=None):
 def maybe_id(x):
     if hasattr(x, "shape"):
         return id(x)
+    if isinstance(x, list):
+        return tuple(x)
     return x
 
 
@@ -1252,7 +1254,7 @@ permute_dims = transpose
 
 
 @lazy_cache("reshape")
-def _reshape_tuple(a, newshape):
+def _reshape_tuple(a, newshape, **kwargs):
     a = ensure_lazy(a)
     fn_reshape = get_lib_fn(a.backend, "reshape")
 
@@ -1262,7 +1264,7 @@ def _reshape_tuple(a, newshape):
         if isinstance(b, LazyArray):
             a = b
 
-    return a.to(fn_reshape, (a, newshape), shape=newshape)
+    return a.to(fn_reshape, (a, newshape), shape=newshape, kwargs=kwargs)
 
 
 @functools.lru_cache(2**14)
@@ -1279,7 +1281,7 @@ def find_full_reshape(newshape, size):
         return newshape
 
 
-def reshape(a, newshape):
+def reshape(a, newshape, **kwargs):
     newshape = (newshape,) if isinstance(newshape, int) else tuple(newshape)
     newshape = find_full_reshape(newshape, a.size)
 
@@ -1287,7 +1289,7 @@ def reshape(a, newshape):
         # no reshape required
         return a
 
-    return _reshape_tuple(a, newshape)
+    return _reshape_tuple(a, newshape, **kwargs)
 
 
 @lazy_cache("expand_dims")
@@ -1323,7 +1325,13 @@ def getitem_hasher(_, a, key):
     if not isinstance(key, tuple):
         key = (key,)
     hkey = tuple(
-        str(k) if isinstance(k, slice) else id(k) if hasattr(k, "shape") else k
+        str(k)
+        if isinstance(k, slice)
+        else id(k)
+        if hasattr(k, "shape")
+        else tuple(k)
+        if isinstance(k, list)
+        else k
         for k in key
     )
     return f"getitem-{hash((id(a), hkey))}"
@@ -1644,12 +1652,12 @@ def sort(a, axis=-1):
 
 
 @lazy_cache("argsort")
-def argsort(a, axis=-1, *, stable=None):
+def argsort(a, axis=-1, **kwargs):
     a = ensure_lazy(a)
     return a.to(
         fn=get_lib_fn(a.backend, "argsort"),
         args=(a, axis),
-        kwargs={"stable": stable},
+        kwargs=kwargs,
     )
 
 
