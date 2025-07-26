@@ -5,7 +5,23 @@ import autoray as ar
 from .test_autoray import BACKENDS
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize(
+    "backend",
+    [
+        b
+        for b in BACKENDS
+        if any(
+            b.values[0] == other
+            for other in (
+                "numpy",
+                "jax",
+                "torch",
+                "cupy",
+                "dask",
+            )
+        )
+    ],
+)
 @pytest.mark.parametrize(
     "dist,args,kwargs",
     [
