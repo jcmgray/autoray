@@ -1350,6 +1350,15 @@ def allclose(x, y, rtol=1e-05, atol=1e-08):
     return do("all", do("abs", x - y) <= atol + rtol * do("abs", y))
 
 
+def _handle_size_to_shape(size=None):
+    if size is None:
+        return ()
+    try:
+        return tuple(size)
+    except TypeError:
+        return (size,)
+
+
 # ----------------------------- Custom dispatchers -------------------------- #
 
 
@@ -1554,6 +1563,114 @@ _CUSTOM_WRAPPERS["cupy", "linalg.svd"] = svd_not_full_matrices_wrapper
 # ----------------------------------- jax ----------------------------------- #
 
 
+def jax_to_numpy(x):
+    return do("asarray", x, like="numpy")
+
+
+class JaxDefaultRNG:
+    """Stateful but deterministic random number generator for JAX following
+    numpy's Generator API, compatible with `jax.jit`.
+    """
+
+    def __init__(self, seed, **kwargs):
+        import jax
+
+        self.jax = jax
+        self.key = jax.random.key(seed, **kwargs)
+
+    def binomial(self, n, p, size=None, **kwargs):
+        self.key, subkey = self.jax.random.split(self.key)
+        shape = _handle_size_to_shape(size)
+        return self.jax.random.binomial(
+            subkey, n=n, p=p, shape=shape, **kwargs
+        )
+
+    def choice(self, a, size=None, replace=True, p=None, axis=0, **kwargs):
+        self.key, subkey = self.jax.random.split(self.key)
+        shape = _handle_size_to_shape(size)
+        return self.jax.random.choice(
+            subkey,
+            a,
+            shape=shape,
+            replace=replace,
+            p=p,
+            axis=axis,
+            **kwargs,
+        )
+
+    def exponential(self, scale=1.0, size=None, **kwargs):
+        self.key, subkey = self.jax.random.split(self.key)
+        shape = _handle_size_to_shape(size)
+        x = self.jax.random.exponential(subkey, shape=shape, **kwargs)
+        if scale != 1.0:
+            x *= scale
+        return x
+
+    def gumbel(self, loc=0.0, scale=1.0, size=None, **kwargs):
+        self.key, subkey = self.jax.random.split(self.key)
+        shape = _handle_size_to_shape(size)
+        x = self.jax.random.gumbel(subkey, shape=shape, **kwargs)
+        if scale != 1.0:
+            x *= scale
+        if loc != 0.0:
+            x += loc
+        return x
+
+    def integers(self, low, high=None, size=None, **kwargs):
+        self.key, subkey = self.jax.random.split(self.key)
+        shape = _handle_size_to_shape(size)
+        if high is None:
+            high = low
+            low = 0
+        return self.jax.random.randint(
+            subkey,
+            shape=shape,
+            minval=low,
+            maxval=high,
+            **kwargs,
+        )
+
+    def normal(self, loc=0.0, scale=1.0, size=None, **kwargs):
+        self.key, subkey = self.jax.random.split(self.key)
+        shape = _handle_size_to_shape(size)
+        x = self.jax.random.normal(subkey, shape=shape, **kwargs)
+        if scale != 1.0:
+            x *= scale
+        if loc != 0.0:
+            x += loc
+        return x
+
+    def permutation(self, x, **kwargs):
+        self.key, subkey = self.jax.random.split(self.key)
+        return self.jax.random.permutation(subkey, x, **kwargs)
+
+    def poisson(self, lam=1.0, size=None, **kwargs):
+        self.key, subkey = self.jax.random.split(self.key)
+        shape = _handle_size_to_shape(size)
+        x = self.jax.random.poisson(subkey, lam, shape=shape, **kwargs)
+        return x
+
+    def random(self, size=None, **kwargs):
+        return self.uniform(size=size, **kwargs)
+
+    def uniform(self, low=0.0, high=1.0, size=None, **kwargs):
+        self.key, subkey = self.jax.random.split(self.key)
+        shape = _handle_size_to_shape(size)
+        return self.jax.random.uniform(
+            subkey, shape=shape, minval=low, maxval=high, **kwargs
+        )
+
+
+def jax_default_rng(seed, **kwargs):
+    if isinstance(seed, JaxDefaultRNG):
+        return seed
+    return JaxDefaultRNG(seed, **kwargs)
+
+
+register_function("jax", "random.default_rng", jax_default_rng)
+register_backend(JaxDefaultRNG, "jax")
+
+
 _JAX_RANDOM_KEY = None
 
 
@@ -1599,10 +1716,6 @@ def jax_random_normal(loc=0.0, scale=1.0, size=None, **kwargs):
     if loc != 0.0:
         x += loc
     return x
-
-
-def jax_to_numpy(x):
-    return do("asarray", x, like="numpy")
 
 
 _BACKEND_ALIASES["jaxlib"] = "jax"
@@ -2083,6 +2196,80 @@ def torch_flip_wrap(torch_flip):
         return torch_flip(x, dims)
 
     return numpy_like
+
+
+class TorchDefaultRNG:
+    def __init__(self, seed, device=None):
+        import torch
+
+        self._torch = torch
+        self._generator = torch.Generator(device=device)
+        self._generator.manual_seed(seed)
+
+    # def binomial(self, n, p, size=None, **kwargs):
+    #     raise NotImplementedError()
+
+    # def choice(self, a, size=None, replace=True, p=None, axis=0, **kwargs):
+    #     raise NotImplementedError()
+
+    # def exponential(self, scale=1.0, size=None, **kwargs):
+    #     raise NotImplementedError()
+
+    # def gumbel(self, loc=0.0, scale=1.0, size=None, **kwargs):
+    #     raise NotImplementedError()
+
+    def integers(self, low, high=None, size=None, **kwargs):
+        if high is None:
+            high = low
+            low = 0
+        size = _handle_size_to_shape(size)
+        return self._torch.randint(
+            low, high, size, generator=self._generator, **kwargs
+        )
+
+    # def poisson(self, lam=1.0, size=None, **kwargs):
+    #     raise NotImplementedError()
+
+    def normal(self, loc=0.0, scale=1.0, size=None, **kwargs):
+        size = _handle_size_to_shape(size)
+        x = self._torch.randn(size, generator=self._generator, **kwargs)
+        if scale != 1.0:
+            x = x * scale
+        if loc != 0.0:
+            x = x + loc
+        return x
+
+    def random(self, size=None, **kwargs):
+        size = _handle_size_to_shape(size)
+        return self._torch.rand(size, generator=self._generator, **kwargs)
+
+    def permutation(self, x, **kwargs):
+        if isinstance(x, int):
+            return self._torch.randperm(x, generator=self._generator, **kwargs)
+
+        axis = kwargs.get("axis", 0)
+        n = x.shape[axis]
+        perm_indices = self._torch.randperm(
+            n, generator=self._generator, device=x.device
+        )
+        return self._torch.index_select(x, axis, perm_indices)
+
+    def uniform(self, low=0.0, high=1.0, size=None, **kwargs):
+        size = _handle_size_to_shape(size)
+        x = self._torch.rand(size, generator=self._generator, **kwargs)
+        if low != 0.0 or high != 1.0:
+            x = x * (high - low) + low
+        return x
+
+
+def torch_default_rng(seed, **kwargs):
+    if isinstance(seed, TorchDefaultRNG):
+        return seed
+    return TorchDefaultRNG(seed, **kwargs)
+
+
+register_function("torch", "random.default_rng", torch_default_rng)
+register_backend(TorchDefaultRNG, "torch")
 
 
 _FUNCS["torch", "pad"] = torch_pad
