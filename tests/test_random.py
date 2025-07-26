@@ -67,3 +67,18 @@ def test_random_default_rng(backend, dist, args, kwargs):
     rng = ar.do("random.default_rng", seed, like=backend)
     x2 = ar.do("to_numpy", getattr(rng, dist)(*args, **kwargs))
     assert ar.do("allclose", x, x2)
+
+
+def test_jax_jit_random():
+    pytest.importorskip("jax")
+
+    @ar.autojit(backend="jax")
+    def f(seed):
+        rng = ar.do("random.default_rng", seed)
+        return rng.normal(size=(3, 4))
+
+    x1 = ar.do("to_numpy", f(ar.do("array", 42)))
+    x2 = ar.do("to_numpy", f(ar.do("array", 42)))
+    assert ar.do("allclose", x1, x2)
+    x3 = ar.do("to_numpy", f(ar.do("array", 43)))
+    assert not ar.do("allclose", x1, x3)
