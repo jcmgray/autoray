@@ -69,15 +69,49 @@ overrides method 1. above but 2. and 3. still take precedence. The argument to
 array.
 
 
+## Namespace API
+
+An alternative way to call functions is to get a namespace object using
+[`get_namespace`](autoray.get_namespace). There are two main ways to use this.
+
+**1. Late dispatch -- alternative syntax to `do`:**
+
+Here dispatch still occurs according to above 4 patterns, but with a syntax
+similar to a standard array library.
+
+```python
+xp = ar.get_namespace()
+x = xp.ones((3, 4), like="torch")
+xp.sqrt(x)
+```
+
 ````{hint}
-In all the above cases `do(fn_name, *args, like=like, **kwargs)` could be
-replaced with:
+`autoray` also provides this 'default namespace' as an importable object like
+so:
 ```python
 from autoray import numpy as np
 
 np.fn_name(*args, like=like, **kwargs)
 ```
 ````
+
+**2. Early dispatch -- specialized to a particular `backend` (and optionally
+`dtype` and `device`)**
+
+Here [`get_namespace`](autoray.get_namespace) dispatches on a `like` argument:
+
+```python
+# if `like` is an array, dtype and device will be picked up from it
+xp = ar.get_namespace(like="torch", device="cuda", dtype="float32")
+x = xp.ones((3, 4))
+xp.sqrt(x)
+```
+
+Function calls then lookup and cache the specific backend function, removing
+any dispatch overhead. This is a concise and fast way to use `autoray` within a
+function where you are happy to lock in the backend. It is also similar how the
+[*python array api*](https://data-apis.org/array-api) works.
+
 
 ### Manual dispatch functions
 
@@ -298,18 +332,26 @@ reference. The following are deviations from this:
 
 ## Comparison to alternatives
 
+* The [Python Array API](https://data-apis.org/array-api)
+  (`x.__array_namespace__()`) is a proposed standard for array libraries to
+  implement that many are converging to. It hopefully will be the de-facto
+  approach for writing backend array agnostic code, and
+  [autoray.get_namespace](autoray.get_namespace) provides a similar mechanism
+  with this in mind. The current benefit of `autoray` is that it does not
+  require the backend library to explicitly support it, and it can dynamically
+  compose and replace functions etc.
+
 * The ``__array_function__`` protocol has been
   [suggested](https://www.numpy.org/neps/nep-0018-array-function-protocol.html)
-  and now implemented in ``numpy``. This will hopefully eventually be a nice
-  solution for array dispatch. However, it requires the backend library to
-  implement the protocol, which has not been done for common libraries yet.
+  and now implemented in ``numpy``. This is more orientated around array
+  classes that explicitly subclass `numpy.ndarray`.
 
 * The [uarray](https://github.com/Quansight-Labs/uarray) project appears to
   have similar goals but is still being developed.
 
-* [`functools.singledispatch`](https://docs.python.org/3/library/functools.html#functools.singledispatch) is a general *single* dispatch mechanism, but it is slower
-  and requires the user to explicitly register each function they want to
-  dispatch on.
+* [`functools.singledispatch`](https://docs.python.org/3/library/functools.html#functools.singledispatch)
+  is a general *single* dispatch mechanism, but it is slower and requires the
+  user to explicitly register each function they want to dispatch on.
 
 * [`plum`](https://github.com/beartype/plum) is a general *multiple* dispatch
   mechanism, but again it would require registering every function for every

@@ -184,7 +184,7 @@ def set_backend(like, set_globally="auto"):
         backend = like
         inferrer = functools.partial(_always_the_same, backend=backend)
     else:
-        backend = infer_backend(like)
+        backend = _infer_class_backend_cached(like.__class__)
         inferrer = functools.partial(_always_the_same, backend=backend)
 
     if set_globally == "auto":
@@ -376,21 +376,6 @@ def register_creation_routine(
     _CREATION_INJECT[backend, fn] = (inject_dtype, inject_device)
 
 
-def _maybe_inject_dtype_device(backend, fn, args, kwargs, like):
-    try:
-        inject_dtype, inject_device = _CREATION_INJECT[backend, fn]
-    except KeyError:
-        # default to just dtype (e.g. for numpy)
-        inject_dtype = True
-        inject_device = False
-        _CREATION_INJECT[backend, fn] = (inject_dtype, inject_device)
-
-    if inject_dtype:
-        kwargs.setdefault("dtype", getattr(like, "dtype", type(like)))
-    if inject_device:
-        kwargs.setdefault("device", like.device)
-
-
 def _choose_backend(fn, args, kwargs, like=None):
     """Private function to choose a backend based on function name and
     signature, which passes args and kwargs by reference for performance and
@@ -405,11 +390,22 @@ def _choose_backend(fn, args, kwargs, like=None):
         return like
     else:
         # explicit example array
-        backend = infer_backend(like)
+        backend = _infer_class_backend_cached(like.__class__)
 
         # check if we should set some extra defaults based on the example array
         if fn in _CREATION_ROUTINES:
-            _maybe_inject_dtype_device(backend, fn, args, kwargs, like)
+            try:
+                inject_dtype, inject_device = _CREATION_INJECT[backend, fn]
+            except KeyError:
+                # default to just dtype (e.g. for numpy)
+                inject_dtype = True
+                inject_device = False
+                _CREATION_INJECT[backend, fn] = (inject_dtype, inject_device)
+
+            if inject_dtype:
+                kwargs.setdefault("dtype", getattr(like, "dtype", type(like)))
+            if inject_device:
+                kwargs.setdefault("device", like.device)
 
         return backend
 
@@ -1061,7 +1057,7 @@ def dag(x):
     try:
         return x.H
     except AttributeError:
-        backend = infer_backend(x)
+        backend = _infer_class_backend_cached(x.__class__)
         return do("conj", do("transpose", x, like=backend), like=backend)
 
 
@@ -1086,7 +1082,7 @@ def reshape(x, shape):
 def to_backend_dtype(dtype_name, like):
     """Turn string specifier ``dtype_name`` into dtype of backend ``like``."""
     if not isinstance(like, str):
-        like = infer_backend(like)
+        like = _infer_class_backend_cached(like.__class__)
 
     try:
         return get_lib_fn(like, dtype_name)
@@ -1401,7 +1397,10 @@ def register_dispatch(fun, dispatcher, raw_signature=True):
 
 def default_dispatcher(args, kwargs):
     """Try to infer backend from first argument passed to function."""
-    return infer_backend(args[0])
+    try:
+        return _infer_class_backend_cached(args[0].__class__)
+    except IndexError:
+        raise TypeError("No args to infer backend from.")
 
 
 # lookup of custom dispatcher methods, for cases when backend cannot be
@@ -1412,11 +1411,11 @@ _DISPATCHERS = defaultdict(lambda: default_dispatcher)
 def join_array_dispatcher(args, kwargs):
     """Dispatcher for functions where first argument is a sequence."""
     try:
-        return infer_backend(args[0][0])
+        return _infer_class_backend_cached(args[0][0].__class__)
     except (TypeError, ValueError):
         # user passed an empty sequence, or something non-iterable
         # try to infer backend from first argument as fallback
-        return infer_backend(args[0])
+        return _infer_class_backend_cached(args[0].__class__)
 
 
 # List of functions listed in numpy API as array joining operations
@@ -1463,48 +1462,186 @@ register_dispatch("subtract", binary_dispatcher, raw_signature=False)
 # --------------- object to act as drop-in replace for numpy ---------------- #
 
 
-def _get_mimic_function_or_attribute(self, fn):
-    # respect all 'dunder' special methods and attributes
-    if (fn[:2] == "__") and (fn[-2:] == "__"):
-        return object.__getattribute__(self, fn)
+class InjectDtypeDevice:
+    """Wrapper that injects defaultdtype and device arguments into a function"""
 
-    # look out for certain submodules which are not functions
-    if fn == "linalg":
-        return NumpyMimic("linalg")
+    __slots__ = ("_fn", "_device", "_dtype")
 
-    if fn == "random":
-        return NumpyMimic("random")
+    def __init__(self, fn, device=None, dtype=None):
+        self._fn = fn
+        self._device = device
+        self._dtype = dtype
 
-    # if this is the e.g. linalg mimic, preprend 'linalg.'
-    submod = object.__getattribute__(self, "submodule")
-    if submod is not None:
-        fn = ".".join((submod, fn))
+    def __call__(self, *args, **kwargs):
+        if self._device is not None and "device" not in kwargs:
+            kwargs["device"] = self._device
+        if self._dtype is not None and "dtype" not in kwargs:
+            kwargs["dtype"] = self._dtype
+        return self._fn(*args, **kwargs)
 
-    return functools.partial(do, fn)
+    def __repr__(self):
+        return (
+            f"InjectDtypeDevice(fn={self._fn}, "
+            f"device={self._device}, "
+            f"dtype={self._dtype})"
+        )
 
 
-class NumpyMimic:
-    """A class to mimic the syntax of using `numpy` directly."""
+class AutoNamespace:
+    """Mimics a namespace, optionally for a specific backend, device, and
+    dtype, caching the lookup of functions, and injecting default device and
+    dtype arguments for certain creation routines.
 
-    def __init__(self, submodule=None):
-        self.submodule = submodule
+    Parameters
+    ----------
+    like : array_like, str, or None
+        The backend to use, or an object to infer the backend from. If None,
+        the default behavior is to use `autoray.do` and auto dispatch backend
+        at function call time. If given, the functions are cached at first
+        call.
+    device : str, optional
+        The device to use for the backend. If None, it will be inferred from
+        the `like` paramater is that is array-like or set to None.
+    dtype : str, optional
+        The dtype to use for the backend. If None, it will be inferred from
+        the `like` parameter if that is array-like or set to None.
+    submodule : str, optional
+        This is used internally when nesting attribute lookups, e.g.
+        `xp.random.normal`, `xp.linalg.eigh`.
+    """
 
-    def __getattribute__(self, attr):
-        # cache the correct partial function (or special method/attribute)
-        d = object.__getattribute__(self, "__dict__")
+    def __init__(
+        self,
+        like=None,
+        device=None,
+        dtype=None,
+        submodule=None,
+    ):
+        if like is None:
+            # use autoray.do and auto dispatch
+            self._backend = None
+        elif isinstance(like, str):
+            # commit to a specific given backend
+            self._backend = like
+        else:
+            # commit to a specific backend inferred from array-like
+            self._backend = _infer_class_backend_cached(like.__class__)
+
+        if device is None:
+            if like is not None:
+                if hasattr(like, "device"):
+                    device = like.device
+        self._device = device
+
+        if dtype is None:
+            if like is not None:
+                if hasattr(like, "dtype"):
+                    dtype = like.dtype
+        self._dtype = dtype
+        self._submodule = submodule
+
+    def _get_submodule(self, name):
+        new = object.__new__(type(self))
+        new._backend = self._backend
+        new._device = self._device
+        new._dtype = self._dtype
+        new._submodule = name
+        return new
+
+    def _get_fn(self, name):
+        if self._submodule is not None:
+            # prepend the submodule name
+            name = f"{self._submodule}.{name}"
+
+        if name in ("random", "linalg"):
+            # note that other submodules can be accessed, these are just the
+            # ones with functions that we possibly want to translate
+            return self._get_submodule(name)
+
+        if self._backend is None:
+            # use autoray.do and auto dispatch
+            return functools.partial(do, name)
+
+        fn = get_lib_fn(self._backend, name)
+
+        # possibly wrap for dtype and device injection
+        if name in _CREATION_ROUTINES:
+            inject_dtype, inject_device = _CREATION_INJECT.get(
+                (self._backend, fn), (True, False)
+            )
+
+            if not inject_dtype:
+                # this is not a function accepts dtype
+                dtype_to_inject = None
+            else:
+                dtype_to_inject = self._dtype
+
+            if not inject_device:
+                # this is not a function accepts device
+                device_to_inject = None
+            else:
+                device_to_inject = self._device
+
+            if (dtype_to_inject is not None) or (device_to_inject is not None):
+                # only wrap if we actually inject something
+                fn = InjectDtypeDevice(fn, device_to_inject, dtype_to_inject)
+
+        return fn
+
+    def __getattribute__(self, name):
         try:
-            pfn = d[attr]
-        except KeyError:
-            pfn = d[attr] = _get_mimic_function_or_attribute(self, attr)
+            return object.__getattribute__(self, name)
+        except AttributeError:
+            x = self._get_fn(name)
+            super().__getattribute__("__dict__")[name] = x
+            return x
 
-        return pfn
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}("
+            f"backend={self._backend}, "
+            f"device={self._device}, "
+            f"dtype={self._dtype}, "
+            f"submodule={self._submodule}"
+            ")"
+        )
 
-    @staticmethod
-    def __repr__():
-        return "<autoray.numpy>"
+
+numpy = AutoNamespace()
 
 
-numpy = NumpyMimic()
+def get_namespace(like=None, device=None, dtype=None, submodule=None):
+    """Get an automatic namespace object.
+
+    If `like` is None, the namespace essentially provides an alternative syntax
+    to `do`, dispatching each function at calltime, and allowing the backend
+    and function implementations to be dynamically updated.
+
+    If `like` is supplied however, the backend is eagerly dispatched and
+    functions are loaded and cached specifically for that backend. In this
+    case, default `device` and `dtype` can also be specified for various array
+    creation routines, or if `like` is an array, inferred from that.
+
+    Parameters
+    ----------
+    like : array-like, str or None, optional
+        An array-like object to dispatch on, an explicit backend name, or None.
+    device : str or None, optional
+        The device to use for array creation, or None to infer from `like`.
+    dtype : str or None, optional
+        The data type to use for array creation, or None to infer from `like`.
+
+    Returns
+    -------
+    AutoNamespace
+        An automatic namespace object.
+    """
+    return AutoNamespace(
+        like=like,
+        device=device,
+        dtype=dtype,
+        submodule=submodule,
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -2300,6 +2437,7 @@ _FUNC_ALIASES["torch", "random.uniform"] = "rand"
 _FUNC_ALIASES["torch", "scipy.linalg.expm"] = "matrix_exp"
 _FUNC_ALIASES["torch", "split"] = "tensor_split"
 _FUNC_ALIASES["torch", "take"] = "index_select"
+_FUNC_ALIASES["torch", "take_along_axis"] = "take_along_dim"
 
 _SUBMODULE_ALIASES["torch", "linalg.expm"] = "torch"
 _SUBMODULE_ALIASES["torch", "scipy.linalg.expm"] = "torch"
@@ -2340,6 +2478,9 @@ _CUSTOM_WRAPPERS["torch", "triu"] = make_translator(
     [("m", ("input",)), ("k", ("diagonal", 0))]
 )
 _CUSTOM_WRAPPERS["torch", "zeros"] = torch_zeros_ones_wrap
+_CUSTOM_WRAPPERS["torch", "take_along_axis"] = make_translator(
+    [("arr", ("input",)), ("indices", ("indices",)), ("axis", ("dim", -1))]
+)
 
 _torch_reduce_translation = [
     ("a", ("input",)),
@@ -2537,3 +2678,55 @@ _CUSTOM_WRAPPERS["paddle", "triu"] = make_translator(
 )
 for f in ("sum", "max", "min", "prod", "mean", "std", "var"):
     _CUSTOM_WRAPPERS["paddle", f] = paddle_wrap_reduction
+
+
+# -------------------------------- pytensor --------------------------------- #
+
+
+@shape.register("pytensor")
+def pytensor_shape(x):
+    return x.type.shape
+
+
+def pytensor_wrap_qr_with_shapes(fn):
+    import pytensor.tensor as pt
+
+    @functools.wraps(fn)
+    def qr_shaped(x, **kwargs):
+        *b, m, n = x.type.shape
+        k = min(m, n)
+        q, r = fn(x, **kwargs)
+        q = pt.specify_shape(q, (*b, m, k))
+        r = pt.specify_shape(r, (*b, k, n))
+        return q, r
+
+    return qr_shaped
+
+
+def pytensor_wrap_svd_with_shapes(fn):
+    import pytensor.tensor as pt
+
+    @functools.wraps(fn)
+    def svd_shaped(x, full_matrices=False, **kwargs):
+        *b, m, n = x.type.shape
+
+        k = min(m, n)
+        if full_matrices:
+            u_shape = (*b, m, m)
+            vh_shape = (*b, n, n)
+        else:
+            u_shape = (*b, m, k)
+            vh_shape = (*b, k, n)
+
+        u, s, vh = fn(x, full_matrices=full_matrices, **kwargs)
+        u = pt.specify_shape(u, u_shape)
+        s = pt.specify_shape(s, (*b, k))
+        vh = pt.specify_shape(vh, vh_shape)
+        return u, s, vh
+
+    return svd_shaped
+
+
+_MODULE_ALIASES["pytensor"] = "pytensor.tensor"
+_CUSTOM_WRAPPERS["pytensor", "linalg.qr"] = pytensor_wrap_qr_with_shapes
+_CUSTOM_WRAPPERS["pytensor", "linalg.svd"] = pytensor_wrap_svd_with_shapes

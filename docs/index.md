@@ -84,6 +84,15 @@ np.exp(z)
 #        [2.7182817, 2.7182817, 2.7182817, 2.7182817]], dtype=float32)
 ```
 
+Alternatively you can use `autoray.get_namespace` to get a backend specific
+(with optional default device and dtype) namespace object, (c.f. the Python
+Array Api):
+
+```python
+xp = ar.get_namespace(z)
+xp.einsum("ii->i", z)
+```
+
 Custom backends and functions can be dynamically registered with:
 
 * [`register_backend`](autoray.register_backend)

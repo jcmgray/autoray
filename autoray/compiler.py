@@ -3,7 +3,6 @@ import functools
 from .autoray import (
     do,
     infer_backend,
-    backend_like,
     tree_map,
     tree_iter,
     tree_flatten,
@@ -47,11 +46,12 @@ class CompilePython:
         variables = tree_map(lazy.array, (args, kwargs))
 
         if self._share_intermediates:
-            with backend_like("autoray.lazy"), lazy.shared_intermediates():
+            # with backend_like("autoray.lazy"), lazy.shared_intermediates():
+            with lazy.shared_intermediates():
                 outs = self._fn(*variables[0], **variables[1])
         else:
-            with backend_like("autoray.lazy"):
-                outs = self._fn(*variables[0], **variables[1])
+            # with backend_like("autoray.lazy"):
+            outs = self._fn(*variables[0], **variables[1])
 
         return lazy.Function(
             variables, outs, fold_constants=self._fold_constants
@@ -164,12 +164,72 @@ class CompileTorch:
         return out
 
 
+class CompileTorch2:
+    def __init__(self, fn, **kwargs):
+        import torch
+
+        self.torch = torch
+
+        def f(*args, **kwargs):
+            # for some reason torch compile wants a wrapper around
+            return fn(*args, **kwargs)
+
+        self._jit_fn = torch.compile(f, **kwargs)
+
+    def __call__(self, *args, array_backend=None, **kwargs):
+        if array_backend != "torch":
+            # torch doesn't handle numpy arrays itself
+            args = tree_map(self.torch.as_tensor, args, is_array)
+        out = self._jit_fn(*args, **kwargs)
+        if array_backend != "torch":
+            out = do("asarray", out, like=array_backend)
+        return out
+
+
+class CompilePytensor:
+    def __init__(self, fn, **kwargs):
+        self._fn = fn
+        self._jit_fn = None
+        self._jit_kwargs = kwargs
+        self._output_ref_tree = None
+
+    def setup(self, args, kwargs):
+        import pytensor
+        import pytensor.tensor as pt
+
+        flat_arrays, ref_tree = tree_flatten(
+            (args, kwargs),
+            is_leaf=is_array,
+            get_ref=True,
+        )
+        variables = [
+            pt.tensor(dtype=x.dtype, shape=x.shape) for x in flat_arrays
+        ]
+        pt_args, pt_kwargs = tree_unflatten(variables, ref_tree)
+        result = self._fn(*pt_args, **pt_kwargs)
+        outs, self._output_ref_tree = tree_flatten(
+            result, is_leaf=is_array, get_ref=True
+        )
+        self._jit_fn = pytensor.function(variables, outs, **self._jit_kwargs)
+
+    def __call__(self, *args, array_backend=None, **kwargs):
+        if self._jit_fn is None:
+            self.setup(args, kwargs)
+
+        flat_arrays = tree_flatten((args, kwargs))
+        flat_outs = self._jit_fn(*flat_arrays)
+        return tree_unflatten(flat_outs, self._output_ref_tree)
+
+
 _backend_lookup = {}
 
 _compiler_lookup = {
     "jax": CompileJax,
     "tensorflow": CompileTensorFlow,
     "torch": CompileTorch,
+    "torch:trace": CompileTorch,
+    "torch:compile": CompileTorch2,
+    "pytensor": CompilePytensor,
 }
 
 
@@ -251,8 +311,18 @@ def autojit(fn=None, *, backend=None, compiler_opts=None):
     ----------
     fn : callable
         The autoray function to compile.
-    backend : {None, 'python', 'jax', 'torch', 'tensorflow'}, optional
-        If set, use this as the default backend.
+    backend : str, optional
+        If set, use this as the default backend. The options are:
+
+        - ``'python'``: extract and unravel all the ``do`` calls into a
+          code object using ``compile`` which is then run with ``exec``.
+        - ``'jax'``: use `jax.jit` to compile the function.
+        - ``'tensorflow'``: use `tf.function` to compile the function.
+        - ``'torch'``: use `torch.jit.trace` to compile the function.
+        - ``'pytensor'``: use `pytensor.function` to compile the function.
+
+        If not set, the backend will be inferred from the input arrays, or it
+        can be set at call time with the ``backend`` keyword argument.
     compiler_opts : dict[dict], optional
         Dict of dicts when you can supply options for each compiler backend
         separately, e.g.:

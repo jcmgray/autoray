@@ -269,22 +269,25 @@ def test_mgs(backend):
     assert ar.to_numpy(y) == pytest.approx(3)
 
 
-def modified_gram_schmidt_np_mimic(X):
-    from autoray import numpy as np
+def modified_gram_schmidt_np_mimic(X, explicit_namespace=False):
+    if explicit_namespace:
+        xp = ar.get_namespace(X)
+    else:
+        from autoray import numpy as xp
 
-    print(np)
+        print(xp)
 
     Q = []
     for j in range(0, shape(X)[0]):
         q = X[j, :]
         for i in range(0, j):
-            rij = np.tensordot(np.conj(Q[i]), q, 1)
+            rij = xp.tensordot(xp.conj(Q[i]), q, 1)
             q = q - rij * Q[i]
 
-        rjj = np.linalg.norm(q, 2)
+        rjj = xp.linalg.norm(q, 2)
         Q.append(q / rjj)
 
-    return np.stack(Q, axis=0)
+    return xp.stack(Q, axis=0)
 
 
 def test_numpy_mimic_dunder_methods():
@@ -301,13 +304,14 @@ def test_numpy_mimic_dunder_methods():
 
 
 @pytest.mark.parametrize("backend", BACKENDS)
-def test_mgs_np_mimic(backend):
+@pytest.mark.parametrize("explicit_namespace", [True, False])
+def test_mgs_np_mimic(backend, explicit_namespace):
     if backend == "sparse":
         pytest.xfail("Sparse doesn't support linear algebra yet...")
     if backend == "ctf":
         pytest.xfail("ctf does not have 'stack' function.")
     x = gen_rand((3, 5), backend)
-    Ux = modified_gram_schmidt_np_mimic(x)
+    Ux = modified_gram_schmidt_np_mimic(x, explicit_namespace)
     y = ar.do("sum", Ux @ ar.dag(Ux))
     assert ar.to_numpy(y) == pytest.approx(3)
 
@@ -935,11 +939,27 @@ class TestCreationRoutines:
         y = ar.do("empty", (2, 3), like=x)
         check_array_dtypes(x, y)
 
+    def test_empty_passes_dtype_device_namespace(self, backend, dtype):
+        if backend in ("tensorflow",):
+            pytest.xfail(f"{backend} doesn't support empty yet.")
+        x = gen_rand((1,), backend, dtype)
+        xp = ar.get_namespace(x)
+        y = xp.empty((2, 3))
+        check_array_dtypes(x, y)
+
     def test_eye_passes_dtype_device(self, backend, dtype):
         if backend == "paddle" and "complex" in dtype:
             pytest.xfail("Paddle doesn't support complex eye yet.")
         x = gen_rand((1,), backend, dtype)
         y = ar.do("eye", 3, like=x)
+        check_array_dtypes(x, y)
+
+    def test_eye_passes_dtype_device_namespace(self, backend, dtype):
+        if backend == "paddle" and "complex" in dtype:
+            pytest.xfail("Paddle doesn't support complex eye yet.")
+        x = gen_rand((1,), backend, dtype)
+        xp = ar.get_namespace(x)
+        y = xp.eye(3)
         check_array_dtypes(x, y)
 
     def test_full_passes_dtype_device(self, backend, dtype):
@@ -949,6 +969,14 @@ class TestCreationRoutines:
         y = ar.do("full", (2, 3), 7, like=x)
         check_array_dtypes(x, y)
 
+    def test_full_passes_dtype_device_namespace(self, backend, dtype):
+        if backend in ("tensorflow",):
+            pytest.xfail(f"{backend} doesn't support full yet.")
+        x = gen_rand((1,), backend, dtype)
+        xp = ar.get_namespace(x)
+        y = xp.full((2, 3), 7)
+        check_array_dtypes(x, y)
+
     def test_identity_passes_dtype_device(self, backend, dtype):
         if backend == "paddle" and "complex" in dtype:
             pytest.xfail("Paddle doesn't support complex identity yet.")
@@ -956,14 +984,34 @@ class TestCreationRoutines:
         y = ar.do("identity", 4, like=x)
         check_array_dtypes(x, y)
 
+    def test_identity_passes_dtype_device_namespace(self, backend, dtype):
+        if backend == "paddle" and "complex" in dtype:
+            pytest.xfail("Paddle doesn't support complex identity yet.")
+        x = gen_rand((1,), backend, dtype)
+        xp = ar.get_namespace(x)
+        y = xp.identity(4)
+        check_array_dtypes(x, y)
+
     def test_ones_passes_dtype_device(self, backend, dtype):
         x = gen_rand((1,), backend, dtype)
         y = ar.do("ones", (2, 3), like=x)
         check_array_dtypes(x, y)
 
+    def test_ones_passes_dtype_device_namespace(self, backend, dtype):
+        x = gen_rand((1,), backend, dtype)
+        xp = ar.get_namespace(x)
+        y = xp.ones((2, 3))
+        check_array_dtypes(x, y)
+
     def test_zeros_passes_dtype_device(self, backend, dtype):
         x = gen_rand((1,), backend, dtype)
         y = ar.do("zeros", (2, 3), like=x)
+        check_array_dtypes(x, y)
+
+    def test_zeros_passes_dtype_device_namespace(self, backend, dtype):
+        x = gen_rand((1,), backend, dtype)
+        xp = ar.get_namespace(x)
+        y = xp.zeros((2, 3))
         check_array_dtypes(x, y)
 
     # def test_arange_passes_dtype_device(self, backend, dtype):
