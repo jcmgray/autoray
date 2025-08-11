@@ -1749,6 +1749,34 @@ def take(x, indices):
     )
 
 
+@lazy_cache("take_along_axis")
+def take_along_axis(arr, indices, axis=-1):
+    arr = ensure_lazy(arr)
+    indices = ensure_lazy(indices)
+
+    if axis < 0:
+        axis += arr.ndim
+
+    fn = get_lib_fn(arr.backend, "take_along_axis")
+    new_shape = tuple(
+        # target axis gets length from indices
+        db
+        if ax == axis
+        # other axes are broadcast
+        else max(da, db)
+        for ax, (da, db) in enumerate(zip(arr.shape, indices.shape))
+    )
+
+    return LazyArray(
+        backend=arr.backend,
+        fn=fn,
+        args=(arr, indices, axis),
+        kwargs=None,
+        shape=new_shape,
+        deps=(arr, indices),
+    )
+
+
 def make_binary_func(name, fn):
     @lazy_cache(name)
     def binary_func(x1, x2):
