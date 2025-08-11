@@ -774,15 +774,8 @@ class LazyArray:
         return self.shape[0]
 
     def __iter__(self):
-        import warnings
-
-        warnings.warn(
-            "Iterating over LazyArray to get the computational graph nodes is "
-            "deprecated - use `LazyArray.descend()` instead. Eventually "
-            "`iter(lz)` will iterate over first axis slices."
-        )
-
-        return self.descend()
+        for ax in range(self.shape[0]):
+            yield self[ax]
 
     @property
     def ndim(self):
