@@ -1797,6 +1797,7 @@ def make_binary_func(name, fn):
 
 add = make_binary_func("add", operator.add)
 eq = make_binary_func("eq", operator.eq)
+equal = make_binary_func("equal", operator.eq)
 floordivide = make_binary_func("floordivide", operator.floordiv)
 ge = make_binary_func("ge", operator.ge)
 gt = make_binary_func("gt", operator.gt)
