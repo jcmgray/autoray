@@ -2697,7 +2697,7 @@ def pytensor_wrap_qr_with_shapes(fn):
     def qr_shaped(x, **kwargs):
         *b, m, n = x.type.shape
         k = min(m, n)
-        q, r = fn(x, **kwargs)
+        q, r = fn(x, mode="economic", **kwargs)
         q = pt.specify_shape(q, (*b, m, k))
         r = pt.specify_shape(r, (*b, k, n))
         return q, r
