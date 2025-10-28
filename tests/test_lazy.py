@@ -2,9 +2,9 @@ import functools
 import re
 
 import pytest
-
-from autoray import do, lazy, to_numpy, infer_backend, astype, shape
 from numpy.testing import assert_allclose, assert_raises
+
+from autoray import astype, do, infer_backend, lazy, shape, to_numpy
 
 from .test_autoray import BACKENDS, gen_rand
 

@@ -1,10 +1,9 @@
 import pytest
-
-from autoray import do, autojit, infer_backend, to_numpy, shape
-from .test_autoray import BACKENDS, gen_rand
-
 from numpy.testing import assert_allclose
 
+from autoray import autojit, do, infer_backend, shape, to_numpy
+
+from .test_autoray import BACKENDS, gen_rand
 
 BACKENDS = [
     p for p in BACKENDS if p.values[0] in ("jax", "torch", "tensorflow")

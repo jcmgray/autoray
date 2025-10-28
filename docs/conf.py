@@ -3,9 +3,9 @@
 # For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
+import datetime
 import os
 import sys
-import datetime
 
 sys.path.append(os.path.abspath("./_pygments"))
 
@@ -91,8 +91,9 @@ def linkcode_resolve(domain, info):
     """
     Determine the URL corresponding to Python object
     """
-    import autoray
     import inspect
+
+    import autoray
 
     if domain != "py":
         return None

@@ -5,12 +5,11 @@ TODO: lstsq, pinv, eigvals, eigvalsh
 import operator
 
 from ..autoray import get_lib_fn
-
 from .core import (
-    shape,
     ensure_lazy,
-    lazy_cache,
     find_common_backend,
+    lazy_cache,
+    shape,
 )
 
 

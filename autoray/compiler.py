@@ -1,15 +1,15 @@
 import functools
 
+from . import lazy
 from .autoray import (
     do,
     infer_backend,
-    tree_map,
-    tree_iter,
-    tree_flatten,
-    tree_unflatten,
     is_array,
+    tree_flatten,
+    tree_iter,
+    tree_map,
+    tree_unflatten,
 )
-from . import lazy
 
 
 class CompilePython:

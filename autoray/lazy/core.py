@@ -1,14 +1,13 @@
 """Core lazy array functionality."""
 
-import operator
-import threading
+import collections
+import contextlib
 import functools
 import itertools
-import contextlib
-import collections
+import operator
+import threading
 
 from ..autoray import (
-    shape,
     astype,
     get_dtype_name,
     get_lib_fn,
@@ -16,19 +15,19 @@ from ..autoray import (
     multi_class_priorities,
     register_backend,
     register_function,
+    shape,
     tree_flatten,
-    tree_map,
     tree_iter,
+    tree_map,
     tree_unflatten,
 )
 from .draw import (
-    plot_graph,
     plot_circuit,
-    plot_history_size_footprint,
+    plot_graph,
     plot_history_functions,
+    plot_history_size_footprint,
     plot_history_stats,
 )
-
 
 _EMPTY_DICT = {}
 get_depth = operator.attrgetter("_depth")

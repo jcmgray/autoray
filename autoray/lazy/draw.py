@@ -1,9 +1,8 @@
 """Visualizations for ``LazyArray`` computational graphs."""
 
-import itertools
 import functools
 import importlib.util
-
+import itertools
 
 COLORING_SEED = 1  # 8, 10
 
@@ -386,9 +385,9 @@ def plot_graph(
     **layout_opts,
 ):
     """Plot the computational graph of this ``LazyArray``."""
-    import numpy as np
-    import networkx as nx
     import matplotlib.pyplot as plt
+    import networkx as nx
+    import numpy as np
 
     if color_by not in ("id", "function", "variables"):
         raise ValueError("color_by must be 'id', 'function' or 'variables'")
@@ -761,8 +760,8 @@ def plot_history_size_footprint(
     return_fig : bool, optional
         If True, return the figure object, else just show and close it.
     """
-    import numpy as np
     import matplotlib.pyplot as plt
+    import numpy as np
 
     y = np.array(self.history_size_footprint())
     if log:
@@ -829,9 +828,9 @@ def plot_history_functions(
     either a scatter plot or an image, showing the size of the that individual
     intermediate as well.
     """
-    import numpy as np
     import matplotlib as mpl
     import matplotlib.pyplot as plt
+    import numpy as np
 
     if fn is not None:
         ylabel = "custom"

@@ -1,11 +1,10 @@
 import importlib.util
 
+import numpy as np
 import pytest
 
 import autoray as ar
 from autoray import shape
-import numpy as np
-
 
 # find backends to tests
 BACKENDS = [pytest.param("numpy")]
@@ -24,6 +23,7 @@ for lib in [
 
         if lib == "jax":
             import os
+
             import jax
 
             jax.config.update("jax_enable_x64", True)
@@ -292,6 +292,7 @@ def modified_gram_schmidt_np_mimic(X, explicit_namespace=False):
 
 def test_numpy_mimic_dunder_methods():
     from abc import ABC
+
     from autoray import numpy as np
 
     class Base(ABC):
@@ -795,8 +796,9 @@ def test_backend_like(backend):
 
 
 def test_nested_multihreaded_backend_like():
-    from autoray.autoray import choose_backend
     from concurrent.futures import ThreadPoolExecutor
+
+    from autoray.autoray import choose_backend
 
     def foo(backend1, backend2):
         bs = []

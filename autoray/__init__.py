@@ -6,8 +6,9 @@ except ImportError:
     # -- Source mode --
     try:
         # use setuptools_scm to get the current version from src using git
-        from setuptools_scm import get_version as _gv
         from pathlib import Path as _Path
+
+        from setuptools_scm import get_version as _gv
 
         __version__ = _gv(_Path(__file__).parent.parent)
     except ImportError:
@@ -15,6 +16,15 @@ except ImportError:
         __version__ = "0.0.0+unknown"
 
 
+# useful constants
+from math import (
+    e,
+    inf,
+    nan,
+    pi,
+)
+
+from . import lazy
 from .autoray import (
     astype,
     backend_like,
@@ -28,10 +38,12 @@ from .autoray import (
     get_lib_fn,
     get_namespace,
     imag,
-    is_array,
-    infer_backend_multi,
     infer_backend,
+    infer_backend_multi,
+    is_array,
     ndim,
+    # the numpy mimic submodule
+    numpy,
     real,
     register_backend,
     register_function,
@@ -48,19 +60,8 @@ from .autoray import (
     tree_iter,
     tree_map,
     tree_unflatten,
-    # the numpy mimic submodule
-    numpy,
 )
 from .compiler import autojit
-from . import lazy
-
-# useful constants
-from math import (
-    e,
-    pi,
-    inf,
-    nan,
-)
 
 __all__ = (
     "do",
