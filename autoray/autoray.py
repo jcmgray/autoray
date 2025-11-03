@@ -1572,17 +1572,17 @@ class AutoNamespace:
         # possibly wrap for dtype and device injection
         if name in _CREATION_ROUTINES:
             inject_dtype, inject_device = _CREATION_INJECT.get(
-                (self._backend, fn), (True, False)
+                (self._backend, name), (True, False)
             )
 
             if not inject_dtype:
-                # this is not a function accepts dtype
+                # this is not a function that accepts dtype
                 dtype_to_inject = None
             else:
                 dtype_to_inject = self._dtype
 
             if not inject_device:
-                # this is not a function accepts device
+                # this is not a function that accepts device
                 device_to_inject = None
             else:
                 device_to_inject = self._device
@@ -1593,13 +1593,10 @@ class AutoNamespace:
 
         return fn
 
-    def __getattribute__(self, name):
-        try:
-            return object.__getattribute__(self, name)
-        except AttributeError:
-            x = self._get_fn(name)
-            super().__getattribute__("__dict__")[name] = x
-            return x
+    def __getattr__(self, name):
+        x = self._get_fn(name)
+        self.__dict__[name] = x
+        return x
 
     def __repr__(self):
         return (
@@ -1612,7 +1609,7 @@ class AutoNamespace:
         )
 
 
-numpy = AutoNamespace()
+_NAMESPACE_CACHE = {}
 
 
 def get_namespace(like=None, device=None, dtype=None, submodule=None):
@@ -1641,12 +1638,45 @@ def get_namespace(like=None, device=None, dtype=None, submodule=None):
     AutoNamespace
         An automatic namespace object.
     """
-    return AutoNamespace(
-        like=like,
-        device=device,
-        dtype=dtype,
-        submodule=submodule,
-    )
+    if like is not None:
+        if not isinstance(like, str):
+            # array
+            cls = like.__class__
+            if device is None:
+                try:
+                    device = like.device
+                except AttributeError:
+                    device = None
+            if dtype is None:
+                try:
+                    dtype = like.dtype
+                except AttributeError:
+                    dtype = None
+        else:
+            # manually specified backend
+            cls = str
+    else:
+        # namespace functions will dispatch at call time
+        cls = None
+
+    key = (cls, device, dtype, submodule)
+
+    try:
+        xp = _NAMESPACE_CACHE[key]
+    except KeyError:
+        xp = _NAMESPACE_CACHE[key] = AutoNamespace(
+            like=like,
+            device=device,
+            dtype=dtype,
+            submodule=submodule,
+        )
+
+    return xp
+
+
+# note this is the backend agnostic numpy mimic (`import autoray.numpy as np`)
+# not the namespace for backend numpy (`xp = get_namespace(like="numpy")`)
+numpy = get_namespace()
 
 
 # --------------------------------------------------------------------------- #
