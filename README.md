@@ -40,7 +40,7 @@ Beyond that, abstracting the array interface allows you to:
 ## Basic usage
 
 The main function of `autoray` is
-[`do`](https://autoray.readthedocs.io/en/latest/autoapi/autoray/autoray/index.html#autoray.autoray.do),
+[`do`](https://autoray.readthedocs.io/en/latest/autoapi/autoray/index.html#autoray.do),
 which takes a function
 name followed by `*args` and `**kwargs`, and automatically looks up (and
 caches) the correct function to match the equivalent numpy call:
@@ -86,9 +86,10 @@ np.exp(z)
 #        [2.7182817, 2.7182817, 2.7182817, 2.7182817]], dtype=float32)
 ```
 
-Alternatively you can use `autoray.get_namespace` to get a backend specific
-(with optional default device and dtype) namespace object, (c.f. the Python
-Array Api):
+Alternatively you can use
+[`autoray.get_namespace`](https://autoray.readthedocs.io/en/latest/autoapi/autoray/index.html#autoray.get_namespace)
+to get a backend specific (with optional default device and dtype) namespace
+object, (c.f. the [Python Array Api](https://data-apis.org/array-api/latest/)):
 
 ```python
 xp = ar.get_namespace(z)
@@ -97,7 +98,7 @@ xp.einsum("ii->i", z)
 
 Custom backends and functions can be dynamically registered with:
 
-* [`register_backend`](https://autoray.readthedocs.io/en/latest/autoapi/autoray/autoray/index.html#autoray.autoray.register_backend)
-* [`register_function`](https://autoray.readthedocs.io/en/latest/autoapi/autoray/autoray/index.html#autoray.autoray.register_function)
+* [`register_backend`](https://autoray.readthedocs.io/en/latest/autoapi/autoray/index.html#autoray.register_backend)
+* [`register_function`](https://autoray.readthedocs.io/en/latest/autoapi/autoray/index.html#autoray.register_function)
 
 The main documentation is available at [autoray.readthedocs.io](https://autoray.readthedocs.io/en/latest/).

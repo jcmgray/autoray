@@ -84,9 +84,9 @@ np.exp(z)
 #        [2.7182817, 2.7182817, 2.7182817, 2.7182817]], dtype=float32)
 ```
 
-Alternatively you can use `autoray.get_namespace` to get a backend specific
-(with optional default device and dtype) namespace object, (c.f. the Python
-Array Api):
+Alternatively you can use [`autoray.get_namespace`](autoray.get_namespace)
+to get a backend specific (with optional default device and dtype) namespace
+object, (c.f. the [Python Array Api](https://data-apis.org/array-api/latest/)):
 
 ```python
 xp = ar.get_namespace(z)

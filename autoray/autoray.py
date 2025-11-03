@@ -32,6 +32,19 @@ def do(fn, *args, like=None, **kwargs):
     dispatch to retrieve ``fn`` based on whichever library defines the class of
     the ``args[0]``, or the ``like`` keyword argument if specified.
 
+    Parameters
+    ----------
+    fn : str
+        Name of the function to do, e.g. 'sum' or 'linalg.svd'.
+    args
+        Positional arguments to pass to the function.
+    like : str or array, optional
+        Backend to use, either as an explicit backend name or an example array
+        to infer the backend from. If not specified, the backend is inferred
+        from the first argument, or from a globally set backend if any.
+    kwargs
+        Keyword arguments to pass to the function.
+
     Examples
     --------
 
