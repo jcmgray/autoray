@@ -2400,7 +2400,7 @@ def torch_flip_wrap(torch_flip):
     return numpy_like
 
 
-def take_torch(a, indices, axis=None):
+def torch_take(a, indices, axis=None):
     torch = get_torch()
 
     if isinstance(indices, (tuple, list)) and len(indices) == 1:
@@ -2410,10 +2410,8 @@ def take_torch(a, indices, axis=None):
         squeeze = False
     else:
         indices = torch.as_tensor(indices, device=a.device)
-        if indices.ndim == 0:
-            # XXX: can't yet use torch.select as it can't vmap
-            unsqueeze = True
-            squeeze = True
+        # XXX: if scalar can't yet use torch.select as it can't vmap
+        squeeze = unsqueeze = (indices.ndim == 0)
 
     if unsqueeze:
         # promote scalar indices to 1D
@@ -2510,7 +2508,7 @@ _FUNCS["torch", "to_numpy"] = torch_to_numpy
 _FUNCS["torch", "complex"] = complex_add_re_im
 _FUNCS["torch", "transpose"] = torch_transpose
 _FUNCS["torch", "indices"] = torch_indices
-_FUNCS["torch", "take"] = take_torch
+_FUNCS["torch", "take"] = torch_take
 
 _FUNC_ALIASES["torch", "array"] = "tensor"
 _FUNC_ALIASES["torch", "asarray"] = "as_tensor"
