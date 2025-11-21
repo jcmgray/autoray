@@ -5,15 +5,15 @@ readme = { file = "README.md", content-type = "text/markdown" }
 dynamic = ["version"]
 authors = [{ name = "Johnnie Gray", email = "johnniemcgray@gmail.com" }]
 license = { text = "Apache" }
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
 keywords = [
     "agnostic",
@@ -73,9 +73,9 @@ max_line_length = 79
 
 [tool.ruff]
 line-length = 79
-target-version = "py39"
+target-version = "py310"
 lint.ignore = ["E741"]
 
 [tool.black]
 line-length = 79
-target-version = ['py39']
+target-version = ['py310']

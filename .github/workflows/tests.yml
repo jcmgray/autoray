@@ -15,23 +15,23 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        python-version: ['3.9', '3.12']
+        python-version: ['3.10', '3.13']
         env: [base]
         include:
         - os: macos-latest
-          python-version: '3.11'
+          python-version: '3.12'
           env: base
         - os: windows-latest
-          python-version: '3.11'
+          python-version: '3.12'
           env: base
         - os: ubuntu-latest
-          python-version: '3.11'
+          python-version: '3.12'
           env: torch
         - os: ubuntu-latest
-          python-version: '3.11'
+          python-version: '3.12'
           env: jax
         - os: ubuntu-latest
-          python-version: '3.11'
+          python-version: '3.12'
           env: tensorflow
 
     steps:
