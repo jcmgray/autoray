@@ -351,12 +351,14 @@ def infer_backend_multi(*arrays):
 # the set of functions that create new arrays, with `dtype` and possibly
 # `device` kwargs, that should be inferred from the like argument
 _CREATION_ROUTINES = {
-    "empty",
-    "eye",
-    "full",
-    "identity",
-    "ones",
-    "zeros",
+    "array": (False, False),
+    "asarray": (False, False),
+    "empty": (True, False),
+    "eye": (True, False),
+    "full": (True, False),
+    "identity": (True, False),
+    "ones": (True, False),
+    "zeros": (True, False),
     # TODO: should these be included?
     # "arange",
     # "geomspace",
@@ -386,6 +388,16 @@ def register_creation_routine(
     inject_device : bool, optional
         Whether to inject a `device` argument based on the `like` argument.
     """
+    if fn not in _CREATION_ROUTINES:
+        import warnings
+
+        warnings.warn(
+            f"Registering creation routine for backend '{backend}' and "
+            f"function '{fn}' which is not in the default set of known "
+            f"creation routines: {_CREATION_ROUTINES.keys()}, this will "
+            "currently have no effect.",
+        )
+
     _CREATION_INJECT[backend, fn] = (inject_dtype, inject_device)
 
 
@@ -408,11 +420,11 @@ def _choose_backend(fn, args, kwargs, like=None):
         # check if we should set some extra defaults based on the example array
         if fn in _CREATION_ROUTINES:
             try:
+                # check for backend specific defaults
                 inject_dtype, inject_device = _CREATION_INJECT[backend, fn]
             except KeyError:
-                # default to just dtype (e.g. for numpy)
-                inject_dtype = True
-                inject_device = False
+                # populate with non backend specific defaults
+                inject_dtype, inject_device = _CREATION_ROUTINES[fn]
                 _CREATION_INJECT[backend, fn] = (inject_dtype, inject_device)
 
             if inject_dtype:
@@ -2188,7 +2200,7 @@ _CUSTOM_WRAPPERS["tensorflow", "pad"] = tensorflow_pad_wrap
 _SUBMODULE_ALIASES["tensorflow", "pad"] = "tensorflow"
 
 
-register_creation_routine("tensorflow", "linspace", inject_dtype=False)
+# register_creation_routine("tensorflow", "linspace", inject_dtype=False)
 
 
 # ---------------------------------- torch ---------------------------------- #
@@ -2559,6 +2571,13 @@ _CUSTOM_WRAPPERS["torch[alt]", "split"] = torch_split_wrap
 
 for f in _CREATION_ROUTINES:
     register_creation_routine("torch", f, inject_device=True)
+register_creation_routine(
+    "torch", "array", inject_dtype=False, inject_device=True
+)
+register_creation_routine(
+    "torch", "asarray", inject_dtype=False, inject_device=True
+)
+
 
 # ---------------------------------- mxnet ---------------------------------- #
 
