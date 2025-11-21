@@ -529,8 +529,49 @@ class LazyArray:
             inputs=variables, outputs=self, fold_constants=fold_constants
         )
 
-    def show(self, filler=" ", max_lines=None, max_depth=None):
-        """Show the computational graph as a nested directory structure."""
+    def as_string_pretty(self):
+        """Render this LazyArray as a nice string, for display rather than
+        evaluation purposes.
+        """
+
+        def _maybe_replace(x):
+            if isinstance(x, LazyArray):
+                return "#"
+            return x
+
+        args, kwargs = tree_map(_maybe_replace, (self._args, self._kwargs))
+        args = [repr(a) for a in args]
+        for k, v in kwargs.items():
+            args.append(f"{k}={repr(v)}")
+
+        s = ", ".join(args)
+        s = f"{self.fn_name}({s}) → {list(self.shape)}"
+        s = s.replace("'#'", "#")
+        s = s.replace("slice(None, None, None)", ":")
+
+        return s
+
+    def show(
+        self,
+        filler=" ",
+        max_lines=None,
+        max_depth=None,
+        show_args=True,
+    ):
+        """Show the computational graph as a nested directory structure.
+
+        Parameters
+        ----------
+        filler : str, optional
+            The string to use to fill in the empty space on the left.
+        max_lines : int, optional
+            The maximum number of lines to show. By default all lines are
+            shown.
+        max_depth : int, optional
+            The maximum depth to show. By default all depths are shown.
+        show_args : bool, optional
+            Whether to show the arguments to each function in the graph.
+        """
         if max_lines is None:
             max_lines = float("inf")
         if max_depth is None:
@@ -559,14 +600,17 @@ class LazyArray:
                 prefix += bend if columns[-1] else junction
 
             if t.fn_name not in (None, "None"):
-                item = f"{t.fn_name}{list(t.shape)}"
+                if show_args:
+                    item = t.as_string_pretty()
+                else:
+                    item = f"{t.fn_name}{list(t.shape)}"
             else:
                 # input node
                 item = f"←{list(t.shape)}"
 
             if t in seen:
                 # ignore loops, but point to when it was computed
-                print(f"{line:>4} {prefix} ... ({item} from line {seen[t]})")
+                print(f"{line:>4} {prefix} ... [{item} from line {seen[t]}]")
                 line += 1
                 continue
 
