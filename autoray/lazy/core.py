@@ -1941,9 +1941,18 @@ max_ = make_reduction_func("max")
 
 # ----------------------------- array creation ------------------------------ #
 
+def parse_creation_shape(shape):
+    try:
+        shape = tuple(shape)
+    except TypeError:
+        # single integer implies 1D shape
+        shape = (shape,)
+    return shape
+
 
 def empty(shape, *, backend="numpy", **kwargs):
     """Lazy creation of an empty array with a given shape."""
+    shape = parse_creation_shape(shape)
     return LazyArray(
         backend=backend,
         fn=get_lib_fn(backend, "empty"),
@@ -1956,6 +1965,7 @@ def empty(shape, *, backend="numpy", **kwargs):
 
 def zeros(shape, *, backend="numpy", **kwargs):
     """Lazy creation of an array filled with zeros with a given shape."""
+    shape = parse_creation_shape(shape)
     return LazyArray(
         backend=backend,
         fn=get_lib_fn(backend, "zeros"),
@@ -1968,6 +1978,7 @@ def zeros(shape, *, backend="numpy", **kwargs):
 
 def ones(shape, *, backend="numpy", **kwargs):
     """Lazy creation of an array filled with ones with a given shape."""
+    shape = parse_creation_shape(shape)
     return LazyArray(
         backend=backend,
         fn=get_lib_fn(backend, "ones"),
