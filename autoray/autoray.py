@@ -2231,10 +2231,6 @@ def torch_transpose(x, axes=None):
     return x.permute(*axes)
 
 
-def torch_count_nonzero(x):
-    return do("sum", x != 0, like="torch")
-
-
 def torch_astype(x, dtype):
     return x.to(dtype=to_backend_dtype(dtype, like=x))
 
@@ -2479,7 +2475,6 @@ _FUNCS["torch", "copy"] = torch_copy
 _FUNCS["torch", "to_numpy"] = torch_to_numpy
 _FUNCS["torch", "complex"] = complex_add_re_im
 _FUNCS["torch", "transpose"] = torch_transpose
-_FUNCS["torch", "count_nonzero"] = torch_count_nonzero
 _FUNCS["torch", "indices"] = torch_indices
 
 _FUNC_ALIASES["torch", "array"] = "tensor"
