@@ -1868,43 +1868,45 @@ def complex_(re, im):
     )
 
 
-def make_unary_func(name):
+def make_unary_func(name, var_name=None):
     @lazy_cache(name)
     def unary_func(x):
         x = ensure_lazy(x)
         return x.to(fn=get_lib_fn(x.backend, name))
 
-    unary_func.__name__ = name
+    if var_name is not None:
+        unary_func.__name__ = name
+        unary_func.__qualname__ = name
 
     return unary_func
 
 
-sin = make_unary_func("sin")
-cos = make_unary_func("cos")
-tan = make_unary_func("tan")
-arcsin = make_unary_func("arcsin")
-arccos = make_unary_func("arccos")
-arctan = make_unary_func("arctan")
-sinh = make_unary_func("sinh")
-cosh = make_unary_func("cosh")
-tanh = make_unary_func("tanh")
-arcsinh = make_unary_func("arcsinh")
-arccosh = make_unary_func("arccosh")
-arctanh = make_unary_func("arctanh")
-sqrt = make_unary_func("sqrt")
-exp = make_unary_func("exp")
-log = make_unary_func("log")
-log2 = make_unary_func("log2")
-log10 = make_unary_func("log10")
-conj = make_unary_func("conj")
-sign = make_unary_func("sign")
-abs_ = make_unary_func("abs")
-angle = make_unary_func("angle")
-real = make_unary_func("real")
-imag = make_unary_func("imag")
+sin = make_unary_func("sin", var_name="sin")
+cos = make_unary_func("cos", var_name="cos")
+tan = make_unary_func("tan", var_name="tan")
+arcsin = make_unary_func("arcsin", var_name="arcsin")
+arccos = make_unary_func("arccos", var_name="arccos")
+arctan = make_unary_func("arctan", var_name="arctan")
+sinh = make_unary_func("sinh", var_name="sinh")
+cosh = make_unary_func("cosh", var_name="cosh")
+tanh = make_unary_func("tanh", var_name="tanh")
+arcsinh = make_unary_func("arcsinh", var_name="arcsinh")
+arccosh = make_unary_func("arccosh", var_name="arccosh")
+arctanh = make_unary_func("arctanh", var_name="arctanh")
+sqrt = make_unary_func("sqrt", var_name="sqrt")
+exp = make_unary_func("exp", var_name="exp")
+log = make_unary_func("log", var_name="log")
+log2 = make_unary_func("log2", var_name="log2")
+log10 = make_unary_func("log10", var_name="log10")
+conj = make_unary_func("conj", var_name="conj")
+sign = make_unary_func("sign", var_name="sign")
+abs_ = make_unary_func("abs", var_name="abs_")
+angle = make_unary_func("angle", var_name="angle")
+real = make_unary_func("real", var_name="real")
+imag = make_unary_func("imag", var_name="imag")
 
 
-def make_reduction_func(name):
+def make_reduction_func(name, var_name=None):
     @lazy_cache(name)
     def reduction_func(a, axis=None):
         a = ensure_lazy(a)
@@ -1923,13 +1925,17 @@ def make_reduction_func(name):
         newshape = tuple(d for i, d in enumerate(shape(a)) if i not in axis)
         return a.to(fn=fn, args=(a, axis), shape=newshape)
 
+    if var_name is not None:
+        reduction_func.__name__ = var_name
+        reduction_func.__qualname__ = var_name
+
     return reduction_func
 
 
-sum_ = make_reduction_func("sum")
-prod = make_reduction_func("prod")
-min_ = make_reduction_func("min")
-max_ = make_reduction_func("max")
+sum_ = make_reduction_func("sum", var_name="sum_")
+prod = make_reduction_func("prod", var_name="prod")
+min_ = make_reduction_func("min", var_name="min_")
+max_ = make_reduction_func("max", var_name="max_")
 
 # # XXX: still missing
 # allclose
