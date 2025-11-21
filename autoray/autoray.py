@@ -2206,6 +2206,13 @@ _SUBMODULE_ALIASES["tensorflow", "pad"] = "tensorflow"
 # ---------------------------------- torch ---------------------------------- #
 
 
+@functools.cache
+def get_torch():
+    import torch
+
+    return torch
+
+
 @shape.register("torch")
 def torch_shape(x):
     # torch returns a Size object, we want tuple[int]
@@ -2393,12 +2400,39 @@ def torch_flip_wrap(torch_flip):
     return numpy_like
 
 
+def take_torch(a, indices, axis=None):
+    torch = get_torch()
+
+    if isinstance(indices, (tuple, list)) and len(indices) == 1:
+        # need to convert list/tuple dimension to tensor, and not squeeze
+        indices = torch.as_tensor(indices[0], device=a.device)
+        unsqueeze = True
+        squeeze = False
+    else:
+        indices = torch.as_tensor(indices, device=a.device)
+        if indices.ndim == 0:
+            # XXX: can't yet use torch.select as it can't vmap
+            unsqueeze = True
+            squeeze = True
+
+    if unsqueeze:
+        # promote scalar indices to 1D
+        indices = torch.unsqueeze(indices, dim=0)
+
+    # perform the take!
+    a = torch.index_select(a, dim=axis, index=indices)
+
+    if squeeze:
+        # remove scalar dimension
+        return a.squeeze(dim=axis)
+
+    return a
+
+
 class TorchDefaultRNG:
     def __init__(self, seed, device=None):
-        import torch
-
-        self._torch = torch
-        self._generator = torch.Generator(device=device)
+        self._torch = get_torch()
+        self._generator = self._torch.Generator(device=device)
         self._generator.manual_seed(seed)
 
     # def binomial(self, n, p, size=None, **kwargs):
@@ -2476,6 +2510,7 @@ _FUNCS["torch", "to_numpy"] = torch_to_numpy
 _FUNCS["torch", "complex"] = complex_add_re_im
 _FUNCS["torch", "transpose"] = torch_transpose
 _FUNCS["torch", "indices"] = torch_indices
+_FUNCS["torch", "take"] = take_torch
 
 _FUNC_ALIASES["torch", "array"] = "tensor"
 _FUNC_ALIASES["torch", "asarray"] = "as_tensor"
@@ -2493,7 +2528,6 @@ _FUNC_ALIASES["torch", "random.normal"] = "randn"
 _FUNC_ALIASES["torch", "random.uniform"] = "rand"
 _FUNC_ALIASES["torch", "scipy.linalg.expm"] = "matrix_exp"
 _FUNC_ALIASES["torch", "split"] = "tensor_split"
-_FUNC_ALIASES["torch", "take"] = "index_select"
 _FUNC_ALIASES["torch", "take_along_axis"] = "take_along_dim"
 
 _SUBMODULE_ALIASES["torch", "linalg.expm"] = "torch"
@@ -2523,9 +2557,6 @@ _CUSTOM_WRAPPERS["torch", "random.uniform"] = scale_random_uniform_manually
 _CUSTOM_WRAPPERS["torch", "sort"] = torch_sort_wrap
 _CUSTOM_WRAPPERS["torch", "stack"] = make_translator(
     [("arrays", ("tensors",)), ("axis", ("dim", 0))]
-)
-_CUSTOM_WRAPPERS["torch", "take"] = make_translator(
-    [("a", ("input",)), ("indices", ("index",)), ("axis", ("dim",))]
 )
 _CUSTOM_WRAPPERS["torch", "tensordot"] = torch_tensordot_wrap
 _CUSTOM_WRAPPERS["torch", "tril"] = make_translator(
