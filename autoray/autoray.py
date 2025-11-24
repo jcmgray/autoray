@@ -1517,6 +1517,13 @@ class InjectDtypeDevice:
         )
 
 
+_NAME_SPACE_SUBMODULES = {
+    "random",
+    "linalg",
+    "scipy",
+}
+
+
 class AutoNamespace:
     """Mimics a namespace, optionally for a specific backend, device, and
     dtype, caching the lookup of functions, and injecting default device and
@@ -1583,7 +1590,7 @@ class AutoNamespace:
             # prepend the submodule name
             name = f"{self._submodule}.{name}"
 
-        if name in ("random", "linalg"):
+        if name in _NAME_SPACE_SUBMODULES:
             # note that other submodules can be accessed, these are just the
             # ones with functions that we possibly want to translate
             return self._get_submodule(name)
@@ -2411,7 +2418,7 @@ def torch_take(a, indices, axis=None):
     else:
         indices = torch.as_tensor(indices, device=a.device)
         # XXX: if scalar can't yet use torch.select as it can't vmap
-        squeeze = unsqueeze = (indices.ndim == 0)
+        squeeze = unsqueeze = indices.ndim == 0
 
     if unsqueeze:
         # promote scalar indices to 1D
