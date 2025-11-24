@@ -1951,9 +1951,22 @@ _FUNCS["aesara", "shape"] = aesara_shape
 
 # -------------------------------- autograd --------------------------------- #
 
+
+def autograd_take(x, indices, axis=None):
+    # NOTE: autograd take doesn't support grad
+    if axis is None:
+        return x.ravel()[indices]
+    else:
+        selector = tuple(
+            slice(None) if i != axis else indices for i in range(x.ndim)
+        )
+        return x[selector]
+
+
 _MODULE_ALIASES["autograd"] = "autograd.numpy"
 _CUSTOM_WRAPPERS["autograd", "linalg.svd"] = svd_not_full_matrices_wrapper
 _FUNCS["autograd", "complex"] = complex_add_re_im
+_FUNCS["autograd", "take"] = autograd_take
 
 
 # ---------------------------------- dask ----------------------------------- #
