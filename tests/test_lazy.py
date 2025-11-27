@@ -4,9 +4,21 @@ import re
 import pytest
 from numpy.testing import assert_allclose, assert_raises
 
-from autoray import astype, do, infer_backend, lazy, shape, to_numpy
+import autoray as ar
+from autoray import lazy
 
 from .test_autoray import BACKENDS, gen_rand
+
+
+def assert_unary_fn_with_kwargs(fn, shapes, seed, kwargs, backend="numpy"):
+    xp = ar.get_namespace(backend)
+    rng = xp.random.default_rng(seed)
+    args = [rng.uniform(size=shape) for shape in shapes]
+    y = ar.do(fn, *args, **kwargs)
+    largs = [lazy.array(arg) for arg in args]
+    ly = ar.do(fn, *largs, **kwargs)
+    assert ly.shape == y.shape
+    xp.testing.assert_allclose(y, ly.compute())
 
 
 def test_manual_construct():
@@ -14,9 +26,9 @@ def test_manual_construct():
         a1, a2 = a
         b1 = b["1"]
         c1, c2 = c["sub"]
-        return do("sum", do("stack", (a1, a2, b1, c1, c2)), axis=0)
+        return ar.do("sum", ar.do("stack", (a1, a2, b1, c1, c2)), axis=0)
 
-    x = do("random.uniform", size=(5, 7), like="numpy")
+    x = ar.do("random.uniform", size=(5, 7), like="numpy")
     x0 = lazy.array(x[0, :])
     x1 = lazy.array(x[1, :])
     x2 = lazy.array(x[2, :])
@@ -24,7 +36,7 @@ def test_manual_construct():
     x4 = lazy.array(x[4, :])
 
     y = lazy.LazyArray(
-        backend=infer_backend(x),
+        backend=ar.infer_backend(x),
         fn=foo,
         args=((x0, x1), {"1": x2}),
         kwargs=dict(c={"sub": (x3, x4)}),
@@ -42,14 +54,14 @@ def test_manual_construct():
 
 def modified_gram_schmidt(X):
     Q = []
-    for j in range(0, shape(X)[0]):
+    for j in range(0, ar.shape(X)[0]):
         q = X[j, :]
         for i in range(0, j):
-            rij = do("tensordot", do("conj", Q[i]), q, axes=1)
+            rij = ar.do("tensordot", ar.do("conj", Q[i]), q, axes=1)
             q = q - rij * Q[i]
-        rjj = do("linalg.norm", q, 2)
+        rjj = ar.do("linalg.norm", q, 2)
         Q.append(q / rjj)
-    return do("stack", tuple(Q), axis=0)
+    return ar.do("stack", tuple(Q), axis=0)
 
 
 def wrap_strict_check(larray):
@@ -58,8 +70,8 @@ def wrap_strict_check(larray):
     @functools.wraps(fn_orig)
     def checked(*args, **kwargs):
         data = fn_orig(*args, **kwargs)
-        assert shape(data) == shape(larray)
-        assert infer_backend(data) == larray.backend
+        assert ar.shape(data) == ar.shape(larray)
+        assert ar.infer_backend(data) == larray.backend
         return data
 
     return checked
@@ -90,13 +102,17 @@ def test_lazy_mgs(backend):
     assert 25 < hpeak < htot
     assert ly.history_num_nodes() == 57
     assert len(ly.history_fn_frequencies()) == 9
-    assert_allclose(to_numpy(ly.compute()), to_numpy(modified_gram_schmidt(x)))
+    assert_allclose(
+        ar.to_numpy(ly.compute()), ar.to_numpy(modified_gram_schmidt(x))
+    )
     with lazy.shared_intermediates():
         ly = modified_gram_schmidt(lx)
         make_strict(ly)
     assert ly.history_num_nodes() == 51
     assert len(ly.history_fn_frequencies()) == 9
-    assert_allclose(to_numpy(ly.compute()), to_numpy(modified_gram_schmidt(x)))
+    assert_allclose(
+        ar.to_numpy(ly.compute()), ar.to_numpy(modified_gram_schmidt(x))
+    )
 
 
 def test_partial_evaluation():
@@ -104,12 +120,12 @@ def test_partial_evaluation():
     lb = lazy.array(gen_rand((10, 10), "numpy"))
     lc = lazy.array(gen_rand((10, 10), "numpy"))
     ld = lazy.array(gen_rand((10, 10), "numpy"))
-    lab = do("tanh", la @ lb)
+    lab = ar.do("tanh", la @ lb)
     lcd = lc @ ld
     ls = lab + lcd
-    ld = do("abs", lab / lcd)
-    le = do("einsum", "ab,ba->a", ls, ld)
-    lf = do("sum", le)
+    ld = ar.do("abs", lab / lcd)
+    le = ar.do("einsum", "ab,ba->a", ls, ld)
+    lf = ar.do("sum", le)
     make_strict(lf)
     assert lf.history_num_nodes() == 12
     lf.compute_constants(variables=[lc, ld])  # constants = [la, lb]
@@ -123,12 +139,12 @@ def test_history_fn_frequencies():
     lb = lazy.array(gen_rand((10, 10), "numpy"))
     lc = lazy.array(gen_rand((10, 10), "numpy"))
     ld = lazy.array(gen_rand((10, 10), "numpy"))
-    lab = do("tanh", la @ lb)
+    lab = ar.do("tanh", la @ lb)
     lcd = lc @ ld
     ls = lab + lcd
-    ld = do("abs", lab / lcd)
-    le = do("einsum", "ab,ba->a", ls, ld)
-    lf = do("sum", le)
+    ld = ar.do("abs", lab / lcd)
+    le = ar.do("einsum", "ab,ba->a", ls, ld)
+    lf = ar.do("sum", le)
     assert lf.history_fn_frequencies() == {
         "None": 4,  # the inputs
         "tanh": 1,
@@ -149,12 +165,12 @@ def test_plot():
     lb = lazy.array(gen_rand((10, 10), "numpy"))
     lc = lazy.array(gen_rand((10, 10), "numpy"))
     ld = lazy.array(gen_rand((10, 10), "numpy"))
-    lab = do("tanh", la @ lb)
+    lab = ar.do("tanh", la @ lb)
     lcd = lc @ ld
     ls = lab + lcd
-    ld = do("abs", lab / lcd)
-    le = do("einsum", "ab,ba->a", ls, ld)
-    lf = do("sum", le)
+    ld = ar.do("abs", lab / lcd)
+    le = ar.do("einsum", "ab,ba->a", ls, ld)
+    lf = ar.do("sum", le)
     lf.plot_graph()
     lf.plot_graph(initial_layout="layers")
     lf.plot_graph(variables=[lc, ld], color_by="variables")
@@ -170,14 +186,14 @@ def test_plot():
 def test_share_intermediates():
     la = lazy.array(gen_rand((10, 10), "numpy"))
     lb = lazy.array(gen_rand((10, 10), "numpy"))
-    l1 = do("tanh", la @ lb)
-    l2 = do("tanh", la @ lb)
+    l1 = ar.do("tanh", la @ lb)
+    l2 = ar.do("tanh", la @ lb)
     ly = l1 + l2
     assert ly.history_num_nodes() == 7
     y1 = ly.compute()
     with lazy.shared_intermediates():
-        l1 = do("tanh", la @ lb)
-        l2 = do("tanh", la @ lb)
+        l1 = ar.do("tanh", la @ lb)
+        l2 = ar.do("tanh", la @ lb)
         ly = l1 + l2
     assert ly.history_num_nodes() == 5
     y2 = ly.compute()
@@ -187,30 +203,30 @@ def test_share_intermediates():
 @pytest.mark.parametrize("backend", BACKENDS)
 def test_transpose_chain(backend):
     lx = lazy.array(gen_rand((2, 3, 4, 5, 6), backend))
-    l1 = do("transpose", lx, (1, 0, 3, 2, 4))
-    l2 = do("transpose", l1, (1, 0, 3, 2, 4))
+    l1 = ar.do("transpose", lx, (1, 0, 3, 2, 4))
+    l2 = ar.do("transpose", l1, (1, 0, 3, 2, 4))
     assert l2.args[0] is lx
     assert l2.deps == (lx,)
     assert l1.history_num_nodes() == 2
     assert l2.history_num_nodes() == 2
     assert_allclose(
-        to_numpy(lx.compute()),
-        to_numpy(l2.compute()),
+        ar.to_numpy(lx.compute()),
+        ar.to_numpy(l2.compute()),
     )
 
 
 @pytest.mark.parametrize("backend", BACKENDS)
 def test_reshape_chain(backend):
     lx = lazy.array(gen_rand((2, 3, 4, 5, 6), backend))
-    l1 = do("reshape", lx, (6, 4, 30))
-    l2 = do("reshape", l1, (-1,))
+    l1 = ar.do("reshape", lx, (6, 4, 30))
+    l2 = ar.do("reshape", l1, (-1,))
     assert l1.history_num_nodes() == 2
     assert l2.history_num_nodes() == 2
     assert l2.args[0] is lx
     assert l2.deps == (lx,)
     assert_allclose(
-        to_numpy(lx.compute()).flatten(),
-        to_numpy(l2.compute()),
+        ar.to_numpy(lx.compute()).flatten(),
+        ar.to_numpy(l2.compute()),
         atol=1e-6,
     )
 
@@ -227,16 +243,16 @@ def test_svd(backend, dtype):
         )
 
     x = lazy.array(gen_rand((4, 5), backend, dtype))
-    U, s, VH = do("linalg.svd", x)
-    assert shape(U) == (4, 4)
-    assert shape(s) == (4,)
-    assert shape(VH) == (4, 5)
-    s = astype(s, dtype)
-    ly = U @ (do("reshape", s, (-1, 1)) * VH)
+    U, s, VH = ar.do("linalg.svd", x)
+    assert ar.shape(U) == (4, 4)
+    assert ar.shape(s) == (4,)
+    assert ar.shape(VH) == (4, 5)
+    s = ar.astype(s, dtype)
+    ly = U @ (ar.do("reshape", s, (-1, 1)) * VH)
     make_strict(ly)
     assert_allclose(
-        to_numpy(x.compute()),
-        to_numpy(ly.compute()),
+        ar.to_numpy(x.compute()),
+        ar.to_numpy(ly.compute()),
     )
 
 
@@ -245,14 +261,14 @@ def test_qr(backend):
     if backend == "sparse":
         pytest.xfail("Sparse doesn't support 'linalg.qr' yet...")
     x = lazy.array(gen_rand((4, 5), backend))
-    Q, R = do("linalg.qr", x)
-    assert shape(Q) == (4, 4)
-    assert shape(R) == (4, 5)
+    Q, R = ar.do("linalg.qr", x)
+    assert ar.shape(Q) == (4, 4)
+    assert ar.shape(R) == (4, 5)
     ly = Q @ R
     make_strict(ly)
     assert_allclose(
-        to_numpy(x.compute()),
-        to_numpy(ly.compute()),
+        ar.to_numpy(x.compute()),
+        ar.to_numpy(ly.compute()),
     )
 
 
@@ -266,14 +282,14 @@ def test_eig_inv(backend, dtype):
     # ``2**(-d * (d - 1) / 4)`` - see Edelman 1997 - so need ``d >> 5``
     d = 20
     x = lazy.array(gen_rand((d, d), backend, dtype))
-    el, ev = do("linalg.eig", x)
-    assert shape(el) == (d,)
-    assert shape(ev) == (d, d)
-    ly = ev @ (do("reshape", el, (-1, 1)) * do("linalg.inv", ev))
+    el, ev = ar.do("linalg.eig", x)
+    assert ar.shape(el) == (d,)
+    assert ar.shape(ev) == (d, d)
+    ly = ev @ (ar.do("reshape", el, (-1, 1)) * ar.do("linalg.inv", ev))
     make_strict(ly)
     assert_allclose(
-        to_numpy(x.compute()),
-        to_numpy(ly.compute()),
+        ar.to_numpy(x.compute()),
+        ar.to_numpy(ly.compute()),
     )
 
 
@@ -288,14 +304,14 @@ def test_eigh(backend, dtype):
         pytest.xfail(f"{backend} doesn't support 'linalg.eig' yet...")
     x = lazy.array(gen_rand((5, 5), backend, dtype))
     x = x + x.H
-    el, ev = do("linalg.eigh", x)
-    assert shape(el) == (5,)
-    assert shape(ev) == (5, 5)
-    ly = ev @ (do("reshape", el, (-1, 1)) * ev.H)
+    el, ev = ar.do("linalg.eigh", x)
+    assert ar.shape(el) == (5,)
+    assert ar.shape(ev) == (5, 5)
+    ly = ev @ (ar.do("reshape", el, (-1, 1)) * ev.H)
     make_strict(ly)
     assert_allclose(
-        to_numpy(x.compute()),
-        to_numpy(ly.compute()),
+        ar.to_numpy(x.compute()),
+        ar.to_numpy(ly.compute()),
     )
 
 
@@ -310,13 +326,13 @@ def test_cholesky(backend, dtype):
 
     x = lazy.array(gen_rand((5, 5), backend, dtype))
     x = x @ x.H
-    C = do("linalg.cholesky", x)
-    assert shape(C) == (5, 5)
+    C = ar.do("linalg.cholesky", x)
+    assert ar.shape(C) == (5, 5)
     ly = C @ C.H
     make_strict(ly)
     assert_allclose(
-        to_numpy(x.compute()),
-        to_numpy(ly.compute()),
+        ar.to_numpy(x.compute()),
+        ar.to_numpy(ly.compute()),
     )
 
 
@@ -334,21 +350,21 @@ def test_solve(backend, dtype):
     A = lazy.array(gen_rand((5, 5), backend, dtype))
     y = lazy.array(gen_rand((5,), backend, dtype))
 
-    x = do("linalg.solve", A, y)
-    assert shape(x) == (5,)
+    x = ar.do("linalg.solve", A, y)
+    assert ar.shape(x) == (5,)
     # tensorflow e.g. doesn't allow ``A @ x`` for vector x ...
-    ly = do("tensordot", A, x, axes=1)
+    ly = ar.do("tensordot", A, x, axes=1)
     make_strict(ly)
     assert_allclose(
-        to_numpy(y.compute()),
-        to_numpy(ly.compute()),
+        ar.to_numpy(y.compute()),
+        ar.to_numpy(ly.compute()),
     )
 
 
 def test_dunder_magic():
-    a = do("random.uniform", size=(), like="numpy")
+    a = ar.do("random.uniform", size=(), like="numpy")
     b = lazy.array(a)
-    x, y, z = do("random.uniform", size=(3), like="numpy")
+    x, y, z = ar.do("random.uniform", size=(3), like="numpy")
     a = x * a
     b = x * b
     a = a * y
@@ -357,9 +373,9 @@ def test_dunder_magic():
     b *= z
     assert_allclose(a, b.compute())
 
-    a = do("random.uniform", size=(), like="numpy")
+    a = ar.do("random.uniform", size=(), like="numpy")
     b = lazy.array(a)
-    x, y, z = do("random.uniform", size=(3), like="numpy")
+    x, y, z = ar.do("random.uniform", size=(3), like="numpy")
     a = x + a
     b = x + b
     a = a + y
@@ -368,9 +384,9 @@ def test_dunder_magic():
     b += z
     assert_allclose(a, b.compute())
 
-    a = do("random.uniform", size=(), like="numpy")
+    a = ar.do("random.uniform", size=(), like="numpy")
     b = lazy.array(a)
-    x, y, z = do("random.uniform", size=(3), like="numpy")
+    x, y, z = ar.do("random.uniform", size=(3), like="numpy")
     a = x - a
     b = x - b
     a = a - y
@@ -379,9 +395,9 @@ def test_dunder_magic():
     b -= z
     assert_allclose(a, b.compute())
 
-    a = do("random.uniform", size=(), like="numpy")
+    a = ar.do("random.uniform", size=(), like="numpy")
     b = lazy.array(a)
-    x, y, z = do("random.uniform", size=(3), like="numpy")
+    x, y, z = ar.do("random.uniform", size=(3), like="numpy")
     a = x / a
     b = x / b
     a = a / y
@@ -390,9 +406,9 @@ def test_dunder_magic():
     b /= z
     assert_allclose(a, b.compute())
 
-    a = do("random.uniform", size=(), like="numpy")
+    a = ar.do("random.uniform", size=(), like="numpy")
     b = lazy.array(a)
-    x, y, z = do("random.uniform", size=(3), like="numpy")
+    x, y, z = ar.do("random.uniform", size=(3), like="numpy")
     a = x // a
     b = x // b
     a = a // y
@@ -401,9 +417,9 @@ def test_dunder_magic():
     b //= z
     assert_allclose(a, b.compute())
 
-    a = do("random.uniform", size=(), like="numpy")
+    a = ar.do("random.uniform", size=(), like="numpy")
     b = lazy.array(a)
-    x, y, z = do("random.uniform", size=(3), like="numpy")
+    x, y, z = ar.do("random.uniform", size=(3), like="numpy")
     a = x**a
     b = x**b
     a = a**y
@@ -412,9 +428,9 @@ def test_dunder_magic():
     b **= z
     assert_allclose(a, b.compute())
 
-    a = do("random.uniform", size=(3, 3), like="numpy")
+    a = ar.do("random.uniform", size=(3, 3), like="numpy")
     b = lazy.array(a)
-    x, y, z = do("random.uniform", size=(3, 3, 3), like="numpy")
+    x, y, z = ar.do("random.uniform", size=(3, 3, 3), like="numpy")
     a = x @ a
     b = x @ b
     a = a @ y
@@ -425,7 +441,7 @@ def test_dunder_magic():
 
 
 def test_indexing():
-    a = do("random.uniform", size=(2, 3, 4, 5), like="numpy")
+    a = ar.do("random.uniform", size=(2, 3, 4, 5), like="numpy")
     b = lazy.array(a)
 
     for key in [0, (1, ..., -1), (0, 1, slice(None), -2)]:
@@ -443,42 +459,42 @@ def test_indexing():
     ],
 )
 def test_diag(shape, k):
-    a = do("random.uniform", size=shape, like="numpy")
+    a = ar.do("random.uniform", size=shape, like="numpy")
     b = lazy.array(a)
-    ad = do("diag", a, k)
-    bd = do("diag", b, k)
+    ad = ar.do("diag", a, k)
+    bd = ar.do("diag", b, k)
     assert_allclose(ad, bd.compute())
 
 
 def test_einsum():
-    a = do("random.uniform", size=(2, 3, 4, 5), like="numpy")
-    b = do("random.uniform", size=(4, 5), like="numpy")
-    c = do("random.uniform", size=(6, 2, 3), like="numpy")
+    a = ar.do("random.uniform", size=(2, 3, 4, 5), like="numpy")
+    b = ar.do("random.uniform", size=(4, 5), like="numpy")
+    c = ar.do("random.uniform", size=(6, 2, 3), like="numpy")
     eq = "abcd,cd,fab->fd"
-    x1 = do("einsum", eq, a, b, c)
+    x1 = ar.do("einsum", eq, a, b, c)
     la, lb, lc = map(lazy.array, (a, b, c))
-    x2 = do("einsum", eq, la, lb, lc)
+    x2 = ar.do("einsum", eq, la, lb, lc)
     assert_allclose(x1, x2.compute())
 
 
 def test_tensordot():
-    a = do("random.uniform", size=(7, 3, 4, 5), like="numpy")
-    b = do("random.uniform", size=(5, 6, 3, 2), like="numpy")
-    x1 = do("tensordot", a, b, axes=[(1, 3), (2, 0)])
+    a = ar.do("random.uniform", size=(7, 3, 4, 5), like="numpy")
+    b = ar.do("random.uniform", size=(5, 6, 3, 2), like="numpy")
+    x1 = ar.do("tensordot", a, b, axes=[(1, 3), (2, 0)])
     la, lb = map(lazy.array, (a, b))
-    x2 = do("tensordot", la, lb, axes=[(1, 3), (2, 0)])
+    x2 = ar.do("tensordot", la, lb, axes=[(1, 3), (2, 0)])
     assert_allclose(x1, x2.compute())
 
 
 def test_use_variable_to_trace_function():
     a = lazy.Variable(shape=(2, 3), backend="numpy")
     b = lazy.Variable(shape=(3, 4), backend="numpy")
-    c = do("tanh", a @ b)
+    c = ar.do("tanh", a @ b)
     f = c.get_function([a, b])
-    x = do("random.uniform", size=(2, 3), like="numpy")
-    y = do("random.uniform", size=(3, 4), like="numpy")
+    x = ar.do("random.uniform", size=(2, 3), like="numpy")
+    y = ar.do("random.uniform", size=(3, 4), like="numpy")
     z = f([x, y])
-    assert shape(z) == (2, 4)
+    assert ar.shape(z) == (2, 4)
 
 
 def test_can_pickle_traced_function():
@@ -486,26 +502,26 @@ def test_can_pickle_traced_function():
 
     a = lazy.Variable(shape=(2, 3), backend="numpy")
     b = lazy.Variable(shape=(3, 4), backend="numpy")
-    c = do("tanh", a @ b)
+    c = ar.do("tanh", a @ b)
     f = c.get_function([a, b])
-    x = do("random.uniform", size=(2, 3), like="numpy")
-    y = do("random.uniform", size=(3, 4), like="numpy")
+    x = ar.do("random.uniform", size=(2, 3), like="numpy")
+    y = ar.do("random.uniform", size=(3, 4), like="numpy")
     z = f([x, y])
-    assert shape(z) == (2, 4)
+    assert ar.shape(z) == (2, 4)
 
     s = pickle.dumps(f)
     g = pickle.loads(s)
     z = g([x, y])
-    assert shape(z) == (2, 4)
+    assert ar.shape(z) == (2, 4)
 
 
 def test_where():
     a = lazy.Variable(shape=(4,), backend="numpy")
     b = lazy.Variable(shape=(4,), backend="numpy")
-    c = do("where", *(a > 0, b, 1))
+    c = ar.do("where", *(a > 0, b, 1))
     f = c.get_function([a, b])
-    x = do("asarray", [-0.5, -0.5, 1, 2], like="numpy")
-    y = do("asarray", [1, 2, 3, 4], like="numpy")
+    x = ar.do("asarray", [-0.5, -0.5, 1, 2], like="numpy")
+    y = ar.do("asarray", [1, 2, 3, 4], like="numpy")
     z = f(x, y)
     assert_allclose(z, [1, 1, 3, 4])
 
@@ -516,17 +532,17 @@ def test_lazy_function_pytree_input_and_output():
         "b": lazy.Variable(shape=(3, 4), backend="numpy"),
     }
     outputs = {
-        "outa": do("tanh", inputs["a"] @ inputs["b"]),
+        "outa": ar.do("tanh", inputs["a"] @ inputs["b"]),
         "outb": [inputs["a"] - 1, inputs["b"] - 1],
     }
     f = lazy.Function(inputs, outputs)
 
-    a = do("random.uniform", size=(2, 3), like="numpy")
-    b = do("random.uniform", size=(3, 4), like="numpy")
+    a = ar.do("random.uniform", size=(2, 3), like="numpy")
+    b = ar.do("random.uniform", size=(3, 4), like="numpy")
 
     outs = f({"a": a, "b": b})
 
-    assert_allclose(outs["outa"], do("tanh", a @ b))
+    assert_allclose(outs["outa"], ar.do("tanh", a @ b))
     assert_allclose(outs["outb"][0], a - 1)
     assert_allclose(outs["outb"][1], b - 1)
 
@@ -551,12 +567,12 @@ def test_lazy_function_pytree_input_and_output():
     ],
 )
 def test_take(indices, shape):
-    a = do("random.uniform", size=shape, like="numpy")
+    a = ar.do("random.uniform", size=shape, like="numpy")
     b = lazy.Variable(shape=shape, backend="numpy")
-    np_shape = do("take", a, indices).shape
-    lazy_shape = do("take", b, indices).shape
+    np_shape = ar.do("take", a, indices).shape
+    lazy_shape = ar.do("take", b, indices).shape
 
-    fn = do("take", b, indices).get_function([b])
+    fn = ar.do("take", b, indices).get_function([b])
     lazy_func_shape = fn([a]).shape
     assert_allclose(np_shape, lazy_shape)
     assert_allclose(np_shape, lazy_func_shape)
@@ -582,7 +598,7 @@ def test_take(indices, shape):
     ],
 )
 def test_getitem(indices, shape):
-    a = do("random.uniform", size=shape, like="numpy")
+    a = ar.do("random.uniform", size=shape, like="numpy")
     b = lazy.Variable(shape=shape, backend="numpy")
     np_shape = a[indices].shape
     lazy_shape = b[indices].shape
@@ -668,7 +684,7 @@ def random_indexer(ndim_min=0, ndim_max=10, d_min=1, d_max=5, seed=None):
 @pytest.mark.parametrize("seed", range(1000))
 def test_lazy_getitem_random(seed):
     shape, indexer = random_indexer()
-    a = do("random.uniform", size=shape, like="numpy")
+    a = ar.do("random.uniform", size=shape, like="numpy")
     ai = a[indexer]
     b = lazy.array(a)
     bi = b[indexer]
@@ -688,8 +704,8 @@ def test_lazy_getitem_random(seed):
 def test_matmul_shape(shape1, shape2):
     a = lazy.Variable(shape=shape1)
     b = lazy.Variable(shape=shape2)
-    np_a = do("random.uniform", size=shape1, like="numpy")
-    np_b = do("random.uniform", size=shape2, like="numpy")
+    np_a = ar.do("random.uniform", size=shape1, like="numpy")
+    np_b = ar.do("random.uniform", size=shape2, like="numpy")
 
     lazy_shape = (a @ b).shape
     np_shape = (np_a @ np_b).shape
@@ -725,57 +741,78 @@ def test_matmul_shape_error(shape1, shape2):
 
 
 def test_pytree_compute():
-    x = do("random.uniform", size=(5, 6), like="numpy")
+    x = ar.do("random.uniform", size=(5, 6), like="numpy")
     lx = lazy.array(x)
-    lu, ls, lv = do("linalg.svd", lx)
+    lu, ls, lv = ar.do("linalg.svd", lx)
     lresults = {"u": lu, "s": ls, "v": lv}
     results = lazy.compute(lresults)
     assert isinstance(results, dict)
-    assert infer_backend(results["s"]) == infer_backend(x)
+    assert ar.infer_backend(results["s"]) == ar.infer_backend(x)
 
 
 def test_kron():
-    x = do("random.uniform", size=(2, 3), like="numpy")
-    y = do("random.uniform", size=(2, 3), like="numpy")
-    xy = do("kron", x, y)
+    x = ar.do("random.uniform", size=(2, 3), like="numpy")
+    y = ar.do("random.uniform", size=(2, 3), like="numpy")
+    xy = ar.do("kron", x, y)
 
     lx = lazy.array(x)
     ly = lazy.array(y)
-    lxy = do("kron", lx, ly)
+    lxy = ar.do("kron", lx, ly)
     assert lxy.shape == xy.shape
     assert_allclose(lxy.compute(), xy)
 
-    x = do("random.uniform", size=(3,), like="numpy")
-    y = do("random.uniform", size=(3, 4, 5), like="numpy")
-    xy = do("kron", x, y)
+    x = ar.do("random.uniform", size=(3,), like="numpy")
+    y = ar.do("random.uniform", size=(3, 4, 5), like="numpy")
+    xy = ar.do("kron", x, y)
 
     lx = lazy.array(x)
     ly = lazy.array(y)
-    lxy = do("kron", lx, ly)
+    lxy = ar.do("kron", lx, ly)
     assert lxy.shape == xy.shape
     assert_allclose(lxy.compute(), xy)
 
-    x = do("random.uniform", size=(3, 4, 5), like="numpy")
-    y = do("random.uniform", size=(3,), like="numpy")
-    xy = do("kron", x, y)
+    x = ar.do("random.uniform", size=(3, 4, 5), like="numpy")
+    y = ar.do("random.uniform", size=(3,), like="numpy")
+    xy = ar.do("kron", x, y)
 
     lx = lazy.array(x)
     ly = lazy.array(y)
-    lxy = do("kron", lx, ly)
+    lxy = ar.do("kron", lx, ly)
     assert lxy.shape == xy.shape
     assert_allclose(lxy.compute(), xy)
 
 
 def test_concatenate():
-    x = do("random.uniform", size=(3, 4, 5), like="numpy")
-    y = do("random.uniform", size=(3, 1, 5), like="numpy")
-    z = do("random.uniform", size=(3, 7, 5), like="numpy")
-    xyz = do("concatenate", (x, y, z), axis=1)
+    x = ar.do("random.uniform", size=(3, 4, 5), like="numpy")
+    y = ar.do("random.uniform", size=(3, 1, 5), like="numpy")
+    z = ar.do("random.uniform", size=(3, 7, 5), like="numpy")
+    xyz = ar.do("concatenate", (x, y, z), axis=1)
 
     lx = lazy.array(x)
     ly = lazy.array(y)
     lz = lazy.array(z)
-    lxyz = do("concatenate", (lx, ly, lz), axis=1)
+    lxyz = ar.do("concatenate", (lx, ly, lz), axis=1)
 
     assert lxyz.shape == xyz.shape
     assert_allclose(lxyz.compute(), xyz)
+
+
+@pytest.mark.parametrize("shape_in", [(2, 3, 4)])
+@pytest.mark.parametrize("keepdims", [False, True])
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"axis": 0},
+        {"axis": 2},
+        {"ord": None, "axis": (0, 2)},
+        {"ord": 1, "axis": (0, 2)},
+        {"ord": 2, "axis": (2, 1)},
+    ],
+)
+@pytest.mark.parametrize("backend", ["numpy", "torch"])
+def test_norm(shape_in, keepdims, kwargs, backend):
+    fn = "linalg.norm"
+    kwargs["keepdims"] = keepdims
+    assert_unary_fn_with_kwargs(
+        fn, [shape_in], seed=1234, kwargs=kwargs, backend=backend
+    )

@@ -2587,6 +2587,14 @@ _CUSTOM_WRAPPERS["torch", "zeros"] = torch_zeros_ones_wrap
 _CUSTOM_WRAPPERS["torch", "take_along_axis"] = make_translator(
     [("arr", ("input",)), ("indices", ("indices",)), ("axis", ("dim", -1))]
 )
+_CUSTOM_WRAPPERS["torch", "linalg.norm"] = make_translator(
+    [
+        ("x", ("input",)),
+        ("ord", ("ord", None)),
+        ("axis", ("dim", None)),
+        ("keepdims", ("keepdim", False)),
+    ]
+)
 
 _torch_reduce_translation = [
     ("a", ("input",)),

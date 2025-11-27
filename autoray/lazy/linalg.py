@@ -103,8 +103,35 @@ def solve(a, b):
 
 
 @lazy_cache("linalg.norm")
-def norm(x, order=None):
+def norm(x, ord=None, axis=None, keepdims=False):
     x = ensure_lazy(x)
-    fn_inv = get_lib_fn(x.backend, "linalg.norm")
-    newshape = ()
-    return x.to(fn_inv, (x, order), shape=newshape)
+    fn_norm = get_lib_fn(x.backend, "linalg.norm")
+
+    if axis is None:
+        if keepdims:
+            newshape = (1,) * x.ndim
+        else:
+            newshape = ()
+
+    else:
+        new_shape = list(shape(x))
+        if isinstance(axis, int):
+            axis = (axis,)
+        if keepdims:
+            for ax in axis:
+                new_shape[ax] = 1
+        else:
+            for ax in sorted(axis, reverse=True):
+                new_shape.pop(ax)
+        newshape = tuple(new_shape)
+
+    return x.to(
+        fn_norm,
+        args=(x,),
+        kwargs={
+            "ord": ord,
+            "axis": axis,
+            "keepdims": keepdims,
+        },
+        shape=newshape,
+    )
