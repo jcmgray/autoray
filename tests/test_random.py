@@ -53,7 +53,6 @@ def test_random_default_rng(backend, dist, args, kwargs):
 
     if backend == "torch" and dist in (
         "binomial",
-        "choice",
         "exponential",
         "gumbel",
         "poisson",

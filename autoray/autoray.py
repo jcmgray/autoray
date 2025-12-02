@@ -22,6 +22,8 @@ import functools
 import importlib
 import itertools
 import math
+import numbers
+import operator
 import threading
 from collections import OrderedDict, defaultdict
 from inspect import signature
@@ -359,6 +361,7 @@ _CREATION_ROUTINES = {
     "identity": (True, False),
     "ones": (True, False),
     "zeros": (True, False),
+    "random.default_rng": (False, False),
     # TODO: should these be included?
     # "arange",
     # "geomspace",
@@ -2348,7 +2351,7 @@ def torch_split_wrap(fn):
     # release this function has not been added
     @functools.wraps(fn)
     def numpy_like(ary, indices_or_sections, axis=0, **kwargs):
-        if isinstance(indices_or_sections, int):
+        if isinstance(indices_or_sections, numbers.Integral):
             split_size = shape(ary)[axis] // indices_or_sections
             return fn(ary, split_size, dim=axis, **kwargs)
         else:
@@ -2508,6 +2511,52 @@ class TorchDefaultRNG:
             x = x * (high - low) + low
         return x
 
+    def choice(self, a, size=None, replace=True, p=None):
+        scalar = reshape = None
+        if size is None:
+            scalar = True
+            size = 1
+        elif not isinstance(size, numbers.Integral):
+            # assume tuple
+            reshape = size
+            size = functools.reduce(operator.mul, size)
+
+        if isinstance(a, numbers.Integral):
+            a = self._torch.arange(a, device=self._generator.device)
+
+        # with torch have to first generate indices
+
+        if (p is not None) or (not replace):
+            if p is None:
+                # uniform distribution, multinomial renormalizes internally
+                p = self._torch.ones(a.shape[0], device=self._generator.device)
+
+            idx = self._torch.multinomial(
+                p,
+                num_samples=size,
+                replacement=replace,
+                generator=self._generator,
+            )
+        else:
+            # quicker for uniform *with* replacement
+            idx = self._torch.randint(
+                low=0,
+                high=a.shape[0],
+                size=(size,),
+                generator=self._generator,
+            )
+
+        # then take the samples!
+        random_choices = a[idx]
+
+        if scalar:
+            random_choices = random_choices.squeeze(0)
+
+        if reshape is not None:
+            random_choices = random_choices.reshape(reshape)
+
+        return random_choices
+
 
 def torch_default_rng(seed, **kwargs):
     if isinstance(seed, TorchDefaultRNG):
@@ -2628,6 +2677,9 @@ register_creation_routine(
 )
 register_creation_routine(
     "torch", "asarray", inject_dtype=False, inject_device=True
+)
+register_creation_routine(
+    "torch", "random.default_rng", inject_dtype=False, inject_device=True
 )
 
 
@@ -2751,7 +2803,7 @@ def paddle_split_wrap(fn):
 
     @functools.wraps(fn)
     def numpy_like(ary, indices_or_sections, axis=0, **kwargs):
-        if isinstance(indices_or_sections, int):
+        if isinstance(indices_or_sections, numbers.Integral):
             return fn(ary, indices_or_sections, axis=axis, **kwargs)
         else:
             diff = do(
