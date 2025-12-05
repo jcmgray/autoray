@@ -1520,7 +1520,7 @@ def _get_parse_einsum_input():
 
 
 @lazy_cache("einsum")
-def einsum(*operands):
+def einsum(*operands, **kwargs):
     lhs, rhs, larrays = _get_parse_einsum_input()(operands)
 
     size_dict = {}
@@ -1534,11 +1534,14 @@ def einsum(*operands):
     backend = find_common_backend(*larrays)
     fn_einsum = get_lib_fn(backend, "einsum")
 
+    if backend == "numpy":
+        kwargs.setdefault("optimize", True)
+
     return LazyArray(
         backend=backend,
         fn=fn_einsum,
         args=(eq, *larrays),
-        kwargs=None,
+        kwargs=kwargs,
         shape=newshape,
         deps=tuple(x for x in larrays if isinstance(x, LazyArray)),
     )
