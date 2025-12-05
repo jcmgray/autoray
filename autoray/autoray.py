@@ -600,6 +600,77 @@ def register_function(backend, name, fn, wrap=False):
         _FUNCS[backend, name] = fn
 
 
+# -------------------------- array detection utils -------------------------- #
+
+
+def is_array(x):
+    """Is ``x`` an array-like object? This simply checks for a ``shape``
+    attribute, thus 0-dimensional arrays are also considered arrays, but lists
+    and tuples are not.
+
+    Parameters
+    ----------
+    x : object
+        Object to check.
+
+    Returns
+    -------
+    bool
+
+    See Also
+    --------
+    is_scalar
+    """
+    return hasattr(x, "shape")
+
+
+_IS_SCALAR_CACHE = {}
+
+
+def _is_scalar_ndim(x):
+    return x.ndim == 0
+
+
+def _always_false(x):
+    return False
+
+
+def _always_true(x):
+    return True
+
+
+def is_scalar(x):
+    """Is ``x`` a scalar-like object? This checks if ``x`` has an ``ndim``
+    attribute equal to 0. If ``x`` has no ``ndim`` attribute, it checks if
+    ``x`` is iterable - if it is not iterable, it is considered a scalar.
+
+    Parameters
+    ----------
+    x : object
+        Object to check.
+
+    Returns
+    -------
+    bool
+
+    See Also
+    --------
+    is_array
+    """
+    try:
+        return _IS_SCALAR_CACHE[x.__class__](x)
+    except KeyError:
+        if hasattr(x, "ndim"):
+            _IS_SCALAR_CACHE[x.__class__] = _is_scalar_ndim
+        else:
+            try:
+                iter(x)
+                _IS_SCALAR_CACHE[x.__class__] = _always_false
+            except TypeError:
+                _IS_SCALAR_CACHE[x.__class__] = _always_true
+        return _IS_SCALAR_CACHE[x.__class__](x)
+
+
 # ------------------------------- tree utils -------------------------------- #
 
 TREE_MAP_REGISTRY = {}
@@ -641,11 +712,6 @@ def is_not_container(x):
         isleaf = not any(isinstance(x, cls) for cls in TREE_MAP_REGISTRY)
         IS_CONTAINER_CACHE[x.__class__] = isleaf
         return isleaf
-
-
-def is_array(x):
-    """An alternative leaf tester for addressing only arrays within trees."""
-    return hasattr(x, "shape")
 
 
 def identity(f, tree, is_leaf):
@@ -1606,9 +1672,14 @@ class AutoNamespace:
 
         # possibly wrap for dtype and device injection
         if name in _CREATION_ROUTINES:
-            inject_dtype, inject_device = _CREATION_INJECT.get(
-                (self._backend, name), (True, False)
-            )
+            key = (self._backend, name)
+            try:
+                # check for backend specific defaults
+                inject_dtype, inject_device = _CREATION_INJECT[key]
+            except KeyError:
+                # populate with non backend specific defaults
+                inject_dtype, inject_device = _CREATION_ROUTINES[name]
+                _CREATION_INJECT[key] = (inject_dtype, inject_device)
 
             if not inject_dtype:
                 # this is not a function that accepts dtype

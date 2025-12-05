@@ -41,6 +41,7 @@ from .autoray import (
     infer_backend,
     infer_backend_multi,
     is_array,
+    is_scalar,
     ndim,
     # the numpy mimic submodule
     numpy,
@@ -90,6 +91,7 @@ __all__ = (
     "register_function",
     # tree utilities
     "is_array",
+    "is_scalar",
     "tree_map",
     "tree_iter",
     "tree_apply",

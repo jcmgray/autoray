@@ -1087,3 +1087,27 @@ def test_indices(backend):
     xn = ar.to_numpy(x)
     xe = ar.do("indices", (3, 4), like="numpy")
     assert_array_equal(xn, xe)
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_is_array(backend):
+    x = gen_rand((2, 3), backend)
+    assert ar.is_array(x)
+    x = gen_rand((), backend)
+    assert ar.is_array(x)
+    y = 5
+    assert not ar.is_array(y)
+    y = [5]
+    assert not ar.is_array(y)
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_is_scalar(backend):
+    x = gen_rand((2, 3), backend)
+    assert not ar.is_scalar(x)
+    x = gen_rand((), backend)
+    assert ar.is_scalar(x)
+    y = 5
+    assert ar.is_scalar(y)
+    y = [5]
+    assert not ar.is_scalar(y)
