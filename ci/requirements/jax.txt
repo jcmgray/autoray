@@ -1,7 +1,0 @@
-coverage
-jax
-matplotlib
-numpy
-opt_einsum
-pytest
-pytest-cov

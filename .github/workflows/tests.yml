@@ -14,48 +14,41 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest]
-        python-version: ['3.10', '3.13']
-        env: [base]
         include:
+        - os: ubuntu-latest
+          pixi_environment: testpynew
+
+        - os: ubuntu-latest
+          pixi_environment: testpyold
+
         - os: macos-latest
-          python-version: '3.12'
-          env: base
+          pixi_environment: testpymid
+
         - os: windows-latest
-          python-version: '3.12'
-          env: base
+          pixi_environment: testpymid
+
         - os: ubuntu-latest
-          python-version: '3.12'
-          env: torch
+          pixi_environment: testtorch
+
         - os: ubuntu-latest
-          python-version: '3.12'
-          env: jax
+          pixi_environment: testjax
+
         - os: ubuntu-latest
-          python-version: '3.12'
-          env: tensorflow
+          pixi_environment: testtensorflow
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
+      - name: Install pixi
+        uses: prefix-dev/setup-pixi@v0.9.3
         with:
-          version: "0.6.x"
-
-      - name: Install python
-        run: uv python install ${{ matrix.python-version }}
-
-      - name: Setup uv project
-        run: uv sync
-
-      - name: Install dependencies
-        run: uv pip install -r ci/requirements/${{ matrix.env }}.txt
+          environments: ${{ matrix.pixi_environment }}
 
       - name: Test with pytest
-        run: uv run pytest --cov=autoray tests/ --cov-report=xml tests
+        run: pixi run -e ${{ matrix.pixi_environment }} test
 
       - name: Report to codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
