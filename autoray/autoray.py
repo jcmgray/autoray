@@ -1759,8 +1759,8 @@ def get_namespace(like=None, device=None, dtype=None, submodule=None):
                 except AttributeError:
                     dtype = None
         else:
-            # manually specified backend
-            cls = str
+            # manually specified backend string
+            cls = like
     else:
         # namespace functions will dispatch at call time
         cls = None
