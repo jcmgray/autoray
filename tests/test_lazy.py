@@ -811,7 +811,7 @@ def test_concatenate():
 )
 @pytest.mark.parametrize("backend", BACKENDS)
 def test_norm(shape_in, keepdims, kwargs, backend):
-    if backend in ("dask",):
+    if backend in ("dask", "sparse",):
         pytest.xfail(f"{backend} doesn't support all 'linalg.norm' options...")
 
     fn = "linalg.norm"
