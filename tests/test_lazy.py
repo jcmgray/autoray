@@ -17,8 +17,9 @@ def assert_unary_fn_with_kwargs(fn, shapes, seed, kwargs, backend="numpy"):
     y = ar.do(fn, *args, **kwargs)
     largs = [lazy.array(arg) for arg in args]
     ly = ar.do(fn, *largs, **kwargs)
-    assert ly.shape == y.shape
-    xp.testing.assert_allclose(y, ly.compute())
+    assert xp.shape(ly) == xp.shape(y)
+    cy = ly.compute()
+    ar.do("testing.assert_allclose", xp.to_numpy(y), xp.to_numpy(cy))
 
 
 def test_manual_construct():
@@ -811,8 +812,11 @@ def test_concatenate():
 )
 @pytest.mark.parametrize("backend", BACKENDS)
 def test_norm(shape_in, keepdims, kwargs, backend):
-    if backend in ("dask", "sparse",):
+    if backend in ("sparse",):
         pytest.xfail(f"{backend} doesn't support all 'linalg.norm' options...")
+
+    if (backend == "dask") and (kwargs.get("ord", None) is not None):
+        pytest.xfail("Dask doesn't support ord != None yet...")
 
     fn = "linalg.norm"
     kwargs["keepdims"] = keepdims

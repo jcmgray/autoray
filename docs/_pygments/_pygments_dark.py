@@ -7,21 +7,20 @@ Pygments template by Jan T. Sott (https://github.com/idleberg)
 
 from pygments.style import Style
 from pygments.token import (
-    Keyword,
-    Name,
     Comment,
-    String,
     Error,
-    Text,
+    Generic,
+    Keyword,
+    Literal,
+    Name,
     Number,
     Operator,
-    Generic,
-    Whitespace,
-    Punctuation,
     Other,
-    Literal,
+    Punctuation,
+    String,
+    Text,
+    Whitespace,
 )
-
 
 BACKGROUND = "#1a1c1e"
 CURRENT_LINE = "#4e5a65"
