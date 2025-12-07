@@ -809,8 +809,11 @@ def test_concatenate():
         {"ord": 2, "axis": (2, 1)},
     ],
 )
-@pytest.mark.parametrize("backend", ["numpy", "torch"])
+@pytest.mark.parametrize("backend", BACKENDS)
 def test_norm(shape_in, keepdims, kwargs, backend):
+    if backend in ("dask",):
+        pytest.xfail(f"{backend} doesn't support all 'linalg.norm' options...")
+
     fn = "linalg.norm"
     kwargs["keepdims"] = keepdims
     assert_unary_fn_with_kwargs(
