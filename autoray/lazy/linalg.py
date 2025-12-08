@@ -116,12 +116,15 @@ def norm(x, ord=None, axis=None, keepdims=False):
     else:
         new_shape = list(shape(x))
         if isinstance(axis, int):
-            axis = (axis,)
+            norm_axes = (axis,)
+        else:
+            norm_axes = axis
+
         if keepdims:
-            for ax in axis:
+            for ax in norm_axes:
                 new_shape[ax] = 1
         else:
-            for ax in sorted(axis, reverse=True):
+            for ax in sorted(norm_axes, reverse=True):
                 new_shape.pop(ax)
         newshape = tuple(new_shape)
 

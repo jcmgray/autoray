@@ -2294,8 +2294,86 @@ _CUSTOM_WRAPPERS["tensorflow", "pad"] = tensorflow_pad_wrap
 _SUBMODULE_ALIASES["tensorflow", "pad"] = "tensorflow"
 
 
+def tensorflow_wrap_norm(tf_norm):
+    def wrapped_norm(x, ord=None, axis=None, keepdims=False, **kwargs):
+        if ord is None:
+            ord = "euclidean"
+        return tf_norm(x, ord=ord, axis=axis, keepdims=keepdims, **kwargs)
+
+    return wrapped_norm
+
+
+_CUSTOM_WRAPPERS["tensorflow", "linalg.norm"] = tensorflow_wrap_norm
+
+
 # register_creation_routine("tensorflow", "linspace", inject_dtype=False)
 
+
+class TensorflowDefaultRNG:
+    """Stateful random number generator for TensorFlow following numpy's
+    Generator API, compatible with `tf.function`.
+    """
+
+    def __init__(self, seed=None, **kwargs):
+        import tensorflow as tf
+
+        self.tf = tf
+
+        if seed is None:
+            self.generator = tf.random.Generator.from_non_deterministic_state(
+                **kwargs
+            )
+        else:
+            self.generator = tf.random.Generator.from_seed(seed, **kwargs)
+
+    def uniform(self, low=0.0, high=1.0, size=None, **kwargs):
+        shape = _handle_size_to_shape(size)
+        x = self.generator.uniform(
+            shape=shape, minval=low, maxval=high, **kwargs
+        )
+        return x
+
+    def random(self, size=None, **kwargs):
+        return self.uniform(size=size, **kwargs)
+
+    def normal(self, loc=0.0, scale=1.0, size=None, **kwargs):
+        shape = _handle_size_to_shape(size)
+        x = self.generator.normal(
+            shape=shape, mean=loc, stddev=scale, **kwargs
+        )
+        return x
+
+    def integers(self, low, high=None, size=None, **kwargs):
+        shape = _handle_size_to_shape(size)
+        if high is None:
+            high = low
+            low = 0
+        return self.generator.uniform(
+            shape=shape,
+            minval=low,
+            maxval=high,
+            dtype=self.tf.int32,
+            **kwargs,
+        )
+
+    # def binomial(self, n, p, size=None, **kwargs):
+    #     raise NotImplementedError
+
+    # def choice(self, a, size=None, replace=True, p=None, axis=0, **kwargs):
+    #     raise NotImplementedError
+
+    # def permutation(self, x, **kwargs):
+    #     raise NotImplementedError
+
+
+def tensorflow_default_rng(seed, **kwargs):
+    if isinstance(seed, TensorflowDefaultRNG):
+        return seed
+    return TensorflowDefaultRNG(seed, **kwargs)
+
+
+register_function("tensorflow", "random.default_rng", tensorflow_default_rng)
+register_backend(TensorflowDefaultRNG, "tensorflow")
 
 # ---------------------------------- torch ---------------------------------- #
 

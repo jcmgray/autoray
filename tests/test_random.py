@@ -13,11 +13,12 @@ from .test_autoray import BACKENDS
         if any(
             b.values[0] == other
             for other in (
-                "numpy",
-                "jax",
-                "torch",
                 "cupy",
                 "dask",
+                "jax",
+                "numpy",
+                "tensorflow",
+                "torch",
             )
         )
     ],
@@ -66,6 +67,16 @@ def test_random_default_rng(backend, dist, args, kwargs):
         "permutation",
     ):
         pytest.xfail(f"torch: no {dist} interface yet.")
+
+    if backend == "tensorflow" and dist in (
+        "binomial",
+        "choice",
+        "exponential",
+        "gumbel",
+        "permutation",
+        "poisson",
+    ):
+        pytest.xfail(f"tensorflow: no {dist} interface yet.")
 
     seed = 42
     seed2 = 43
