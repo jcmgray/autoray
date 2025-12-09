@@ -1115,6 +1115,9 @@ def test_is_scalar(backend):
 
 @pytest.mark.parametrize("backend", BACKENDS)
 def test_function_array(backend):
+    if backend == "sparse":
+        pytest.xfail("sparse needs explicit constructor.")
+
     x = 2.0
     z1 = ar.do("array", [x], like=backend)
     assert ar.do("shape", z1) == (1,)
@@ -1140,6 +1143,9 @@ def test_function_array(backend):
 
 @pytest.mark.parametrize("backend", BACKENDS)
 def test_function_asarray(backend):
+    if backend == "sparse":
+        pytest.xfail("sparse needs explicit constructor.")
+
     x = 2.0
     z1 = ar.do("asarray", [x], like=backend)
     assert ar.do("shape", z1) == (1,)
