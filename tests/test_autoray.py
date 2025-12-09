@@ -1111,3 +1111,53 @@ def test_is_scalar(backend):
     assert ar.is_scalar(y)
     y = [5]
     assert not ar.is_scalar(y)
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_function_array(backend):
+    x = 2.0
+    z1 = ar.do("array", [x], like=backend)
+    assert ar.do("shape", z1) == (1,)
+    assert ar.infer_backend(z1) == backend
+
+    z2 = ar.do("array", (x,), like=backend)
+    assert ar.do("shape", z2) == (1,)
+    assert ar.infer_backend(z2) == backend
+
+    y = ar.do("array", x, like=backend)
+    z3 = ar.do("array", [y], like=y)
+    assert ar.do("shape", z3) == (1,)
+    assert ar.infer_backend(z3) == backend
+
+    z4 = ar.do("array", (y,), like=y)
+    assert ar.do("shape", z4) == (1,)
+    assert ar.infer_backend(z4) == backend
+
+    z5 = ar.do("array", z4, like=z4)
+    assert ar.do("shape", z5) == (1,)
+    assert ar.infer_backend(z5) == backend
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_function_asarray(backend):
+    x = 2.0
+    z1 = ar.do("asarray", [x], like=backend)
+    assert ar.do("shape", z1) == (1,)
+    assert ar.infer_backend(z1) == backend
+
+    z2 = ar.do("asarray", (x,), like=backend)
+    assert ar.do("shape", z2) == (1,)
+    assert ar.infer_backend(z2) == backend
+
+    y = ar.do("asarray", x, like=backend)
+    z3 = ar.do("asarray", [y], like=y)
+    assert ar.do("shape", z3) == (1,)
+    assert ar.infer_backend(z3) == backend
+
+    z4 = ar.do("asarray", (y,), like=y)
+    assert ar.do("shape", z4) == (1,)
+    assert ar.infer_backend(z4) == backend
+
+    z5 = ar.do("asarray", z4, like=z4)
+    assert ar.do("shape", z5) == (1,)
+    assert ar.infer_backend(z5) == backend
