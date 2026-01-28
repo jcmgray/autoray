@@ -131,11 +131,14 @@ astroid = "*"
 furo = "*"
 ipython = "*"
 myst-nb = "*"
+ruff = "*"
 setuptools_scm = "*"
 sphinx = "*"
 sphinx-autoapi = "*"
 sphinx-copybutton = "*"
 sphinx-design = "*"
+[tool.pixi.feature.docs.pypi-dependencies]
+squeaky = "*"
 
 [tool.pixi.environments]
 testpyold = { features = ["pyold", "full", "tests"] }
@@ -161,3 +164,12 @@ cwd = "."
 docs = { cmd = "sphinx-build -b html docs docs/_build/html", cwd = "." }
 docs-clean = { cmd = "rm -rf docs/_build", cwd = "." }
 docs-serve = { cmd = "python -m http.server -d docs/_build/html 8000", cwd = "." }
+lint = { cmd = """
+    ruff check --select I
+    && ruff format --check
+""", cwd = "." }
+format = { cmd = """
+    ruff check --select I --fix
+    && ruff format
+    && squeaky `find . -name \"*.ipynb\"`
+""", cwd = "." }
