@@ -1245,6 +1245,16 @@ def find_broadcast_shape(xshape, yshape):
 # -------------------------------- interface -------------------------------- #
 
 
+# TODO: notable still missing
+# dot
+# vdot
+# inner
+# outer
+# pad
+# squeeze
+# to_numpy
+
+
 def Variable(shape, backend=None):
     """Create a ``LazyArray`` from a shape only, representing a leaf node
     in the computational graph. It can only act as a placeholder for data.
@@ -1957,13 +1967,6 @@ def allclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False):
         shape=(),
         deps=tuple(x for x in (a, b) if isinstance(x, LazyArray)),
     )
-
-
-# # XXX: still missing
-# dot, vdot, inner, outer
-# pad, eye
-# squeeze, expand_dims
-# to_numpy
 
 
 # ----------------------------- array creation ------------------------------ #
