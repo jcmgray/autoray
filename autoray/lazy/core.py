@@ -1940,8 +1940,26 @@ prod = make_reduction_func("prod", var_name="prod")
 min_ = make_reduction_func("min", var_name="min_")
 max_ = make_reduction_func("max", var_name="max_")
 
+
+@lazy_cache("allclose")
+def allclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False):
+    a = ensure_lazy(a)
+    b = ensure_lazy(b)
+
+    backend = find_common_backend(a, b)
+    fn_allclose = get_lib_fn(backend, "allclose")
+
+    return LazyArray(
+        backend=backend,
+        fn=fn_allclose,
+        args=(a, b),
+        kwargs={"rtol": rtol, "atol": atol, "equal_nan": equal_nan},
+        shape=(),
+        deps=tuple(x for x in (a, b) if isinstance(x, LazyArray)),
+    )
+
+
 # # XXX: still missing
-# allclose
 # dot, vdot, inner, outer
 # pad, eye
 # squeeze, expand_dims

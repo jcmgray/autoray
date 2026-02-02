@@ -4,6 +4,7 @@ from .core import (
     LazyArray,
     Variable,
     add,
+    allclose,
     angle,
     arccos,
     arccosh,
@@ -74,6 +75,7 @@ from .core import sum_ as sum
 __all__ = (
     "abs",
     "add",
+    "allclose",
     "angle",
     "arccos",
     "arccosh",

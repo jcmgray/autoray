@@ -823,3 +823,20 @@ def test_norm(shape_in, keepdims, kwargs, backend):
     assert_unary_fn_with_kwargs(
         fn, [shape_in], seed=1234, kwargs=kwargs, backend=backend
     )
+
+
+def test_allclose():
+    a = ar.do("random.uniform", size=(2, 3), like="numpy")
+    b = lazy.array(a)
+    # identical arrays
+    assert ar.do("allclose", b, b).compute()
+    # small difference
+    c = b + 1e-9
+    assert ar.do("allclose", b, c).compute()
+    # large difference
+    d = b + 1.0
+    assert not ar.do("allclose", b, d).compute()
+    # custom tolerance
+    e = b + 1e-4
+    assert not ar.do("allclose", b, e).compute()
+    assert ar.do("allclose", b, e, atol=1e-3).compute()
