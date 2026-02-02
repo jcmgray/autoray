@@ -2,7 +2,7 @@
 AUTORAY - backend agnostic array operations.
 
 
-Copyright 2019-2023 Johnnie Gray
+Copyright 2019-2026 Johnnie Gray
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -595,9 +595,80 @@ def register_function(backend, name, fn, wrap=False):
     """
     if wrap:
         old = get_lib_fn(backend, name)
-        _FUNCS[backend, name] = fn(old)
+        register_function(backend, name, fn(old))
     else:
         _FUNCS[backend, name] = fn
+
+
+def register_backend_alias(alias, backend):
+    """Register an alias for a backend.
+
+    Parameters
+    ----------
+    alias : str
+        The alias name.
+    backend : str
+        The actual backend name.
+    """
+    _BACKEND_ALIASES[alias] = backend
+
+
+def register_module_alias(alias, module):
+    """Register an alias for a module.
+
+    Parameters
+    ----------
+    alias : str
+        The alias name.
+    module : str
+        The actual module name.
+    """
+    _MODULE_ALIASES[alias] = module
+
+
+def register_submodule_alias(backend, fn, module):
+    """Register an alias for a submodule location of a function.
+
+    Parameters
+    ----------
+    backend : str
+        The name of the backend.
+    fn : str
+        The name of the function.
+    module : str
+        The module where the function is located.
+    """
+    _SUBMODULE_ALIASES[backend, fn] = module
+
+
+def register_func_alias(backend, fn, alias):
+    """Register an alias for a function name.
+
+    Parameters
+    ----------
+    backend : str
+        The name of the backend.
+    fn : str
+        The name of the function.
+    alias : str
+        The name of the function in the backend.
+    """
+    _FUNC_ALIASES[backend, fn] = alias
+
+
+def register_custom_wrapper(backend, fn, wrapper):
+    """Register a custom wrapper for a function.
+
+    Parameters
+    ----------
+    backend : str
+        The name of the backend.
+    fn : str
+        The name of the function.
+    wrapper : callable
+        The wrapper function.
+    """
+    _CUSTOM_WRAPPERS[backend, fn] = wrapper
 
 
 # -------------------------- array detection utils -------------------------- #
@@ -1791,8 +1862,8 @@ numpy = get_namespace()
 
 # ------------------------------ standard-lib ------------------------------- #
 
-_MODULE_ALIASES["decimal"] = "math"
-_MODULE_ALIASES["builtins"] = "numpy"
+register_module_alias("decimal", "math")
+register_module_alias("builtins", "numpy")
 
 
 _builtin_dtype_lookup = {
@@ -1807,7 +1878,7 @@ def builtins_get_dtype_name(x):
     return _builtin_dtype_lookup[x.__class__]
 
 
-_FUNCS["builtins", "complex"] = complex
+register_function("builtins", "complex", complex)
 
 # ---------------------------------- numpy ---------------------------------- #
 
@@ -1816,15 +1887,15 @@ def numpy_to_numpy(x):
     return do("asarray", x, like="numpy")
 
 
-_MODULE_ALIASES["numpy.scipy"] = "scipy"
-_FUNCS["numpy", "to_numpy"] = numpy_to_numpy
-_FUNCS["numpy", "complex"] = complex_add_re_im
-_FUNCS["builtins", "to_numpy"] = numpy_to_numpy
-_SUBMODULE_ALIASES["numpy", "linalg.lu"] = "scipy.linalg"
-_SUBMODULE_ALIASES["numpy", "linalg.expm"] = "scipy.linalg"
-_CUSTOM_WRAPPERS["numpy", "linalg.svd"] = svd_not_full_matrices_wrapper
-_CUSTOM_WRAPPERS["numpy", "random.normal"] = with_dtype_wrapper
-_CUSTOM_WRAPPERS["numpy", "random.uniform"] = with_dtype_wrapper
+register_module_alias("numpy.scipy", "scipy")
+register_function("builtins", "to_numpy", numpy_to_numpy)
+register_function("numpy", "complex", complex_add_re_im)
+register_function("numpy", "to_numpy", numpy_to_numpy)
+register_submodule_alias("numpy", "linalg.expm", "scipy.linalg")
+register_submodule_alias("numpy", "linalg.lu", "scipy.linalg")
+register_custom_wrapper("numpy", "linalg.svd", svd_not_full_matrices_wrapper)
+register_custom_wrapper("numpy", "random.normal", with_dtype_wrapper)
+register_custom_wrapper("numpy", "random.uniform", with_dtype_wrapper)
 
 # ---------------------------------- cupy ----------------------------------- #
 
@@ -1833,10 +1904,10 @@ def cupy_to_numpy(x):  # pragma: no cover
     return x.get()
 
 
-_MODULE_ALIASES["cupy.scipy"] = "cupyx.scipy"
-_FUNCS["cupy", "to_numpy"] = cupy_to_numpy
-_FUNCS["cupy", "complex"] = complex_add_re_im
-_CUSTOM_WRAPPERS["cupy", "linalg.svd"] = svd_not_full_matrices_wrapper
+register_module_alias("cupy.scipy", "cupyx.scipy")
+register_function("cupy", "complex", complex_add_re_im)
+register_function("cupy", "to_numpy", cupy_to_numpy)
+register_custom_wrapper("cupy", "linalg.svd", svd_not_full_matrices_wrapper)
 
 # ----------------------------------- jax ----------------------------------- #
 
@@ -1996,19 +2067,20 @@ def jax_random_normal(loc=0.0, scale=1.0, size=None, **kwargs):
     return x
 
 
-_BACKEND_ALIASES["jaxlib"] = "jax"
-_MODULE_ALIASES["jax.scipy"] = "jax.scipy"
-_MODULE_ALIASES["jax"] = "jax.numpy"
-_SUBMODULE_ALIASES["jax", "complex"] = "jax.lax"
-_SUBMODULE_ALIASES["jax", "linalg.expm"] = "jax.scipy.linalg"
-_SUBMODULE_ALIASES["jax", "linalg.householder_product"] = "jax.lax.linalg"
-# n.b. jax supports fat QR but not when computing gradients
-_CUSTOM_WRAPPERS["jax", "linalg.qr"] = qr_allow_fat
-_CUSTOM_WRAPPERS["jax", "linalg.svd"] = svd_not_full_matrices_wrapper
-_FUNCS["jax", "to_numpy"] = jax_to_numpy
-_FUNCS["jax", "random.seed"] = jax_random_seed
-_FUNCS["jax", "random.uniform"] = jax_random_uniform
-_FUNCS["jax", "random.normal"] = jax_random_normal
+register_module_alias("jaxlib", "jax")
+register_module_alias("jax.scipy", "jax.scipy")
+register_module_alias("jax", "jax.numpy")
+register_submodule_alias("jax", "complex", "jax.lax")
+register_submodule_alias("jax", "linalg.expm", "jax.scipy.linalg")
+register_submodule_alias("jax", "linalg.householder_product", "jax.lax.linalg")
+# n.b. jax supports fat QR but *not* when computing gradients
+#     https://github.com/jax-ml/jax/issues/23533
+register_custom_wrapper("jax", "linalg.qr", qr_allow_fat)
+register_custom_wrapper("jax", "linalg.svd", svd_not_full_matrices_wrapper)
+register_function("jax", "to_numpy", jax_to_numpy)
+register_function("jax", "random.seed", jax_random_seed)
+register_function("jax", "random.uniform", jax_random_uniform)
+register_function("jax", "random.normal", jax_random_normal)
 
 
 # --------------------------------- aesara ---------------------------------- #
@@ -2019,8 +2091,8 @@ def aesara_shape(x):
     return x.type.shape
 
 
-_MODULE_ALIASES["aesara"] = "aesara.tensor"
-_FUNCS["aesara", "shape"] = aesara_shape
+register_module_alias("aesara", "aesara.tensor")
+register_function("aesara", "shape", aesara_shape)
 
 
 # -------------------------------- autograd --------------------------------- #
@@ -2037,10 +2109,12 @@ def autograd_take(x, indices, axis=None):
         return x[selector]
 
 
-_MODULE_ALIASES["autograd"] = "autograd.numpy"
-_CUSTOM_WRAPPERS["autograd", "linalg.svd"] = svd_not_full_matrices_wrapper
-_FUNCS["autograd", "complex"] = complex_add_re_im
-_FUNCS["autograd", "take"] = autograd_take
+register_module_alias("autograd", "autograd.numpy")
+register_custom_wrapper(
+    "autograd", "linalg.svd", svd_not_full_matrices_wrapper
+)
+register_function("autograd", "complex", complex_add_re_im)
+register_function("autograd", "take", autograd_take)
 
 
 # ---------------------------------- dask ----------------------------------- #
@@ -2059,16 +2133,16 @@ def dask_eye_wrapper(fn):
     return numpy_like
 
 
-_FUNCS["dask", "to_numpy"] = dask_to_numpy
-_FUNCS["dask", "complex"] = complex_add_re_im
-_FUNC_ALIASES["dask", "abs"] = "absolute"
-_FUNC_ALIASES["dask", "identity"] = "eye"
-_MODULE_ALIASES["dask"] = "dask.array"
-_CUSTOM_WRAPPERS["dask", "linalg.svd"] = svd_manual_full_matrices_kwarg
-_CUSTOM_WRAPPERS["dask", "linalg.cholesky"] = cholesky_lower
-_CUSTOM_WRAPPERS["dask", "random.normal"] = with_dtype_wrapper
-_CUSTOM_WRAPPERS["dask", "random.uniform"] = with_dtype_wrapper
-_CUSTOM_WRAPPERS["dask", "eye"] = dask_eye_wrapper
+register_function("dask", "to_numpy", dask_to_numpy)
+register_function("dask", "complex", complex_add_re_im)
+register_func_alias("dask", "abs", "absolute")
+register_func_alias("dask", "identity", "eye")
+register_module_alias("dask", "dask.array")
+register_custom_wrapper("dask", "eye", dask_eye_wrapper)
+register_custom_wrapper("dask", "linalg.cholesky", cholesky_lower)
+register_custom_wrapper("dask", "linalg.svd", svd_manual_full_matrices_kwarg)
+register_custom_wrapper("dask", "random.normal", with_dtype_wrapper)
+register_custom_wrapper("dask", "random.uniform", with_dtype_wrapper)
 
 # ---------------------------------- mars ----------------------------------- #
 
@@ -2077,10 +2151,10 @@ def mars_to_numpy(x):
     return x.to_numpy()
 
 
-_FUNCS["mars", "to_numpy"] = mars_to_numpy
-_FUNCS["mars", "complex"] = complex_add_re_im
-_MODULE_ALIASES["mars"] = "mars.tensor"
-_CUSTOM_WRAPPERS["mars", "linalg.cholesky"] = cholesky_lower
+register_function("mars", "to_numpy", mars_to_numpy)
+register_function("mars", "complex", complex_add_re_im)
+register_module_alias("mars", "mars.tensor")
+register_custom_wrapper("mars", "linalg.cholesky", cholesky_lower)
 
 
 # ----------------------------------- ctf ----------------------------------- #
@@ -2103,24 +2177,24 @@ def ctf_get_dtype_name(x):
     return x.dtype.__name__
 
 
-_FUNCS["ctf", "array"] = ctf_array
-_FUNCS["ctf", "complex"] = complex_add_re_im
-_FUNCS["ctf", "allclose"] = allclose
-_FUNCS["ctf", "to_numpy"] = ctf_to_numpy
-_FUNCS["ctf", "count_nonzero"] = ctf_count_nonzero
+register_function("ctf", "array", ctf_array)
+register_function("ctf", "complex", complex_add_re_im)
+register_function("ctf", "allclose", allclose)
+register_function("ctf", "to_numpy", ctf_to_numpy)
+register_function("ctf", "count_nonzero", ctf_count_nonzero)
 
-_SUBMODULE_ALIASES["ctf", "float32"] = "numpy"
-_SUBMODULE_ALIASES["ctf", "float64"] = "numpy"
-_SUBMODULE_ALIASES["ctf", "complex64"] = "numpy"
-_SUBMODULE_ALIASES["ctf", "complex128"] = "numpy"
-_SUBMODULE_ALIASES["ctf", "linalg.svd"] = "ctf"
-_SUBMODULE_ALIASES["ctf", "linalg.eigh"] = "ctf"
-_SUBMODULE_ALIASES["ctf", "linalg.qr"] = "ctf"
-_SUBMODULE_ALIASES["ctf", "linalg.norm"] = "ctf"
+register_submodule_alias("ctf", "float32", "numpy")
+register_submodule_alias("ctf", "float64", "numpy")
+register_submodule_alias("ctf", "complex64", "numpy")
+register_submodule_alias("ctf", "complex128", "numpy")
+register_submodule_alias("ctf", "linalg.svd", "ctf")
+register_submodule_alias("ctf", "linalg.eigh", "ctf")
+register_submodule_alias("ctf", "linalg.qr", "ctf")
+register_submodule_alias("ctf", "linalg.norm", "ctf")
 
-_FUNC_ALIASES["ctf", "random.uniform"] = "random"
+register_func_alias("ctf", "random.uniform", "random")
 
-_CUSTOM_WRAPPERS["ctf", "random.uniform"] = scale_random_uniform_manually
+register_custom_wrapper("ctf", "random.uniform", scale_random_uniform_manually)
 
 
 # ------------------------------- sparse------------------------------------- #
@@ -2184,22 +2258,21 @@ def sparse_random_normal(loc=0.0, scale=1.0, size=None, dtype=None, **kwargs):
     return do("random", size, data_rvs=rvs, **kwargs, like="sparse")
 
 
-_FUNCS["sparse", "array"] = sparse_array
-_FUNCS["sparse", "to_numpy"] = sparse_to_numpy
-_FUNCS["sparse", "transpose"] = sparse_transpose
-_FUNCS["sparse", "reshape"] = sparse_reshape
-_FUNCS["sparse", "sum"] = sparse_sum
-_FUNCS["sparse", "prod"] = sparse_prod
-_FUNCS["sparse", "conj"] = sparse_conj
-_FUNCS["sparse", "real"] = sparse_real
-_FUNCS["sparse", "real"] = sparse_real
-_FUNCS["sparse", "imag"] = sparse_imag
-_FUNCS["sparse", "complex"] = complex_add_re_im
-_FUNCS["sparse", "count_nonzero"] = sparse_count_nonzero
-_FUNCS["sparse", "random.uniform"] = sparse_random_uniform
-_FUNCS["sparse", "random.normal"] = sparse_random_normal
+register_function("sparse", "array", sparse_array)
+register_function("sparse", "to_numpy", sparse_to_numpy)
+register_function("sparse", "transpose", sparse_transpose)
+register_function("sparse", "reshape", sparse_reshape)
+register_function("sparse", "sum", sparse_sum)
+register_function("sparse", "prod", sparse_prod)
+register_function("sparse", "conj", sparse_conj)
+register_function("sparse", "real", sparse_real)
+register_function("sparse", "imag", sparse_imag)
+register_function("sparse", "complex", complex_add_re_im)
+register_function("sparse", "count_nonzero", sparse_count_nonzero)
+register_function("sparse", "random.uniform", sparse_random_uniform)
+register_function("sparse", "random.normal", sparse_random_normal)
 
-_FUNC_ALIASES["sparse", "identity"] = "eye"
+register_func_alias("sparse", "identity", "eye")
 
 # sparse uses numpys __array_func__ interface
 for f in (
@@ -2226,7 +2299,7 @@ for f in (
     # arrays but errors when both inputs are dense - we want nested calls to
     # tensordot to handle this
 ):
-    _SUBMODULE_ALIASES["sparse", f] = "numpy"
+    register_submodule_alias("sparse", f, "numpy")
 
 
 # ------------------------------- tensorflow -------------------------------- #
@@ -2242,33 +2315,41 @@ def tensorflow_indices(dimensions):
     return _meshgrid(*map(_arange, dimensions), indexing="ij")
 
 
-_MODULE_ALIASES["tensorflow.linalg"] = "tensorflow.linalg"
-_MODULE_ALIASES["tensorflow.random"] = "tensorflow.random"
-_MODULE_ALIASES["tensorflow"] = "tensorflow.experimental.numpy"
+register_module_alias("tensorflow.linalg", "tensorflow.linalg")
+register_module_alias("tensorflow.random", "tensorflow.random")
+register_module_alias("tensorflow", "tensorflow.experimental.numpy")
 
-_FUNCS["tensorflow", "to_numpy"] = tensorflow_to_numpy
-_FUNCS["tensorflow", "indices"] = tensorflow_indices
+register_function("tensorflow", "to_numpy", tensorflow_to_numpy)
+register_function("tensorflow", "indices", tensorflow_indices)
 
-_FUNC_ALIASES["tensorflow", "astype"] = "cast"
-_SUBMODULE_ALIASES["tensorflow", "cast"] = "tensorflow"
-_SUBMODULE_ALIASES["tensorflow", "astype"] = "tensorflow"
-_SUBMODULE_ALIASES["tensorflow", "complex"] = "tensorflow"
+register_func_alias("tensorflow", "astype", "cast")
+register_submodule_alias("tensorflow", "cast", "tensorflow")
+register_submodule_alias("tensorflow", "astype", "tensorflow")
+register_submodule_alias("tensorflow", "complex", "tensorflow")
 
-_CUSTOM_WRAPPERS["tensorflow", "linalg.svd"] = svd_sUV_to_UsVH_wrapper
-_CUSTOM_WRAPPERS["tensorflow", "linalg.solve"] = binary_allow_1d_rhs_wrap
-_CUSTOM_WRAPPERS["tensorflow", "random.uniform"] = make_translator(
-    [
-        ("low", ("minval", 0.0)),
-        ("high", ("maxval", 1.0)),
-        ("size", ("shape", ())),
-    ]
+register_custom_wrapper("tensorflow", "linalg.svd", svd_sUV_to_UsVH_wrapper)
+register_custom_wrapper("tensorflow", "linalg.solve", binary_allow_1d_rhs_wrap)
+register_custom_wrapper(
+    "tensorflow",
+    "random.uniform",
+    make_translator(
+        [
+            ("low", ("minval", 0.0)),
+            ("high", ("maxval", 1.0)),
+            ("size", ("shape", ())),
+        ]
+    ),
 )
-_CUSTOM_WRAPPERS["tensorflow", "random.normal"] = make_translator(
-    [
-        ("loc", ("mean", 0.0)),
-        ("scale", ("stddev", 1.0)),
-        ("size", ("shape", ())),
-    ]
+register_custom_wrapper(
+    "tensorflow",
+    "random.normal",
+    make_translator(
+        [
+            ("loc", ("mean", 0.0)),
+            ("scale", ("stddev", 1.0)),
+            ("size", ("shape", ())),
+        ]
+    ),
 )
 
 
@@ -2290,8 +2371,8 @@ def tensorflow_pad_wrap(tf_pad):
     return numpy_like
 
 
-_CUSTOM_WRAPPERS["tensorflow", "pad"] = tensorflow_pad_wrap
-_SUBMODULE_ALIASES["tensorflow", "pad"] = "tensorflow"
+register_custom_wrapper("tensorflow", "pad", tensorflow_pad_wrap)
+register_submodule_alias("tensorflow", "pad", "tensorflow")
 
 
 def tensorflow_wrap_norm(tf_norm):
@@ -2303,7 +2384,7 @@ def tensorflow_wrap_norm(tf_norm):
     return wrapped_norm
 
 
-_CUSTOM_WRAPPERS["tensorflow", "linalg.norm"] = tensorflow_wrap_norm
+register_custom_wrapper("tensorflow", "linalg.norm", tensorflow_wrap_norm)
 
 
 # register_creation_routine("tensorflow", "linspace", inject_dtype=False)
@@ -2717,81 +2798,111 @@ register_function("torch", "random.default_rng", torch_default_rng)
 register_backend(TorchDefaultRNG, "torch")
 
 
-_FUNCS["torch", "pad"] = torch_pad
-_FUNCS["torch", "real"] = torch_real
-_FUNCS["torch", "imag"] = torch_imag
-_FUNCS["torch", "astype"] = torch_astype
-_FUNCS["torch", "copy"] = torch_copy
-_FUNCS["torch", "to_numpy"] = torch_to_numpy
-_FUNCS["torch", "complex"] = complex_add_re_im
-_FUNCS["torch", "transpose"] = torch_transpose
-_FUNCS["torch", "indices"] = torch_indices
-_FUNCS["torch", "take"] = torch_take
+register_function("torch", "pad", torch_pad)
+register_function("torch", "real", torch_real)
+register_function("torch", "imag", torch_imag)
+register_function("torch", "astype", torch_astype)
+register_function("torch", "copy", torch_copy)
+register_function("torch", "to_numpy", torch_to_numpy)
+register_function("torch", "complex", complex_add_re_im)
+register_function("torch", "transpose", torch_transpose)
+register_function("torch", "indices", torch_indices)
+register_function("torch", "take", torch_take)
 
-_FUNC_ALIASES["torch", "array"] = "tensor"
-_FUNC_ALIASES["torch", "asarray"] = "as_tensor"
-_FUNC_ALIASES["torch", "clip"] = "clamp"
-_FUNC_ALIASES["torch", "concatenate"] = "cat"
-_FUNC_ALIASES["torch", "conjugate"] = "conj"
-_FUNC_ALIASES["torch", "equal"] = "eq"
-_FUNC_ALIASES["torch", "expand_dims"] = "unsqueeze"
-_FUNC_ALIASES["torch", "identity"] = "eye"
-_FUNC_ALIASES["torch", "linalg.expm"] = "matrix_exp"
-_FUNC_ALIASES["torch", "max"] = "amax"
-_FUNC_ALIASES["torch", "min"] = "amin"
-_FUNC_ALIASES["torch", "power"] = "pow"
-_FUNC_ALIASES["torch", "random.normal"] = "randn"
-_FUNC_ALIASES["torch", "random.uniform"] = "rand"
-_FUNC_ALIASES["torch", "scipy.linalg.expm"] = "matrix_exp"
-_FUNC_ALIASES["torch", "split"] = "tensor_split"
-_FUNC_ALIASES["torch", "take_along_axis"] = "take_along_dim"
+register_func_alias("torch", "array", "tensor")
+register_func_alias("torch", "asarray", "as_tensor")
+register_func_alias("torch", "clip", "clamp")
+register_func_alias("torch", "concatenate", "cat")
+register_func_alias("torch", "conjugate", "conj")
+register_func_alias("torch", "equal", "eq")
+register_func_alias("torch", "expand_dims", "unsqueeze")
+register_func_alias("torch", "identity", "eye")
+register_func_alias("torch", "linalg.expm", "matrix_exp")
+register_func_alias("torch", "max", "amax")
+register_func_alias("torch", "min", "amin")
+register_func_alias("torch", "power", "pow")
+register_func_alias("torch", "random.normal", "randn")
+register_func_alias("torch", "random.uniform", "rand")
+register_func_alias("torch", "scipy.linalg.expm", "matrix_exp")
+register_func_alias("torch", "split", "tensor_split")
+register_func_alias("torch", "take_along_axis", "take_along_dim")
 
-_SUBMODULE_ALIASES["torch", "linalg.expm"] = "torch"
-_SUBMODULE_ALIASES["torch", "scipy.linalg.expm"] = "torch"
-_SUBMODULE_ALIASES["torch", "random.normal"] = "torch"
-_SUBMODULE_ALIASES["torch", "random.uniform"] = "torch"
+register_submodule_alias("torch", "linalg.expm", "torch")
+register_submodule_alias("torch", "scipy.linalg.expm", "torch")
+register_submodule_alias("torch", "random.normal", "torch")
+register_submodule_alias("torch", "random.uniform", "torch")
 
-_CUSTOM_WRAPPERS["torch", "clip"] = make_translator(
-    [("a", ("input",)), ("a_min", ("min",)), ("a_max", ("max",))]
+register_custom_wrapper(
+    "torch",
+    "clip",
+    make_translator(
+        [("a", ("input",)), ("a_min", ("min",)), ("a_max", ("max",))]
+    ),
 )
-_CUSTOM_WRAPPERS["torch", "concatenate"] = make_translator(
-    [("arrays", ("tensors",)), ("axis", ("dim", 0))]
+register_custom_wrapper(
+    "torch",
+    "concatenate",
+    make_translator([("arrays", ("tensors",)), ("axis", ("dim", 0))]),
 )
-_CUSTOM_WRAPPERS["torch", "diagonal"] = make_translator(
-    [("a", ("input",)), ("axis1", ("dim1", 0)), ("axis2", ("dim2", 1))]
+register_custom_wrapper(
+    "torch",
+    "diagonal",
+    make_translator(
+        [("a", ("input",)), ("axis1", ("dim1", 0)), ("axis2", ("dim2", 1))]
+    ),
 )
-_CUSTOM_WRAPPERS["torch", "empty"] = make_translator([("shape", ("size",))])
-_CUSTOM_WRAPPERS["torch", "expand_dims"] = make_translator(
-    [("a", ("input",)), ("axis", ("dim",))]
+register_custom_wrapper(
+    "torch", "empty", make_translator([("shape", ("size",))])
 )
-_CUSTOM_WRAPPERS["torch", "eye"] = torch_eye_wrap
-_CUSTOM_WRAPPERS["torch", "flip"] = torch_flip_wrap
-_CUSTOM_WRAPPERS["torch", "linalg.svd"] = svd_not_full_matrices_wrapper
-_CUSTOM_WRAPPERS["torch", "ones"] = torch_zeros_ones_wrap
-_CUSTOM_WRAPPERS["torch", "random.normal"] = scale_random_normal_manually
-_CUSTOM_WRAPPERS["torch", "random.uniform"] = scale_random_uniform_manually
-_CUSTOM_WRAPPERS["torch", "sort"] = torch_sort_wrap
-_CUSTOM_WRAPPERS["torch", "stack"] = make_translator(
-    [("arrays", ("tensors",)), ("axis", ("dim", 0))]
+register_custom_wrapper(
+    "torch",
+    "expand_dims",
+    make_translator([("a", ("input",)), ("axis", ("dim",))]),
 )
-_CUSTOM_WRAPPERS["torch", "tensordot"] = torch_tensordot_wrap
-_CUSTOM_WRAPPERS["torch", "tril"] = make_translator(
-    [("m", ("input",)), ("k", ("diagonal", 0))]
+register_custom_wrapper("torch", "eye", torch_eye_wrap)
+register_custom_wrapper("torch", "flip", torch_flip_wrap)
+register_custom_wrapper("torch", "linalg.svd", svd_not_full_matrices_wrapper)
+register_custom_wrapper("torch", "ones", torch_zeros_ones_wrap)
+register_custom_wrapper("torch", "random.normal", scale_random_normal_manually)
+register_custom_wrapper(
+    "torch", "random.uniform", scale_random_uniform_manually
 )
-_CUSTOM_WRAPPERS["torch", "triu"] = make_translator(
-    [("m", ("input",)), ("k", ("diagonal", 0))]
+register_custom_wrapper("torch", "sort", torch_sort_wrap)
+register_custom_wrapper(
+    "torch",
+    "stack",
+    make_translator([("arrays", ("tensors",)), ("axis", ("dim", 0))]),
 )
-_CUSTOM_WRAPPERS["torch", "zeros"] = torch_zeros_ones_wrap
-_CUSTOM_WRAPPERS["torch", "take_along_axis"] = make_translator(
-    [("arr", ("input",)), ("indices", ("indices",)), ("axis", ("dim", -1))]
+register_custom_wrapper("torch", "tensordot", torch_tensordot_wrap)
+register_custom_wrapper(
+    "torch",
+    "tril",
+    make_translator([("m", ("input",)), ("k", ("diagonal", 0))]),
 )
-_CUSTOM_WRAPPERS["torch", "linalg.norm"] = make_translator(
-    [
-        ("x", ("input",)),
-        ("ord", ("ord", None)),
-        ("axis", ("dim", None)),
-        ("keepdims", ("keepdim", False)),
-    ]
+register_custom_wrapper(
+    "torch",
+    "triu",
+    make_translator([("m", ("input",)), ("k", ("diagonal", 0))]),
+)
+register_custom_wrapper("torch", "zeros", torch_zeros_ones_wrap)
+register_custom_wrapper(
+    "torch",
+    "take_along_axis",
+    make_translator(
+        [("arr", ("input",)), ("indices", ("indices",)), ("axis", ("dim", -1))]
+    ),
+)
+register_custom_wrapper(
+    "torch",
+    "linalg.norm",
+    make_translator(
+        [
+            ("x", ("input",)),
+            ("ord", ("ord", None)),
+            ("axis", ("dim", None)),
+            ("keepdims", ("keepdim", False)),
+        ]
+    ),
 )
 
 _torch_reduce_translation = [
@@ -2801,23 +2912,25 @@ _torch_reduce_translation = [
 ]
 for f in ("sum", "max", "min", "prod", "mean", "median", "std", "var"):
     # TODO: search "keepdim" in torch docs to find more
-    _CUSTOM_WRAPPERS["torch", f] = make_translator(_torch_reduce_translation)
+    register_custom_wrapper(
+        "torch", f, make_translator(_torch_reduce_translation)
+    )
 
 # for older versions of torch, can provide some alternative implementations
-_MODULE_ALIASES["torch[alt]"] = "torch"
+register_module_alias("torch[alt]", "torch")
 
-_FUNCS["torch[alt]", "linalg.eigh"] = torch_linalg_eigh
-_FUNCS["torch[alt]", "linalg.eigvalsh"] = torch_linalg_eigvalsh
+register_function("torch[alt]", "linalg.eigh", torch_linalg_eigh)
+register_function("torch[alt]", "linalg.eigvalsh", torch_linalg_eigvalsh)
 
-_SUBMODULE_ALIASES["torch[alt]", "linalg.norm"] = "torch"
-_SUBMODULE_ALIASES["torch[alt]", "linalg.qr"] = "torch"
-_SUBMODULE_ALIASES["torch[alt]", "linalg.solve"] = "torch"
-_SUBMODULE_ALIASES["torch[alt]", "linalg.svd"] = "torch"
+register_submodule_alias("torch[alt]", "linalg.norm", "torch")
+register_submodule_alias("torch[alt]", "linalg.qr", "torch")
+register_submodule_alias("torch[alt]", "linalg.solve", "torch")
+register_submodule_alias("torch[alt]", "linalg.svd", "torch")
 
-_CUSTOM_WRAPPERS["torch[alt]", "linalg.qr"] = qr_allow_fat
-_CUSTOM_WRAPPERS["torch[alt]", "linalg.solve"] = torch_linalg_solve_wrap
-_CUSTOM_WRAPPERS["torch[alt]", "linalg.svd"] = svd_UsV_to_UsVH_wrapper
-_CUSTOM_WRAPPERS["torch[alt]", "split"] = torch_split_wrap
+register_custom_wrapper("torch[alt]", "linalg.qr", qr_allow_fat)
+register_custom_wrapper("torch[alt]", "linalg.solve", torch_linalg_solve_wrap)
+register_custom_wrapper("torch[alt]", "linalg.svd", svd_UsV_to_UsVH_wrapper)
+register_custom_wrapper("torch[alt]", "split", torch_split_wrap)
 
 for f in _CREATION_ROUTINES:
     register_creation_routine("torch", f, inject_device=True)
@@ -2839,8 +2952,8 @@ def mxnet_to_numpy(x):
     return x.asnumpy()
 
 
-_MODULE_ALIASES["mxnet"] = "mxnet.numpy"
-_FUNCS["mxnet", "to_numpy"] = mxnet_to_numpy
+register_module_alias("mxnet", "mxnet.numpy")
+register_function("mxnet", "to_numpy", mxnet_to_numpy)
 
 
 # --------------------------------- paddle ---------------------------------- #
@@ -2968,38 +3081,42 @@ def paddle_split_wrap(fn):
     return numpy_like
 
 
-_MODULE_ALIASES["paddle[alt]"] = "paddle"
+register_module_alias("paddle[alt]", "paddle")
 
-_FUNCS["paddle", "to_numpy"] = paddle_to_numpy
-_FUNCS["paddle", "transpose"] = paddle_transpose
-_FUNCS["paddle", "real"] = paddle_real
-_FUNCS["paddle", "imag"] = paddle_imag
-_FUNCS["paddle", "indices"] = paddle_indices
-_FUNCS["paddle", "ravel"] = paddle_ravel
-_FUNCS["paddle", "pad"] = paddle_pad
+register_function("paddle", "to_numpy", paddle_to_numpy)
+register_function("paddle", "transpose", paddle_transpose)
+register_function("paddle", "real", paddle_real)
+register_function("paddle", "imag", paddle_imag)
+register_function("paddle", "indices", paddle_indices)
+register_function("paddle", "ravel", paddle_ravel)
+register_function("paddle", "pad", paddle_pad)
 
-_FUNC_ALIASES["paddle", "random.normal"] = "randn"
-_FUNC_ALIASES["paddle", "random.uniform"] = "rand"
-_FUNC_ALIASES["paddle", "asarray"] = "to_tensor"
-_FUNC_ALIASES["paddle", "concatenate"] = "concat"
-_FUNC_ALIASES["paddle", "power"] = "pow"
-_FUNC_ALIASES["paddle", "identity"] = "eye"
-_FUNC_ALIASES["paddle", "split"] = "tensor_split"
+register_func_alias("paddle", "random.normal", "randn")
+register_func_alias("paddle", "random.uniform", "rand")
+register_func_alias("paddle", "asarray", "to_tensor")
+register_func_alias("paddle", "concatenate", "concat")
+register_func_alias("paddle", "power", "pow")
+register_func_alias("paddle", "identity", "eye")
+register_func_alias("paddle", "split", "tensor_split")
 
-_SUBMODULE_ALIASES["paddle", "random.normal"] = "paddle"
-_SUBMODULE_ALIASES["paddle", "random.uniform"] = "paddle"
+register_submodule_alias("paddle", "random.normal", "paddle")
+register_submodule_alias("paddle", "random.uniform", "paddle")
 
-_CUSTOM_WRAPPERS["paddle", "random.normal"] = scale_random_normal_manually
-_CUSTOM_WRAPPERS["paddle", "random.uniform"] = scale_random_uniform_manually
-_CUSTOM_WRAPPERS["paddle[alt]", "split"] = paddle_split_wrap
-_CUSTOM_WRAPPERS["paddle", "tril"] = make_translator(
-    [("m", ("x",)), ("k", ("diagonal", 0))]
+register_custom_wrapper(
+    "paddle", "random.normal", scale_random_normal_manually
 )
-_CUSTOM_WRAPPERS["paddle", "triu"] = make_translator(
-    [("m", ("x",)), ("k", ("diagonal", 0))]
+register_custom_wrapper(
+    "paddle", "random.uniform", scale_random_uniform_manually
+)
+register_custom_wrapper("paddle[alt]", "split", paddle_split_wrap)
+register_custom_wrapper(
+    "paddle", "tril", make_translator([("m", ("x",)), ("k", ("diagonal", 0))])
+)
+register_custom_wrapper(
+    "paddle", "triu", make_translator([("m", ("x",)), ("k", ("diagonal", 0))])
 )
 for f in ("sum", "max", "min", "prod", "mean", "std", "var"):
-    _CUSTOM_WRAPPERS["paddle", f] = paddle_wrap_reduction
+    register_custom_wrapper("paddle", f, paddle_wrap_reduction)
 
 
 # -------------------------------- pytensor --------------------------------- #
@@ -3049,6 +3166,8 @@ def pytensor_wrap_svd_with_shapes(fn):
     return svd_shaped
 
 
-_MODULE_ALIASES["pytensor"] = "pytensor.tensor"
-_CUSTOM_WRAPPERS["pytensor", "linalg.qr"] = pytensor_wrap_qr_with_shapes
-_CUSTOM_WRAPPERS["pytensor", "linalg.svd"] = pytensor_wrap_svd_with_shapes
+register_module_alias("pytensor", "pytensor.tensor")
+register_custom_wrapper("pytensor", "linalg.qr", pytensor_wrap_qr_with_shapes)
+register_custom_wrapper(
+    "pytensor", "linalg.svd", pytensor_wrap_svd_with_shapes
+)
