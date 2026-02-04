@@ -26,4 +26,5 @@ new release:
    and uploading a package to the [PyPI **production** server](https://pypi.org/project/autoray/).
 5. The [`conda-forge/autoray-feedstock`](https://github.com/conda-forge/autoray-feedstock)
    repo should automatically pick up the new PyPI release and build a new
-   [conda package](https://anaconda.org/conda-forge/autoray).
+   [conda package](https://anaconda.org/conda-forge/autoray), the recipe should
+   only need to be manually updated if there are for example new dependencies.

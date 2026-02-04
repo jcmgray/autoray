@@ -578,30 +578,9 @@ def get_lib_fn(backend, fn):
 # --------------------------- register your own! ---------------------------- #
 
 
-def register_function(backend, name, fn, wrap=False):
-    """Directly provide your own function.
-
-    Parameters
-    ----------
-    backend : str
-        The name of the backend to register the function for.
-    name : str
-        Name of the function, e.g. `'sum'` or `'linalg.svd'`.
-    fn : callable
-        The function to register.
-    wrap : bool, optional
-        Whether to wrap the old function like ``fn(old_fn)`` rather than
-        directly supply the entire new function.
-    """
-    if wrap:
-        old = get_lib_fn(backend, name)
-        register_function(backend, name, fn(old))
-    else:
-        _FUNCS[backend, name] = fn
-
-
 def register_backend_alias(alias, backend):
-    """Register an alias for a backend.
+    """Register an alias for a backend, i.e. if the backend `alias` is
+    inferred for an array, use functions from `backend` instead.
 
     Parameters
     ----------
@@ -657,7 +636,8 @@ def register_func_alias(backend, fn, alias):
 
 
 def register_custom_wrapper(backend, fn, wrapper):
-    """Register a custom wrapper for a function.
+    """Register a custom wrapper for a function. The wrapper is called lazily
+    so that no imports are done until the function is actually used.
 
     Parameters
     ----------
@@ -669,6 +649,29 @@ def register_custom_wrapper(backend, fn, wrapper):
         The wrapper function.
     """
     _CUSTOM_WRAPPERS[backend, fn] = wrapper
+
+
+def register_function(backend, name, fn, wrap=False):
+    """Directly provide a custom implementation.
+
+    Parameters
+    ----------
+    backend : str
+        The name of the backend to register the function for.
+    name : str
+        Name of the function, e.g. `'sum'` or `'linalg.svd'`.
+    fn : callable
+        The function to register.
+    wrap : bool, optional
+        Whether to wrap the old function like ``fn(old_fn)`` rather than
+        directly supply the entire new function. This wrapper is eagerly called
+        when registering, unlike `register_custom_wrapper`.
+    """
+    if wrap:
+        old = get_lib_fn(backend, name)
+        _FUNCS[backend, name] = fn(old)
+    else:
+        _FUNCS[backend, name] = fn
 
 
 # -------------------------- array detection utils -------------------------- #
@@ -1888,14 +1891,17 @@ def numpy_to_numpy(x):
 
 
 register_module_alias("numpy.scipy", "scipy")
-register_function("builtins", "to_numpy", numpy_to_numpy)
-register_function("numpy", "complex", complex_add_re_im)
-register_function("numpy", "to_numpy", numpy_to_numpy)
+
 register_submodule_alias("numpy", "linalg.expm", "scipy.linalg")
 register_submodule_alias("numpy", "linalg.lu", "scipy.linalg")
+
 register_custom_wrapper("numpy", "linalg.svd", svd_not_full_matrices_wrapper)
 register_custom_wrapper("numpy", "random.normal", with_dtype_wrapper)
 register_custom_wrapper("numpy", "random.uniform", with_dtype_wrapper)
+
+register_function("builtins", "to_numpy", numpy_to_numpy)
+register_function("numpy", "complex", complex_add_re_im)
+register_function("numpy", "to_numpy", numpy_to_numpy)
 
 # ---------------------------------- cupy ----------------------------------- #
 
@@ -1905,9 +1911,11 @@ def cupy_to_numpy(x):  # pragma: no cover
 
 
 register_module_alias("cupy.scipy", "cupyx.scipy")
+
+register_custom_wrapper("cupy", "linalg.svd", svd_not_full_matrices_wrapper)
+
 register_function("cupy", "complex", complex_add_re_im)
 register_function("cupy", "to_numpy", cupy_to_numpy)
-register_custom_wrapper("cupy", "linalg.svd", svd_not_full_matrices_wrapper)
 
 # ----------------------------------- jax ----------------------------------- #
 
@@ -2016,10 +2024,6 @@ def jax_default_rng(seed, **kwargs):
     return JaxDefaultRNG(seed, **kwargs)
 
 
-register_function("jax", "random.default_rng", jax_default_rng)
-register_backend(JaxDefaultRNG, "jax")
-
-
 _JAX_RANDOM_KEY = None
 
 
@@ -2067,20 +2071,27 @@ def jax_random_normal(loc=0.0, scale=1.0, size=None, **kwargs):
     return x
 
 
-register_module_alias("jaxlib", "jax")
+register_backend_alias("jaxlib", "jax")
+
+register_backend(JaxDefaultRNG, "jax")
+
 register_module_alias("jax.scipy", "jax.scipy")
 register_module_alias("jax", "jax.numpy")
+
 register_submodule_alias("jax", "complex", "jax.lax")
 register_submodule_alias("jax", "linalg.expm", "jax.scipy.linalg")
 register_submodule_alias("jax", "linalg.householder_product", "jax.lax.linalg")
+
 # n.b. jax supports fat QR but *not* when computing gradients
 #     https://github.com/jax-ml/jax/issues/23533
 register_custom_wrapper("jax", "linalg.qr", qr_allow_fat)
 register_custom_wrapper("jax", "linalg.svd", svd_not_full_matrices_wrapper)
-register_function("jax", "to_numpy", jax_to_numpy)
+
+register_function("jax", "random.default_rng", jax_default_rng)
+register_function("jax", "random.normal", jax_random_normal)
 register_function("jax", "random.seed", jax_random_seed)
 register_function("jax", "random.uniform", jax_random_uniform)
-register_function("jax", "random.normal", jax_random_normal)
+register_function("jax", "to_numpy", jax_to_numpy)
 
 
 # --------------------------------- aesara ---------------------------------- #
@@ -2092,6 +2103,7 @@ def aesara_shape(x):
 
 
 register_module_alias("aesara", "aesara.tensor")
+
 register_function("aesara", "shape", aesara_shape)
 
 
@@ -2110,9 +2122,11 @@ def autograd_take(x, indices, axis=None):
 
 
 register_module_alias("autograd", "autograd.numpy")
+
 register_custom_wrapper(
     "autograd", "linalg.svd", svd_not_full_matrices_wrapper
 )
+
 register_function("autograd", "complex", complex_add_re_im)
 register_function("autograd", "take", autograd_take)
 
@@ -2133,16 +2147,19 @@ def dask_eye_wrapper(fn):
     return numpy_like
 
 
-register_function("dask", "to_numpy", dask_to_numpy)
-register_function("dask", "complex", complex_add_re_im)
+register_module_alias("dask", "dask.array")
+
 register_func_alias("dask", "abs", "absolute")
 register_func_alias("dask", "identity", "eye")
-register_module_alias("dask", "dask.array")
+
 register_custom_wrapper("dask", "eye", dask_eye_wrapper)
 register_custom_wrapper("dask", "linalg.cholesky", cholesky_lower)
 register_custom_wrapper("dask", "linalg.svd", svd_manual_full_matrices_kwarg)
 register_custom_wrapper("dask", "random.normal", with_dtype_wrapper)
 register_custom_wrapper("dask", "random.uniform", with_dtype_wrapper)
+
+register_function("dask", "complex", complex_add_re_im)
+register_function("dask", "to_numpy", dask_to_numpy)
 
 # ---------------------------------- mars ----------------------------------- #
 
@@ -2151,10 +2168,12 @@ def mars_to_numpy(x):
     return x.to_numpy()
 
 
-register_function("mars", "to_numpy", mars_to_numpy)
-register_function("mars", "complex", complex_add_re_im)
 register_module_alias("mars", "mars.tensor")
+
 register_custom_wrapper("mars", "linalg.cholesky", cholesky_lower)
+
+register_function("mars", "complex", complex_add_re_im)
+register_function("mars", "to_numpy", mars_to_numpy)
 
 
 # ----------------------------------- ctf ----------------------------------- #
@@ -2177,25 +2196,24 @@ def ctf_get_dtype_name(x):
     return x.dtype.__name__
 
 
-register_function("ctf", "array", ctf_array)
-register_function("ctf", "complex", complex_add_re_im)
-register_function("ctf", "allclose", allclose)
-register_function("ctf", "to_numpy", ctf_to_numpy)
-register_function("ctf", "count_nonzero", ctf_count_nonzero)
-
+register_submodule_alias("ctf", "complex128", "numpy")
+register_submodule_alias("ctf", "complex64", "numpy")
 register_submodule_alias("ctf", "float32", "numpy")
 register_submodule_alias("ctf", "float64", "numpy")
-register_submodule_alias("ctf", "complex64", "numpy")
-register_submodule_alias("ctf", "complex128", "numpy")
-register_submodule_alias("ctf", "linalg.svd", "ctf")
 register_submodule_alias("ctf", "linalg.eigh", "ctf")
-register_submodule_alias("ctf", "linalg.qr", "ctf")
 register_submodule_alias("ctf", "linalg.norm", "ctf")
+register_submodule_alias("ctf", "linalg.qr", "ctf")
+register_submodule_alias("ctf", "linalg.svd", "ctf")
 
 register_func_alias("ctf", "random.uniform", "random")
 
 register_custom_wrapper("ctf", "random.uniform", scale_random_uniform_manually)
 
+register_function("ctf", "allclose", allclose)
+register_function("ctf", "array", ctf_array)
+register_function("ctf", "complex", complex_add_re_im)
+register_function("ctf", "count_nonzero", ctf_count_nonzero)
+register_function("ctf", "to_numpy", ctf_to_numpy)
 
 # ------------------------------- sparse------------------------------------- #
 
@@ -2258,42 +2276,26 @@ def sparse_random_normal(loc=0.0, scale=1.0, size=None, dtype=None, **kwargs):
     return do("random", size, data_rvs=rvs, **kwargs, like="sparse")
 
 
-register_function("sparse", "array", sparse_array)
-register_function("sparse", "to_numpy", sparse_to_numpy)
-register_function("sparse", "transpose", sparse_transpose)
-register_function("sparse", "reshape", sparse_reshape)
-register_function("sparse", "sum", sparse_sum)
-register_function("sparse", "prod", sparse_prod)
-register_function("sparse", "conj", sparse_conj)
-register_function("sparse", "real", sparse_real)
-register_function("sparse", "imag", sparse_imag)
-register_function("sparse", "complex", complex_add_re_im)
-register_function("sparse", "count_nonzero", sparse_count_nonzero)
-register_function("sparse", "random.uniform", sparse_random_uniform)
-register_function("sparse", "random.normal", sparse_random_normal)
-
-register_func_alias("sparse", "identity", "eye")
-
 # sparse uses numpys __array_func__ interface
 for f in (
-    "log",
-    "log2",
-    "log10",
+    "arccos",
+    "arccosh",
+    "arcsin",
+    "arcsinh",
+    "arctan",
+    "arctanh",
+    "cos",
+    "cosh",
     "exp",
-    "sqrt",
+    "log",
+    "log10",
+    "log2",
     "sign",
     "sin",
-    "cos",
-    "tan",
-    "arcsin",
-    "arccos",
-    "arctan",
     "sinh",
-    "cosh",
+    "sqrt",
+    "tan",
     "tanh",
-    "arcsinh",
-    "arccosh",
-    "arctanh",
     "tensordot",
     # NB put tensordot here, as sparse.tensordot can produce dense (numpy)
     # arrays but errors when both inputs are dense - we want nested calls to
@@ -2301,6 +2303,21 @@ for f in (
 ):
     register_submodule_alias("sparse", f, "numpy")
 
+register_func_alias("sparse", "identity", "eye")
+
+register_function("sparse", "array", sparse_array)
+register_function("sparse", "complex", complex_add_re_im)
+register_function("sparse", "conj", sparse_conj)
+register_function("sparse", "count_nonzero", sparse_count_nonzero)
+register_function("sparse", "imag", sparse_imag)
+register_function("sparse", "prod", sparse_prod)
+register_function("sparse", "random.normal", sparse_random_normal)
+register_function("sparse", "random.uniform", sparse_random_uniform)
+register_function("sparse", "real", sparse_real)
+register_function("sparse", "reshape", sparse_reshape)
+register_function("sparse", "sum", sparse_sum)
+register_function("sparse", "to_numpy", sparse_to_numpy)
+register_function("sparse", "transpose", sparse_transpose)
 
 # ------------------------------- tensorflow -------------------------------- #
 
@@ -2313,44 +2330,6 @@ def tensorflow_indices(dimensions):
     _meshgrid = get_lib_fn("tensorflow", "meshgrid")
     _arange = get_lib_fn("tensorflow", "arange")
     return _meshgrid(*map(_arange, dimensions), indexing="ij")
-
-
-register_module_alias("tensorflow.linalg", "tensorflow.linalg")
-register_module_alias("tensorflow.random", "tensorflow.random")
-register_module_alias("tensorflow", "tensorflow.experimental.numpy")
-
-register_function("tensorflow", "to_numpy", tensorflow_to_numpy)
-register_function("tensorflow", "indices", tensorflow_indices)
-
-register_func_alias("tensorflow", "astype", "cast")
-register_submodule_alias("tensorflow", "cast", "tensorflow")
-register_submodule_alias("tensorflow", "astype", "tensorflow")
-register_submodule_alias("tensorflow", "complex", "tensorflow")
-
-register_custom_wrapper("tensorflow", "linalg.svd", svd_sUV_to_UsVH_wrapper)
-register_custom_wrapper("tensorflow", "linalg.solve", binary_allow_1d_rhs_wrap)
-register_custom_wrapper(
-    "tensorflow",
-    "random.uniform",
-    make_translator(
-        [
-            ("low", ("minval", 0.0)),
-            ("high", ("maxval", 1.0)),
-            ("size", ("shape", ())),
-        ]
-    ),
-)
-register_custom_wrapper(
-    "tensorflow",
-    "random.normal",
-    make_translator(
-        [
-            ("loc", ("mean", 0.0)),
-            ("scale", ("stddev", 1.0)),
-            ("size", ("shape", ())),
-        ]
-    ),
-)
 
 
 def tensorflow_pad_wrap(tf_pad):
@@ -2371,10 +2350,6 @@ def tensorflow_pad_wrap(tf_pad):
     return numpy_like
 
 
-register_custom_wrapper("tensorflow", "pad", tensorflow_pad_wrap)
-register_submodule_alias("tensorflow", "pad", "tensorflow")
-
-
 def tensorflow_wrap_norm(tf_norm):
     def wrapped_norm(x, ord=None, axis=None, keepdims=False, **kwargs):
         if ord is None:
@@ -2382,12 +2357,6 @@ def tensorflow_wrap_norm(tf_norm):
         return tf_norm(x, ord=ord, axis=axis, keepdims=keepdims, **kwargs)
 
     return wrapped_norm
-
-
-register_custom_wrapper("tensorflow", "linalg.norm", tensorflow_wrap_norm)
-
-
-# register_creation_routine("tensorflow", "linspace", inject_dtype=False)
 
 
 class TensorflowDefaultRNG:
@@ -2453,8 +2422,50 @@ def tensorflow_default_rng(seed, **kwargs):
     return TensorflowDefaultRNG(seed, **kwargs)
 
 
-register_function("tensorflow", "random.default_rng", tensorflow_default_rng)
 register_backend(TensorflowDefaultRNG, "tensorflow")
+
+register_module_alias("tensorflow.linalg", "tensorflow.linalg")
+register_module_alias("tensorflow.random", "tensorflow.random")
+register_module_alias("tensorflow", "tensorflow.experimental.numpy")
+
+register_submodule_alias("tensorflow", "astype", "tensorflow")
+register_submodule_alias("tensorflow", "cast", "tensorflow")
+register_submodule_alias("tensorflow", "complex", "tensorflow")
+register_submodule_alias("tensorflow", "pad", "tensorflow")
+
+register_func_alias("tensorflow", "astype", "cast")
+
+register_custom_wrapper("tensorflow", "linalg.norm", tensorflow_wrap_norm)
+register_custom_wrapper("tensorflow", "linalg.solve", binary_allow_1d_rhs_wrap)
+register_custom_wrapper("tensorflow", "linalg.svd", svd_sUV_to_UsVH_wrapper)
+register_custom_wrapper("tensorflow", "pad", tensorflow_pad_wrap)
+register_custom_wrapper(
+    "tensorflow",
+    "random.normal",
+    make_translator(
+        [
+            ("loc", ("mean", 0.0)),
+            ("scale", ("stddev", 1.0)),
+            ("size", ("shape", ())),
+        ]
+    ),
+)
+register_custom_wrapper(
+    "tensorflow",
+    "random.uniform",
+    make_translator(
+        [
+            ("low", ("minval", 0.0)),
+            ("high", ("maxval", 1.0)),
+            ("size", ("shape", ())),
+        ]
+    ),
+)
+
+register_function("tensorflow", "indices", tensorflow_indices)
+register_function("tensorflow", "to_numpy", tensorflow_to_numpy)
+register_function("tensorflow", "random.default_rng", tensorflow_default_rng)
+
 
 # ---------------------------------- torch ---------------------------------- #
 
@@ -2794,20 +2805,12 @@ def torch_default_rng(seed, **kwargs):
     return TorchDefaultRNG(seed, **kwargs)
 
 
-register_function("torch", "random.default_rng", torch_default_rng)
 register_backend(TorchDefaultRNG, "torch")
 
-
-register_function("torch", "pad", torch_pad)
-register_function("torch", "real", torch_real)
-register_function("torch", "imag", torch_imag)
-register_function("torch", "astype", torch_astype)
-register_function("torch", "copy", torch_copy)
-register_function("torch", "to_numpy", torch_to_numpy)
-register_function("torch", "complex", complex_add_re_im)
-register_function("torch", "transpose", torch_transpose)
-register_function("torch", "indices", torch_indices)
-register_function("torch", "take", torch_take)
+register_submodule_alias("torch", "linalg.expm", "torch")
+register_submodule_alias("torch", "scipy.linalg.expm", "torch")
+register_submodule_alias("torch", "random.normal", "torch")
+register_submodule_alias("torch", "random.uniform", "torch")
 
 register_func_alias("torch", "array", "tensor")
 register_func_alias("torch", "asarray", "as_tensor")
@@ -2826,11 +2829,6 @@ register_func_alias("torch", "random.uniform", "rand")
 register_func_alias("torch", "scipy.linalg.expm", "matrix_exp")
 register_func_alias("torch", "split", "tensor_split")
 register_func_alias("torch", "take_along_axis", "take_along_dim")
-
-register_submodule_alias("torch", "linalg.expm", "torch")
-register_submodule_alias("torch", "scipy.linalg.expm", "torch")
-register_submodule_alias("torch", "random.normal", "torch")
-register_submodule_alias("torch", "random.uniform", "torch")
 
 register_custom_wrapper(
     "torch",
@@ -2916,21 +2914,17 @@ for f in ("sum", "max", "min", "prod", "mean", "median", "std", "var"):
         "torch", f, make_translator(_torch_reduce_translation)
     )
 
-# for older versions of torch, can provide some alternative implementations
-register_module_alias("torch[alt]", "torch")
-
-register_function("torch[alt]", "linalg.eigh", torch_linalg_eigh)
-register_function("torch[alt]", "linalg.eigvalsh", torch_linalg_eigvalsh)
-
-register_submodule_alias("torch[alt]", "linalg.norm", "torch")
-register_submodule_alias("torch[alt]", "linalg.qr", "torch")
-register_submodule_alias("torch[alt]", "linalg.solve", "torch")
-register_submodule_alias("torch[alt]", "linalg.svd", "torch")
-
-register_custom_wrapper("torch[alt]", "linalg.qr", qr_allow_fat)
-register_custom_wrapper("torch[alt]", "linalg.solve", torch_linalg_solve_wrap)
-register_custom_wrapper("torch[alt]", "linalg.svd", svd_UsV_to_UsVH_wrapper)
-register_custom_wrapper("torch[alt]", "split", torch_split_wrap)
+register_function("torch", "astype", torch_astype)
+register_function("torch", "complex", complex_add_re_im)
+register_function("torch", "copy", torch_copy)
+register_function("torch", "imag", torch_imag)
+register_function("torch", "indices", torch_indices)
+register_function("torch", "pad", torch_pad)
+register_function("torch", "random.default_rng", torch_default_rng)
+register_function("torch", "real", torch_real)
+register_function("torch", "take", torch_take)
+register_function("torch", "to_numpy", torch_to_numpy)
+register_function("torch", "transpose", torch_transpose)
 
 for f in _CREATION_ROUTINES:
     register_creation_routine("torch", f, inject_device=True)
@@ -2944,6 +2938,22 @@ register_creation_routine(
     "torch", "random.default_rng", inject_dtype=False, inject_device=True
 )
 
+# for older versions of torch, can provide some alternative implementations
+register_module_alias("torch[alt]", "torch")
+
+register_submodule_alias("torch[alt]", "linalg.norm", "torch")
+register_submodule_alias("torch[alt]", "linalg.qr", "torch")
+register_submodule_alias("torch[alt]", "linalg.solve", "torch")
+register_submodule_alias("torch[alt]", "linalg.svd", "torch")
+
+register_custom_wrapper("torch[alt]", "linalg.qr", qr_allow_fat)
+register_custom_wrapper("torch[alt]", "linalg.solve", torch_linalg_solve_wrap)
+register_custom_wrapper("torch[alt]", "linalg.svd", svd_UsV_to_UsVH_wrapper)
+register_custom_wrapper("torch[alt]", "split", torch_split_wrap)
+
+register_function("torch[alt]", "linalg.eigh", torch_linalg_eigh)
+register_function("torch[alt]", "linalg.eigvalsh", torch_linalg_eigvalsh)
+
 
 # ---------------------------------- mxnet ---------------------------------- #
 
@@ -2953,6 +2963,7 @@ def mxnet_to_numpy(x):
 
 
 register_module_alias("mxnet", "mxnet.numpy")
+
 register_function("mxnet", "to_numpy", mxnet_to_numpy)
 
 
@@ -3083,24 +3094,16 @@ def paddle_split_wrap(fn):
 
 register_module_alias("paddle[alt]", "paddle")
 
-register_function("paddle", "to_numpy", paddle_to_numpy)
-register_function("paddle", "transpose", paddle_transpose)
-register_function("paddle", "real", paddle_real)
-register_function("paddle", "imag", paddle_imag)
-register_function("paddle", "indices", paddle_indices)
-register_function("paddle", "ravel", paddle_ravel)
-register_function("paddle", "pad", paddle_pad)
-
-register_func_alias("paddle", "random.normal", "randn")
-register_func_alias("paddle", "random.uniform", "rand")
-register_func_alias("paddle", "asarray", "to_tensor")
-register_func_alias("paddle", "concatenate", "concat")
-register_func_alias("paddle", "power", "pow")
-register_func_alias("paddle", "identity", "eye")
-register_func_alias("paddle", "split", "tensor_split")
-
 register_submodule_alias("paddle", "random.normal", "paddle")
 register_submodule_alias("paddle", "random.uniform", "paddle")
+
+register_func_alias("paddle", "asarray", "to_tensor")
+register_func_alias("paddle", "concatenate", "concat")
+register_func_alias("paddle", "identity", "eye")
+register_func_alias("paddle", "power", "pow")
+register_func_alias("paddle", "random.normal", "randn")
+register_func_alias("paddle", "random.uniform", "rand")
+register_func_alias("paddle", "split", "tensor_split")
 
 register_custom_wrapper(
     "paddle", "random.normal", scale_random_normal_manually
@@ -3117,6 +3120,14 @@ register_custom_wrapper(
 )
 for f in ("sum", "max", "min", "prod", "mean", "std", "var"):
     register_custom_wrapper("paddle", f, paddle_wrap_reduction)
+
+register_function("paddle", "imag", paddle_imag)
+register_function("paddle", "indices", paddle_indices)
+register_function("paddle", "pad", paddle_pad)
+register_function("paddle", "ravel", paddle_ravel)
+register_function("paddle", "real", paddle_real)
+register_function("paddle", "to_numpy", paddle_to_numpy)
+register_function("paddle", "transpose", paddle_transpose)
 
 
 # -------------------------------- pytensor --------------------------------- #
@@ -3167,6 +3178,7 @@ def pytensor_wrap_svd_with_shapes(fn):
 
 
 register_module_alias("pytensor", "pytensor.tensor")
+
 register_custom_wrapper("pytensor", "linalg.qr", pytensor_wrap_qr_with_shapes)
 register_custom_wrapper(
     "pytensor", "linalg.svd", pytensor_wrap_svd_with_shapes

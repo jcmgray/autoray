@@ -155,6 +155,7 @@ pytest \
     --durations=10
 """
 cwd = "."
+default-environment = "testpymid"
 
 [tool.pixi.feature.docs.tasks]
 docs = { cmd = "sphinx-build -b html docs docs/_build/html", cwd = "." }
