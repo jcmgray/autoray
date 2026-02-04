@@ -32,13 +32,13 @@ except ImportError:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
-    "myst_nb",
-    "sphinx.ext.intersphinx",
-    "sphinx.ext.extlinks",
-    "sphinx.ext.napoleon",
-    "sphinx.ext.linkcode",
-    "sphinx_copybutton",
     "autoapi.extension",
+    "myst_nb",
+    "sphinx_copybutton",
+    "sphinx.ext.extlinks",
+    "sphinx.ext.intersphinx",
+    "sphinx.ext.linkcode",
+    "sphinx.ext.napoleon",
 ]
 
 nb_execution_mode = "off"

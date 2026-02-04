@@ -31,9 +31,13 @@ keywords = [
 ]
 
 [project.optional-dependencies]
-tests = ["numpy", "coverage", "pytest", "pytest-cov"]
+tests = [
+    "numpy",
+    "coverage",
+    "pytest",
+    "pytest-cov",
+]
 docs = [
-    "astroid",
     "furo",
     "ipython",
     "myst-nb",
@@ -48,7 +52,6 @@ docs = [
 "Repository" = "https://github.com/jcmgray/autoray/"
 "Issues" = "https://github.com/jcmgray/autoray/issues"
 "Changelog" = "https://github.com/jcmgray/autoray/releases"
-
 
 [build-system]
 requires = ["hatchling", "hatch-vcs"]
@@ -68,18 +71,10 @@ filterwarnings = "once"
 omit = ["*/autoray/experimental/*"]
 source = ["autoray"]
 
-[tool.pylama]
-ignore = "C901"
-max_line_length = 79
-
 [tool.ruff]
 line-length = 79
 target-version = "py310"
 lint.ignore = ["E741"]
-
-[tool.black]
-line-length = 79
-target-version = ['py310']
 
 # ---------------------------------- pixi ----------------------------------- #
 
@@ -115,7 +110,7 @@ platforms = ["linux-64"]
 [tool.pixi.feature.tensorflow.pypi-dependencies]
 tensorflow = "*"
 
-[tool.pixi.feature.tests.dependencies]
+[tool.pixi.feature.testing.dependencies]
 coverage = "*"
 pytest = "*"
 pytest-cov = "*"
@@ -142,12 +137,12 @@ sphinx-design = "*"
 squeaky = "*"
 
 [tool.pixi.environments]
-testpyold = { features = ["pyold", "full", "tests"] }
-testpymid = { features = ["pymid", "full", "tests"] }
-testpynew = { features = ["pynew", "full", "tests"] }
-testjax = { features = ["pymid", "full", "jax", "tests"] }
-testtorch = { features = ["pymid", "full", "torch", "tests"] }
-testtensorflow = { features = ["pymid", "full", "tensorflow", "tests"] }
+testpyold = { features = ["pyold", "full", "testing"] }
+testpymid = { features = ["pymid", "full", "testing"] }
+testpynew = { features = ["pynew", "full", "testing"] }
+testjax = { features = ["pymid", "full", "jax", "testing"] }
+testtorch = { features = ["pymid", "full", "torch", "testing"] }
+testtensorflow = { features = ["pymid", "full", "tensorflow", "testing"] }
 docs = { features = ["pynew", "docs"] }
 
 [tool.pixi.tasks.test]
@@ -172,5 +167,9 @@ lint = { cmd = """
 format = { cmd = """
     ruff check --select I --fix
     && ruff format
-    && squeaky `find . -name \"*.ipynb\"`
+""", cwd = "." }
+format-all = { cmd = """
+    ruff check --select I --fix
+    && ruff format
+    && find . -name "*.ipynb" -print0 | xargs -0 squeaky
 """, cwd = "." }
