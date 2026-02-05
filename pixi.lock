@@ -3885,8 +3885,8 @@ packages:
   timestamp: 1764875182184
 - pypi: ./
   name: autoray
-  version: 0.8.6.dev13+g726f7af3d.d20260204
-  sha256: 5da5521b1ed96f3da998a855a3081862720a38cfd6ebbf16f1bb98168b219efd
+  version: 0.8.6.dev15+gcfb6ff104.d20260205
+  sha256: 806097196542643f5da5668b6efaefc26ec62fe6549e01518bd168f42eed6def
   requires_dist:
   - furo ; extra == 'docs'
   - ipython ; extra == 'docs'
