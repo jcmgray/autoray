@@ -63,6 +63,7 @@ from .autoray import (
     tree_unflatten,
 )
 from .compiler import autojit
+from .grad import stop_gradient
 
 __all__ = (
     "do",
@@ -104,6 +105,8 @@ __all__ = (
     "autojit",
     # lazy array library
     "lazy",
+    # grad
+    "stop_gradient",
     # math constants,
     "e",
     "pi",
