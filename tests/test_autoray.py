@@ -923,6 +923,46 @@ def test_scipy_dispatching(backend):
     ar.do("scipy.linalg.expm", x)
 
 
+@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize(
+    "dtype",
+    ["float32", "float64", "complex64", "complex128"],
+)
+def test_scipy_linalg_solve_triangular(backend, dtype):
+    if backend not in ("numpy", "jax", "torch"):
+        pytest.xfail(
+            f"{backend} doesn't support scipy.linalg.solve_triangular."
+        )
+
+    A = gen_rand((4, 4), backend, dtype)
+    # make A a well-conditioned triangular matrix
+    A = ar.do("triu", A)
+    A = A + 2 * ar.do("eye", 4, like=backend)
+    b = gen_rand((4, 1), backend, dtype)
+
+    # solve with upper triangular (default)
+    x = ar.do("scipy.linalg.solve_triangular", A, b)
+    assert ar.do(
+        "allclose",
+        ar.to_numpy(A @ x),
+        ar.to_numpy(b),
+        rtol=1e-3,
+        atol=1e-6,
+    )
+
+    # solve with lower triangular
+    L = ar.do("tril", A)
+    L = L + 2 * ar.do("eye", 4, like=backend)
+    x = ar.do("scipy.linalg.solve_triangular", L, b, lower=True)
+    assert ar.do(
+        "allclose",
+        ar.to_numpy(L @ x),
+        ar.to_numpy(b),
+        rtol=1e-3,
+        atol=1e-6,
+    )
+
+
 def check_array_dtypes(x, y):
     assert x.dtype == y.dtype
     if hasattr(x, "device"):
