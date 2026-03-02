@@ -1,5 +1,4 @@
-from .autoray import register_function, do
-
+from .autoray import do, register_function
 
 _GRAD_BACKENDS = {"jax", "torch", "tensorflow", "paddle", "autograd"}
 _NO_GRAD_BACKENDS = {"numpy", "cupy", "dask", "sparse", "mars"}

@@ -1664,6 +1664,8 @@ _NAME_SPACE_SUBMODULES = {
     "random",
     "linalg",
     "scipy",
+    "scipy.linalg",
+    "scipy.sparse.linalg",
 }
 
 
@@ -1729,6 +1731,13 @@ class AutoNamespace:
         return new
 
     def _get_fn(self, name):
+        if name.startswith("__") and name.endswith("__"):
+            # raise correct error for dunder methods, so
+            # that debuggers and inspectors work correctly
+            raise AttributeError(
+                f"'{self.__class__.__name__}' object has no attribute '{name}'"
+            )
+
         if self._submodule is not None:
             # prepend the submodule name
             name = f"{self._submodule}.{name}"
@@ -2552,6 +2561,20 @@ def torch_linalg_eigvalsh(x):
     return do("symeig", x, eigenvectors=False, like="torch")[0]
 
 
+def torch_scipy_linalg_solve_triangular(
+    a,
+    b,
+    lower=False,
+    unit_diagonal=False,
+    **kwargs,
+):
+    torch = get_torch()
+
+    return torch.linalg.solve_triangular(
+        a, b, upper=not lower, unitriangular=unit_diagonal, **kwargs
+    )
+
+
 def torch_tensordot_wrap(fn):
     @functools.wraps(fn)
     def numpy_like(a, b, axes=2):
@@ -2925,6 +2948,11 @@ register_function("torch", "real", torch_real)
 register_function("torch", "take", torch_take)
 register_function("torch", "to_numpy", torch_to_numpy)
 register_function("torch", "transpose", torch_transpose)
+register_function(
+    "torch",
+    "scipy.linalg.solve_triangular",
+    torch_scipy_linalg_solve_triangular,
+)
 
 for f in _CREATION_ROUTINES:
     register_creation_routine("torch", f, inject_device=True)
