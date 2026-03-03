@@ -750,6 +750,56 @@ def test_trace(backend):
 
 
 @pytest.mark.parametrize("backend", BACKENDS)
+def test_moveaxis(backend):
+    x = gen_rand((2, 3, 4), backend)
+    xn = ar.to_numpy(x)
+
+    # single axis, positive and negative index
+    y = ar.do("moveaxis", x, 0, -1)
+    assert shape(y) == (3, 4, 2)
+    assert ar.infer_backend(y) == backend
+    assert ar.do("allclose", ar.to_numpy(y), ar.do("moveaxis", xn, 0, -1))
+
+    y = ar.do("moveaxis", x, 2, 0)
+    assert shape(y) == (4, 2, 3)
+    assert ar.infer_backend(y) == backend
+    assert ar.do("allclose", ar.to_numpy(y), ar.do("moveaxis", xn, 2, 0))
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_moveaxis_multiple(backend):
+    x = gen_rand((2, 3, 4, 5), backend)
+    xn = ar.to_numpy(x)
+
+    y = ar.do("moveaxis", x, [0, 1], [-1, -2])
+    assert shape(y) == (4, 5, 3, 2)
+    assert ar.infer_backend(y) == backend
+    assert ar.do(
+        "allclose", ar.to_numpy(y), ar.do("moveaxis", xn, [0, 1], [-1, -2])
+    )
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_swapaxes(backend):
+    if backend == "sparse":
+        pytest.xfail("sparse doesn't support 'swapaxes'")
+
+    x = gen_rand((2, 3, 4), backend)
+    xn = ar.to_numpy(x)
+
+    y = ar.do("swapaxes", x, 0, 2)
+    assert shape(y) == (4, 3, 2)
+    assert ar.infer_backend(y) == backend
+    assert ar.do("allclose", ar.to_numpy(y), ar.do("swapaxes", xn, 0, 2))
+
+    # negative indices
+    y = ar.do("swapaxes", x, -1, -3)
+    assert shape(y) == (4, 3, 2)
+    assert ar.infer_backend(y) == backend
+    assert ar.do("allclose", ar.to_numpy(y), ar.do("swapaxes", xn, -1, -3))
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize("int_or_section", ["int", "section", "empty"])
 def test_split(backend, int_or_section):
     if backend == "sparse":
