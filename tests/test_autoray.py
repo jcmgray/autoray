@@ -713,6 +713,22 @@ def test_einsum(backend):
 
 
 @pytest.mark.parametrize("backend", BACKENDS)
+def test_trace(backend):
+    if backend == "sparse":
+        pytest.xfail("sparse doesn't support trace yet")
+
+    x = gen_rand((4, 4), backend)
+    tr = ar.do("trace", x)
+    assert shape(tr) == ()
+    assert ar.infer_backend(tr) == backend
+
+    x = gen_rand((3, 5, 5), backend)
+    tr = ar.do("trace", x, axis1=1, axis2=2)
+    assert shape(tr) == (3,)
+    assert ar.infer_backend(tr) == backend
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize("int_or_section", ["int", "section", "empty"])
 def test_split(backend, int_or_section):
     if backend == "sparse":

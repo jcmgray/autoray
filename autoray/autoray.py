@@ -2374,7 +2374,7 @@ class TensorflowDefaultRNG:
     """
 
     def __init__(self, seed=None, **kwargs):
-        import tensorflow as tf
+        import tensorflow as tf  # type: ignore
 
         self.tf = tf
 
@@ -2714,6 +2714,13 @@ def torch_take(a, indices, axis=None):
     return a
 
 
+def torch_trace(x, axis1=0, axis2=1):
+    if x.dim() == 2:
+        # prefer built in
+        return x.trace()
+    return x.diagonal(dim1=axis1, dim2=axis2).sum(-1)
+
+
 class TorchDefaultRNG:
     def __init__(self, seed=None, device=None):
         self._torch = get_torch()
@@ -2953,6 +2960,7 @@ register_function("torch", "random.default_rng", torch_default_rng)
 register_function("torch", "real", torch_real)
 register_function("torch", "take", torch_take)
 register_function("torch", "to_numpy", torch_to_numpy)
+register_function("torch", "trace", torch_trace)
 register_function("torch", "transpose", torch_transpose)
 register_function(
     "torch",
