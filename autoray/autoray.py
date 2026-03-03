@@ -635,7 +635,7 @@ def register_func_alias(backend, fn, alias):
     _FUNC_ALIASES[backend, fn] = alias
 
 
-def register_custom_wrapper(backend, fn, wrapper):
+def register_custom_wrapper(backend, fn, wrapper=None):
     """Register a custom wrapper for a function. The wrapper is called lazily
     so that no imports are done until the function is actually used.
 
@@ -645,9 +645,19 @@ def register_custom_wrapper(backend, fn, wrapper):
         The name of the backend.
     fn : str
         The name of the function.
-    wrapper : callable
-        The wrapper function.
+    wrapper : callable, optional
+        The wrapper function. It should take a function as input and return a
+        function. If not supplied, this function can be used as a decorator
+        with ``backend`` and ``fn`` only.
     """
+    if wrapper is None:
+
+        def decorator(wrapper):
+            register_custom_wrapper(backend, fn, wrapper)
+            return wrapper
+
+        return decorator
+
     _CUSTOM_WRAPPERS[backend, fn] = wrapper
 
 
@@ -2153,11 +2163,12 @@ def dask_to_numpy(x):
     return x.compute()
 
 
-def dask_eye_wrapper(fn):
+@register_custom_wrapper("dask", "eye")
+def dask_eye_wrapper(eye_fn):
     # Make M work as positional argument
-    @functools.wraps(fn)
+    @functools.wraps(eye_fn)
     def numpy_like(N, M=None, **kwargs):
-        return fn(N, M=M, **kwargs)
+        return eye_fn(N, M=M, **kwargs)
 
     return numpy_like
 
@@ -2167,7 +2178,6 @@ register_module_alias("dask", "dask.array")
 register_func_alias("dask", "abs", "absolute")
 register_func_alias("dask", "identity", "eye")
 
-register_custom_wrapper("dask", "eye", dask_eye_wrapper)
 register_custom_wrapper("dask", "linalg.cholesky", cholesky_lower)
 register_custom_wrapper("dask", "linalg.svd", svd_manual_full_matrices_kwarg)
 register_custom_wrapper("dask", "random.normal", with_dtype_wrapper)
@@ -2341,6 +2351,7 @@ def sparse_random_normal(loc=0.0, scale=1.0, size=None, dtype=None, **kwargs):
 # ------------------------------- tensorflow -------------------------------- #
 
 
+@register_custom_wrapper("tensorflow", "pad")
 def tensorflow_pad_wrap(tf_pad):
     def numpy_like(array, pad_width, mode="constant", constant_values=0):
         if mode != "constant":
@@ -2359,6 +2370,7 @@ def tensorflow_pad_wrap(tf_pad):
     return numpy_like
 
 
+@register_custom_wrapper("tensorflow", "linalg.norm")
 def tensorflow_wrap_norm(tf_norm):
     def wrapped_norm(x, ord=None, axis=None, keepdims=False, **kwargs):
         if ord is None:
@@ -2445,10 +2457,8 @@ register_submodule_alias("tensorflow", "pad", "tensorflow")
 
 register_func_alias("tensorflow", "astype", "cast")
 
-register_custom_wrapper("tensorflow", "linalg.norm", tensorflow_wrap_norm)
 register_custom_wrapper("tensorflow", "linalg.solve", binary_allow_1d_rhs_wrap)
 register_custom_wrapper("tensorflow", "linalg.svd", svd_sUV_to_UsVH_wrapper)
-register_custom_wrapper("tensorflow", "pad", tensorflow_pad_wrap)
 register_custom_wrapper(
     "tensorflow",
     "random.normal",
@@ -2516,6 +2526,7 @@ def torch_get_dtype_name(x):
     return _torch_get_dtype_name(x.dtype)
 
 
+@register_custom_wrapper("torch[alt]", "linalg.solve")
 def torch_linalg_solve_wrap(fn):
     @binary_allow_1d_rhs_wrap
     def numpy_like(a, b):
@@ -2524,6 +2535,7 @@ def torch_linalg_solve_wrap(fn):
     return numpy_like
 
 
+@register_custom_wrapper("torch", "tensordot")
 def torch_tensordot_wrap(fn):
     @functools.wraps(fn)
     def numpy_like(a, b, axes=2):
@@ -2532,6 +2544,7 @@ def torch_tensordot_wrap(fn):
     return numpy_like
 
 
+@register_custom_wrapper("torch[alt]", "split")
 def torch_split_wrap(fn):
     # for torch >=1.8 we can use tensor_split instead, but in current stable
     # release this function has not been added
@@ -2558,6 +2571,8 @@ def torch_split_wrap(fn):
     return numpy_like
 
 
+@register_custom_wrapper("torch", "ones")
+@register_custom_wrapper("torch", "zeros")
 def torch_zeros_ones_wrap(fn):
     @functools.wraps(fn)
     def numpy_like(shape, dtype=None, **kwargs):
@@ -2568,6 +2583,7 @@ def torch_zeros_ones_wrap(fn):
     return numpy_like
 
 
+@register_custom_wrapper("torch", "eye")
 def torch_eye_wrap(fn):
     @functools.wraps(fn)
     def numpy_like(N, M=None, dtype=None, **kwargs):
@@ -2581,6 +2597,7 @@ def torch_eye_wrap(fn):
     return numpy_like
 
 
+@register_custom_wrapper("torch", "sort")
 def torch_sort_wrap(fn):
     @functools.wraps(fn)
     def numpy_like(a, axis=-1):
@@ -2589,6 +2606,7 @@ def torch_sort_wrap(fn):
     return numpy_like
 
 
+@register_custom_wrapper("torch", "flip")
 def torch_flip_wrap(torch_flip):
     def numpy_like(x, axis=None):
         if axis is None:
@@ -2776,21 +2794,17 @@ register_custom_wrapper(
     "expand_dims",
     make_translator([("a", ("input",)), ("axis", ("dim",))]),
 )
-register_custom_wrapper("torch", "eye", torch_eye_wrap)
-register_custom_wrapper("torch", "flip", torch_flip_wrap)
 register_custom_wrapper("torch", "linalg.svd", svd_not_full_matrices_wrapper)
-register_custom_wrapper("torch", "ones", torch_zeros_ones_wrap)
 register_custom_wrapper("torch", "random.normal", scale_random_normal_manually)
 register_custom_wrapper(
     "torch", "random.uniform", scale_random_uniform_manually
 )
-register_custom_wrapper("torch", "sort", torch_sort_wrap)
+
 register_custom_wrapper(
     "torch",
     "stack",
     make_translator([("arrays", ("tensors",)), ("axis", ("dim", 0))]),
 )
-register_custom_wrapper("torch", "tensordot", torch_tensordot_wrap)
 register_custom_wrapper(
     "torch",
     "tril",
@@ -2801,7 +2815,6 @@ register_custom_wrapper(
     "triu",
     make_translator([("m", ("input",)), ("k", ("diagonal", 0))]),
 )
-register_custom_wrapper("torch", "zeros", torch_zeros_ones_wrap)
 register_custom_wrapper(
     "torch",
     "take_along_axis",
@@ -2855,9 +2868,7 @@ register_submodule_alias("torch[alt]", "linalg.solve", "torch")
 register_submodule_alias("torch[alt]", "linalg.svd", "torch")
 
 register_custom_wrapper("torch[alt]", "linalg.qr", qr_allow_fat)
-register_custom_wrapper("torch[alt]", "linalg.solve", torch_linalg_solve_wrap)
 register_custom_wrapper("torch[alt]", "linalg.svd", svd_UsV_to_UsVH_wrapper)
-register_custom_wrapper("torch[alt]", "split", torch_split_wrap)
 
 
 @register_function("torch", "to_numpy")
