@@ -2715,10 +2715,11 @@ def torch_take(a, indices, axis=None):
 
 
 class TorchDefaultRNG:
-    def __init__(self, seed, device=None):
+    def __init__(self, seed=None, device=None):
         self._torch = get_torch()
         self._generator = self._torch.Generator(device=device)
-        self._generator.manual_seed(seed)
+        if seed is not None:
+            self._generator.manual_seed(seed)
 
     # def binomial(self, n, p, size=None, **kwargs):
     #     raise NotImplementedError()
@@ -2864,6 +2865,11 @@ register_custom_wrapper(
     "torch",
     "concatenate",
     make_translator([("arrays", ("tensors",)), ("axis", ("dim", 0))]),
+)
+register_custom_wrapper(
+    "torch",
+    "count_nonzero",
+    make_translator([("a", ("input",)), ("axis", ("dim", None))]),
 )
 register_custom_wrapper(
     "torch",
