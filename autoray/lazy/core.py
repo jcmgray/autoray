@@ -1299,6 +1299,44 @@ def transpose(a, axes=None):
 permute_dims = transpose
 
 
+@lazy_cache("moveaxis")
+def moveaxis(a, source, destination):
+    a = ensure_lazy(a)
+
+    if not hasattr(source, "__len__"):
+        source = (source,)
+    if not hasattr(destination, "__len__"):
+        destination = (destination,)
+
+    ndim = a.ndim
+    source = tuple(s % ndim for s in source)
+    destination = tuple(d % ndim for d in destination)
+
+    order = [n for n in range(ndim) if n not in source]
+    for dst, src in sorted(zip(destination, source)):
+        order.insert(dst, src)
+
+    return transpose(a, tuple(order))
+
+
+@lazy_cache("swapaxes")
+def swapaxes(a, axis1, axis2):
+    a = ensure_lazy(a)
+
+    if axis1 < 0:
+        axis1 += a.ndim
+    if axis2 < 0:
+        axis2 += a.ndim
+
+    if axis1 == axis2:
+        return a
+
+    order = list(range(a.ndim))
+    order[axis1], order[axis2] = order[axis2], order[axis1]
+
+    return transpose(a, tuple(order))
+
+
 @lazy_cache("reshape")
 def _reshape_tuple(a, newshape, **kwargs):
     a = ensure_lazy(a)

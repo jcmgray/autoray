@@ -217,6 +217,47 @@ def test_transpose_chain(backend):
 
 
 @pytest.mark.parametrize("backend", BACKENDS)
+def test_moveaxis(backend):
+    x = gen_rand((2, 3, 4, 5), backend)
+    lx = lazy.array(x)
+    # single axis
+    ly = ar.do("moveaxis", lx, 0, -1)
+    y = ar.do("moveaxis", x, 0, -1)
+    assert ly.shape == ar.shape(y)
+    assert_allclose(ar.to_numpy(ly.compute()), ar.to_numpy(y))
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_moveaxis_multiple(backend):
+    x = gen_rand((2, 3, 4, 5), backend)
+    lx = lazy.array(x)
+    # move multiple axes
+    ly = ar.do("moveaxis", lx, [0, 1], [-1, -2])
+    y = ar.do("moveaxis", x, [0, 1], [-1, -2])
+    assert ly.shape == ar.shape(y)
+    assert_allclose(ar.to_numpy(ly.compute()), ar.to_numpy(y))
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_swapaxes(backend):
+    if backend == "sparse":
+        pytest.xfail("sparse doesn't support 'swapaxes'")
+    x = gen_rand((2, 3, 4, 5), backend)
+    lx = lazy.array(x)
+    ly = ar.do("swapaxes", lx, 0, 2)
+    y = ar.do("swapaxes", x, 0, 2)
+    assert ly.shape == ar.shape(y)
+    assert_allclose(ar.to_numpy(ly.compute()), ar.to_numpy(y))
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_swapaxes_noop(backend):
+    lx = lazy.array(gen_rand((2, 3, 4), backend))
+    ly = ar.do("swapaxes", lx, 1, 1)
+    assert ly is lx
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
 def test_reshape_chain(backend):
     lx = lazy.array(gen_rand((2, 3, 4, 5, 6), backend))
     l1 = ar.do("reshape", lx, (6, 4, 30))
