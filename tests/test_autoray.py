@@ -634,6 +634,27 @@ def test_register_function(backend):
 
 
 @pytest.mark.parametrize("backend", BACKENDS)
+def test_register_function_decorator(backend):
+    x = ar.do("ones", shape=(2, 3), like=backend)
+
+    @ar.register_function(backend, "test_register_decorator")
+    def test_register_decorator(x):
+        return 1
+
+    assert ar.do("test_register_decorator", x) == 1
+
+    @ar.register_function(backend, "test_register_decorator", wrap=True)
+    def wrap_fn(fn):
+        def new_fn(*args, **kwargs):
+            res = fn(*args, **kwargs)
+            return res + 1
+
+        return new_fn
+
+    assert ar.do("test_register_decorator", x) == 2
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
 def test_take(backend):
     if backend in {"sparse", "paddle"}:
         pytest.xfail(f"{backend} doesn't fully support take yet")
