@@ -2495,6 +2495,13 @@ def tensorflow_indices(dimensions):
     return _meshgrid(*map(_arange, dimensions), indexing="ij")
 
 
+@register_function("tensorflow", "swapaxes")
+def tensorflow_swapaxes(a, axis1, axis2):
+    perm = list(range(a.ndim))
+    perm[axis1], perm[axis2] = perm[axis2], perm[axis1]
+    return a.transpose(perm)
+
+
 # ---------------------------------- torch ---------------------------------- #
 
 
