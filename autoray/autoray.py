@@ -1365,20 +1365,18 @@ def svd_manual_full_matrices_kwarg(fn):
 def qr_allow_fat(fn):
     @functools.wraps(fn)
     def numpy_like(a, **kwargs):
-        *_, m, n = shape(a)
+        xp = get_namespace(a)
+
+        *_, m, n = xp.shape(a)
 
         if m >= n:
             # square or thin
             return fn(a, **kwargs)
 
-        backend = _infer_class_backend_cached(a.__class__)
-
         Q, R_sq = fn(a[..., :, :m])
-        Qdag = do(
-            "conj", do("swapaxes", Q, -2, -1, like=backend), like=backend
-        )
+        Qdag = xp.conj(xp.swapaxes(Q, -2, -1))
         R_r = Qdag @ a[..., :, m:]
-        R = do("concatenate", (R_sq, R_r), axis=-1, like=backend)
+        R = xp.concatenate((R_sq, R_r), axis=-1)
 
         return Q, R
 
