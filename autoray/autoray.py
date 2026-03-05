@@ -2497,9 +2497,10 @@ def tensorflow_indices(dimensions):
 
 @register_function("tensorflow", "swapaxes")
 def tensorflow_swapaxes(a, axis1, axis2):
+    xp = get_namespace(a)
     perm = list(range(a.ndim))
     perm[axis1], perm[axis2] = perm[axis2], perm[axis1]
-    return a.transpose(perm)
+    return xp.transpose(a, perm)
 
 
 # ---------------------------------- torch ---------------------------------- #
