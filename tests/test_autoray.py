@@ -336,6 +336,27 @@ def test_linalg_svd_square(backend):
 
 
 @pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("dtype", ["float64", "complex128"])
+def test_linalg_svd_batched(backend, dtype):
+    if backend in ("dask", "sparse"):
+        pytest.xfail("Sparse doesn't support linear algebra yet...")
+
+    if backend == "paddle" and "complex" in dtype:
+        pytest.xfail("Paddle doesn't support complex SVD yet...")
+
+    x = gen_rand((2, 5, 4), backend, dtype)
+    U, s, VH = ar.do("linalg.svd", x)
+    # XXX: tensorflow can't multiply complex * real
+    s = ar.do("astype", s, U.dtype)
+    y = U @ (ar.do("reshape", s, (2, 4, 1)) * VH)
+
+    assert ar.shape(U) == (2, 5, 4)
+    assert ar.shape(s) == (2, 4)
+    assert ar.shape(VH) == (2, 4, 4)
+    assert ar.do("allclose", ar.to_numpy(y), ar.to_numpy(x), rtol=1e-4)
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
 def test_translator_random_uniform(backend):
     from autoray import numpy as anp
 
@@ -585,6 +606,32 @@ def test_linalg_eigh(backend, dtype):
     el, ev = ar.do("linalg.eigh", A)
     B = (ev * ar.reshape(el, (1, -1))) @ ar.dag(ev)
     assert ar.do("allclose", ar.to_numpy(A), ar.to_numpy(B), rtol=1e-3)
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("dtype", ["float64", "complex128"])
+def test_linalg_cholesky_upper(backend, dtype):
+    if backend in ("dask", "sparse"):
+        pytest.xfail("Sparse doesn't support linear algebra yet...")
+
+    if backend == "paddle" and "complex" in dtype:
+        pytest.xfail("Paddle doesn't support complex cholesky yet...")
+
+    x = gen_rand((4, 4), backend, dtype)
+    xp = ar.get_namespace(x)
+    A = x @ ar.dag(x) + 1e-3 * xp.eye(4)
+
+    U = xp.linalg.cholesky(A, upper=True)
+    reconstructed = ar.dag(U) @ U
+
+    assert xp.shape(U) == (4, 4)
+    assert ar.do(
+        "allclose",
+        ar.to_numpy(reconstructed),
+        ar.to_numpy(A),
+        rtol=1e-3,
+        atol=1e-6,
+    )
 
 
 @pytest.mark.parametrize("backend", BACKENDS)
@@ -1017,34 +1064,35 @@ def test_scipy_dispatching(backend):
     ["float32", "float64", "complex64", "complex128"],
 )
 def test_scipy_linalg_solve_triangular(backend, dtype):
-    if backend not in ("numpy", "jax", "torch"):
+    if backend not in ("numpy", "jax", "torch", "tensorflow"):
         pytest.xfail(
             f"{backend} doesn't support scipy.linalg.solve_triangular."
         )
 
     A = gen_rand((4, 4), backend, dtype)
+    xp = ar.get_namespace(A)
     # make A a well-conditioned triangular matrix
-    A = ar.do("triu", A)
-    A = A + 2 * ar.do("eye", 4, like=backend)
+    Au = xp.triu(A)
+    Au = Au + 2 * xp.eye(4)
     b = gen_rand((4, 1), backend, dtype)
 
     # solve with upper triangular (default)
-    x = ar.do("scipy.linalg.solve_triangular", A, b)
+    x = xp.scipy.linalg.solve_triangular(Au, b)
     assert ar.do(
         "allclose",
-        ar.to_numpy(A @ x),
+        ar.to_numpy(Au @ x),
         ar.to_numpy(b),
         rtol=1e-3,
         atol=1e-6,
     )
 
     # solve with lower triangular
-    L = ar.do("tril", A)
-    L = L + 2 * ar.do("eye", 4, like=backend)
-    x = ar.do("scipy.linalg.solve_triangular", L, b, lower=True)
+    Al = xp.tril(A)
+    Al = Al + 2 * xp.eye(4)
+    x = xp.scipy.linalg.solve_triangular(Al, b, lower=True)
     assert ar.do(
         "allclose",
-        ar.to_numpy(L @ x),
+        ar.to_numpy(Al @ x),
         ar.to_numpy(b),
         rtol=1e-3,
         atol=1e-6,

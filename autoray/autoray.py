@@ -1335,7 +1335,8 @@ def svd_sUV_to_UsVH_wrapper(fn):
     @functools.wraps(fn)
     def numpy_like(*args, **kwargs):
         s, U, V = fn(*args, **kwargs)
-        return U, s, dag(V)
+        xp = get_namespace(V)
+        return U, s, xp.conj(xp.swapaxes(V, -2, -1))
 
     return numpy_like
 
@@ -1344,7 +1345,8 @@ def svd_UsV_to_UsVH_wrapper(fn):
     @functools.wraps(fn)
     def numpy_like(*args, **kwargs):
         U, s, V = fn(*args, **kwargs)
-        return U, s, dag(V)
+        xp = get_namespace(V)
+        return U, s, xp.conj(xp.swapaxes(V, -2, -1))
 
     return numpy_like
 
@@ -2349,6 +2351,13 @@ def sparse_random_normal(loc=0.0, scale=1.0, size=None, dtype=None, **kwargs):
 # ------------------------------- tensorflow -------------------------------- #
 
 
+@functools.cache
+def get_tensorflow():
+    import tensorflow as tf
+
+    return tf
+
+
 @register_custom_wrapper("tensorflow", "pad")
 def tensorflow_pad_wrap(tf_pad):
     def numpy_like(array, pad_width, mode="constant", constant_values=0):
@@ -2448,6 +2457,7 @@ register_module_alias("tensorflow.linalg", "tensorflow.linalg")
 register_module_alias("tensorflow.random", "tensorflow.random")
 register_module_alias("tensorflow", "tensorflow.experimental.numpy")
 
+# these aren't in experimental.numpy
 register_submodule_alias("tensorflow", "astype", "tensorflow")
 register_submodule_alias("tensorflow", "cast", "tensorflow")
 register_submodule_alias("tensorflow", "complex", "tensorflow")
@@ -2495,10 +2505,26 @@ def tensorflow_indices(dimensions):
 
 @register_function("tensorflow", "swapaxes")
 def tensorflow_swapaxes(a, axis1, axis2):
-    xp = get_namespace(a)
+    tf = get_tensorflow()
     perm = list(range(a.ndim))
     perm[axis1], perm[axis2] = perm[axis2], perm[axis1]
-    return xp.transpose(a, perm)
+    return tf.transpose(a, perm)
+
+
+@register_function("tensorflow", "linalg.cholesky")
+def tensorflow_cholesky(x, upper=False, **kwargs):
+    tf = get_tensorflow()
+    left = tf.linalg.cholesky(x, **kwargs)
+    if upper:
+        return tf.math.conj(tensorflow_swapaxes(left, -2, -1))
+    return left
+
+
+@register_function("tensorflow", "scipy.linalg.solve_triangular")
+def tensorflow_solve_triangular(a, b, lower=False, **kwargs):
+    tf = get_tensorflow()
+    left = tf.linalg.triangular_solve(a, b, lower=lower, **kwargs)
+    return left
 
 
 # ---------------------------------- torch ---------------------------------- #
@@ -2923,17 +2949,19 @@ def torch_imag(x):
             return x.imag
     except AttributeError:
         pass
-    return do("zeros_like", x)
+    return get_torch().zeros_like(x)
 
 
 @register_function("torch[alt]", "linalg.eigh")
 def torch_linalg_eigh(x):
-    return tuple(do("symeig", x, eigenvectors=True, like="torch"))
+    torch = get_torch()
+    return tuple(torch.symeig(x, eigenvectors=True))
 
 
 @register_function("torch[alt]", "linalg.eigvalsh")
 def torch_linalg_eigvalsh(x):
-    return do("symeig", x, eigenvectors=False, like="torch")[0]
+    torch = get_torch()
+    return tuple(torch.symeig(x, eigenvectors=False))
 
 
 @register_function("torch", "scipy.linalg.solve_triangular")
@@ -2953,6 +2981,8 @@ def torch_scipy_linalg_solve_triangular(
 
 @register_function("torch", "pad")
 def torch_pad(array, pad_width, mode="constant", constant_values=0):
+    torch = get_torch()
+
     if mode != "constant":
         raise NotImplementedError
 
@@ -2969,8 +2999,7 @@ def torch_pad(array, pad_width, mode="constant", constant_values=0):
         # assume int
         pad = (pad_width,) * 2 * array.ndimension()
 
-    return do(
-        "nn.functional.pad",
+    return torch.nn.functional.pad(
         array,
         pad=pad,
         mode=mode,
@@ -2981,9 +3010,8 @@ def torch_pad(array, pad_width, mode="constant", constant_values=0):
 
 @register_function("torch", "indices")
 def torch_indices(dimensions):
-    _meshgrid = get_lib_fn("torch", "meshgrid")
-    _arange = get_lib_fn("torch", "arange")
-    return _meshgrid(*map(_arange, dimensions), indexing="ij")
+    torch = get_torch()
+    return torch.meshgrid(*map(torch.arange, dimensions), indexing="ij")
 
 
 @register_function("torch", "take")
