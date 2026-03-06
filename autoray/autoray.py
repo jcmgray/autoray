@@ -3004,7 +3004,6 @@ def torch_pad(array, pad_width, mode="constant", constant_values=0):
         pad=pad,
         mode=mode,
         value=constant_values,
-        like="torch",
     )
 
 
