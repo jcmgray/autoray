@@ -1266,25 +1266,34 @@ def reshape(x, shape):
         return do("reshape", x, shape)
 
 
+@functools.cache
+def _to_backend_dtype_from_str_cached(dtype_name, like):
+    try:
+        return get_lib_fn(like, dtype_name)
+    except ImportError:
+        # fallback to just trying with plain str
+        return dtype_name
+
+
 def to_backend_dtype(dtype_name, like):
     """Turn string specifier ``dtype_name`` into dtype of backend ``like``."""
     if not isinstance(like, str):
         like = _infer_class_backend_cached(like.__class__)
+    return _to_backend_dtype_from_str_cached(dtype_name, like)
 
+
+@functools.cache
+def _dtype_to_name_cached(dtype):
     try:
-        return get_lib_fn(like, dtype_name)
-    except ImportError:
-        return dtype_name
+        return dtype.name
+    except AttributeError:
+        return str(dtype).split(".")[-1].lower()
 
 
 @compose
 def get_dtype_name(x):
     """Find string specifier ``dtype_name`` of array ``x``."""
-    dtype = x.dtype
-    try:
-        return dtype.name
-    except AttributeError:
-        return str(dtype)
+    return _dtype_to_name_cached(x.dtype)
 
 
 _COMPLEX_DTYPES = {"complex64", "complex128"}
@@ -1953,13 +1962,20 @@ def jax_to_numpy(x):
     return do("asarray", x, like="numpy")
 
 
+@functools.cache
+def get_jax():
+    import jax  # type: ignore
+
+    return jax
+
+
 class JaxDefaultRNG:
     """Stateful but deterministic random number generator for JAX following
     numpy's Generator API, compatible with `jax.jit`.
     """
 
     def __init__(self, seed, **kwargs):
-        import jax
+        jax = get_jax()
 
         self.jax = jax
         self.key = jax.random.key(seed, **kwargs)
@@ -2054,54 +2070,38 @@ def jax_default_rng(seed, **kwargs):
     return JaxDefaultRNG(seed, **kwargs)
 
 
-_JAX_RANDOM_KEY = None
+_JAX_DEFAULT_RNG = None
 
 
 @register_function("jax", "random.seed")
 def jax_random_seed(seed=None):
-    from jax.random import PRNGKey
-
-    global _JAX_RANDOM_KEY
+    global _JAX_DEFAULT_RNG
     if seed is None:
         from random import SystemRandom
 
         seed = SystemRandom().randint(-(2**63), 2**63 - 1)  # inclusive high
-    _JAX_RANDOM_KEY = PRNGKey(seed)
+    _JAX_DEFAULT_RNG = JaxDefaultRNG(seed)
 
 
-def jax_random_get_key():
-    from jax.random import split
-
-    global _JAX_RANDOM_KEY
-    if _JAX_RANDOM_KEY is None:
+def _get_jax_default_rng():
+    global _JAX_DEFAULT_RNG
+    if _JAX_DEFAULT_RNG is None:
         jax_random_seed()
-    _JAX_RANDOM_KEY, subkey = split(_JAX_RANDOM_KEY)
-    return subkey
+    return _JAX_DEFAULT_RNG
 
 
 @register_function("jax", "random.uniform")
 def jax_random_uniform(low=0.0, high=1.0, size=None, **kwargs):
-    from jax.random import uniform
-
-    if size is None:
-        size = ()
-    return uniform(
-        jax_random_get_key(), shape=size, minval=low, maxval=high, **kwargs
+    return _get_jax_default_rng().uniform(
+        low=low, high=high, size=size, **kwargs
     )
 
 
 @register_function("jax", "random.normal")
 def jax_random_normal(loc=0.0, scale=1.0, size=None, **kwargs):
-    from jax.random import normal
-
-    if size is None:
-        size = ()
-    x = normal(jax_random_get_key(), shape=size, **kwargs)
-    if scale != 1.0:
-        x *= scale
-    if loc != 0.0:
-        x += loc
-    return x
+    return _get_jax_default_rng().normal(
+        loc=loc, scale=scale, size=size, **kwargs
+    )
 
 
 register_backend_alias("jaxlib", "jax")
@@ -2353,7 +2353,7 @@ def sparse_random_normal(loc=0.0, scale=1.0, size=None, dtype=None, **kwargs):
 
 @functools.cache
 def get_tensorflow():
-    import tensorflow as tf
+    import tensorflow as tf  # type: ignore
 
     return tf
 
@@ -2393,7 +2393,7 @@ class TensorflowDefaultRNG:
     """
 
     def __init__(self, seed=None, **kwargs):
-        import tensorflow as tf  # type: ignore
+        tf = get_tensorflow()
 
         self.tf = tf
 
@@ -2532,7 +2532,7 @@ def tensorflow_solve_triangular(a, b, lower=False, **kwargs):
 
 @functools.cache
 def get_torch():
-    import torch
+    import torch  # type: ignore
 
     return torch
 
@@ -2546,16 +2546,6 @@ def torch_shape(x):
 @size.register("torch")
 def torch_size(x):
     return x.numel()
-
-
-@functools.lru_cache(None)
-def _torch_get_dtype_name(dtype):
-    return str(dtype).split(".")[-1]
-
-
-@get_dtype_name.register("torch")
-def torch_get_dtype_name(x):
-    return _torch_get_dtype_name(x.dtype)
 
 
 @register_custom_wrapper("torch[alt]", "linalg.solve")
@@ -3232,7 +3222,7 @@ def pytensor_shape(x):
 
 
 def pytensor_wrap_qr_with_shapes(fn):
-    import pytensor.tensor as pt
+    import pytensor.tensor as pt  # type: ignore
 
     @functools.wraps(fn)
     def qr_shaped(x, **kwargs):
@@ -3247,7 +3237,7 @@ def pytensor_wrap_qr_with_shapes(fn):
 
 
 def pytensor_wrap_svd_with_shapes(fn):
-    import pytensor.tensor as pt
+    import pytensor.tensor as pt  # type: ignore
 
     @functools.wraps(fn)
     def svd_shaped(x, full_matrices=False, **kwargs):
@@ -3276,3 +3266,181 @@ register_custom_wrapper("pytensor", "linalg.qr", pytensor_wrap_qr_with_shapes)
 register_custom_wrapper(
     "pytensor", "linalg.svd", pytensor_wrap_svd_with_shapes
 )
+
+
+# ----------------------------------- mlx ----------------------------------- #
+
+register_module_alias("mlx", "mlx.core")
+
+
+@register_function("mlx", "to_numpy")
+def mlx_to_numpy(x):
+    return do("asarray", x, like="numpy")
+
+
+@functools.cache
+def get_mlx():
+    import mlx.core as mx
+
+    return mx
+
+
+class MlxDefaultRNG:
+    """Stateful but deterministic random number generator for MLX following
+    numpy's Generator API.
+    """
+
+    def __init__(self, seed, **kwargs):
+        mx = get_mlx()
+        self.mx = mx
+        self.key = mx.random.key(seed, **kwargs)
+
+    # TODO: implement binomial, choice, exponential, poisson when mlx adds them
+
+    def _split_key(self):
+        keys = self.mx.random.split(self.key)
+        self.key = keys[0]
+        return keys[1]
+
+    def _resolve_dtype(self, dtype):
+        if isinstance(dtype, str):
+            return getattr(self.mx, dtype)
+        return dtype
+
+    def gumbel(self, loc=0.0, scale=1.0, size=None, dtype=None, **kwargs):
+        shape = _handle_size_to_shape(size)
+        if dtype is not None:
+            kwargs["dtype"] = self._resolve_dtype(dtype)
+        x = self.mx.random.gumbel(shape=shape, key=self._split_key(), **kwargs)
+        if scale != 1.0:
+            x *= scale
+        if loc != 0.0:
+            x += loc
+        return x
+
+    def integers(self, low, high=None, size=None, dtype=None, **kwargs):
+        shape = _handle_size_to_shape(size)
+        if high is None:
+            high = low
+            low = 0
+        if dtype is not None:
+            kwargs["dtype"] = self._resolve_dtype(dtype)
+        return self.mx.random.randint(
+            low=low,
+            high=high,
+            shape=shape,
+            key=self._split_key(),
+            **kwargs,
+        )
+
+    def normal(self, loc=0.0, scale=1.0, size=None, dtype=None, **kwargs):
+        shape = _handle_size_to_shape(size)
+        if dtype is not None:
+            kwargs["dtype"] = self._resolve_dtype(dtype)
+        x = self.mx.random.normal(shape=shape, key=self._split_key(), **kwargs)
+        if scale != 1.0:
+            x *= scale
+        if loc != 0.0:
+            x += loc
+        return x
+
+    def permutation(self, x, **kwargs):
+        return self.mx.random.permutation(x, key=self._split_key(), **kwargs)
+
+    def random(self, size=None, **kwargs):
+        return self.uniform(size=size, **kwargs)
+
+    def uniform(self, low=0.0, high=1.0, size=None, dtype=None, **kwargs):
+        shape = _handle_size_to_shape(size)
+        if dtype is not None:
+            kwargs["dtype"] = self._resolve_dtype(dtype)
+        return self.mx.random.uniform(
+            low=low,
+            high=high,
+            shape=shape,
+            key=self._split_key(),
+            **kwargs,
+        )
+
+
+@register_function("mlx", "random.default_rng")
+def mlx_default_rng(seed, **kwargs):
+    if isinstance(seed, MlxDefaultRNG):
+        return seed
+    return MlxDefaultRNG(seed, **kwargs)
+
+
+register_backend(MlxDefaultRNG, "mlx")
+
+
+_MLX_DEFAULT_RNG = None
+
+
+@register_function("mlx", "random.seed")
+def mlx_random_seed(seed=None):
+    global _MLX_DEFAULT_RNG
+    if seed is None:
+        from random import SystemRandom
+
+        seed = SystemRandom().randint(0, 2**31 - 1)
+    _MLX_DEFAULT_RNG = MlxDefaultRNG(seed)
+
+
+def _get_mlx_default_rng():
+    global _MLX_DEFAULT_RNG
+    if _MLX_DEFAULT_RNG is None:
+        mlx_random_seed()
+    return _MLX_DEFAULT_RNG
+
+
+@register_function("mlx", "random.uniform")
+def mlx_random_uniform(low=0.0, high=1.0, size=None, **kwargs):
+    return _get_mlx_default_rng().uniform(
+        low=low, high=high, size=size, **kwargs
+    )
+
+
+@register_function("mlx", "random.normal")
+def mlx_random_normal(loc=0.0, scale=1.0, size=None, **kwargs):
+    return _get_mlx_default_rng().normal(
+        loc=loc, scale=scale, size=size, **kwargs
+    )
+
+
+register_function("mlx", "complex", complex_add_re_im)
+
+
+@register_function("mlx", "count_nonzero")
+def mlx_count_nonzero(x):
+    return (x != 0).sum()
+
+
+@register_function("mlx", "ravel")
+def mlx_ravel(x, *args, **kwargs):
+    return x.reshape(-1, *args, **kwargs)
+
+
+@register_custom_wrapper("mlx", "ones")
+@register_custom_wrapper("mlx", "zeros")
+def mlx_zeros_ones_wrap(fn):
+    @functools.wraps(fn)
+    def numpy_like(shape, dtype=None, **kwargs):
+        if dtype is not None:
+            dtype = to_backend_dtype(dtype, like="mlx")
+        return fn(shape, dtype=dtype, **kwargs)
+
+    return numpy_like
+
+
+@register_custom_wrapper("mlx", "eye")
+def mlx_eye_wrap(fn):
+    @functools.wraps(fn)
+    def numpy_like(N, M=None, dtype=None, **kwargs):
+        if dtype is not None:
+            dtype = to_backend_dtype(dtype, like="mlx")
+        if M is not None:
+            return fn(N, m=M, dtype=dtype, **kwargs)
+        else:
+            return fn(N, dtype=dtype, **kwargs)
+
+    return numpy_like

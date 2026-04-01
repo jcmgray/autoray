@@ -110,6 +110,13 @@ platforms = ["linux-64"]
 [tool.pixi.feature.tensorflow.pypi-dependencies]
 tensorflow = "*"
 
+[tool.pixi.feature.mlx]
+platforms = ["linux-64", "osx-arm64"]
+[tool.pixi.feature.mlx.system-requirements]
+macos = "26.0"
+[tool.pixi.feature.mlx.dependencies]
+mlx = ">=0.31.1"
+
 [tool.pixi.feature.testing.dependencies]
 coverage = "*"
 pytest = "*"
@@ -143,6 +150,7 @@ testpynew = { features = ["pynew", "full", "testing"] }
 testjax = { features = ["pymid", "full", "jax", "testing"] }
 testtorch = { features = ["pymid", "full", "torch", "testing"] }
 testtensorflow = { features = ["pymid", "full", "tensorflow", "testing"] }
+testmlx = { features = ["pymid", "full", "mlx", "testing"] }
 docs = { features = ["pynew", "docs"] }
 
 [tool.pixi.tasks.pytest]
