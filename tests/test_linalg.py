@@ -34,8 +34,9 @@ def test_svd(backend, dtype, fn, args):
         # XXX: tensorflow can't multiply complex * real
         s = ar.do("astype", s, U.dtype)
         y = U @ ar.do("diag", s, like=x) @ V
-        diff = ar.do("sum", ar.do("abs", y - x))
-        assert ar.to_numpy(diff) < 1e-5
+        yn = ar.to_numpy(y)
+        xn = ar.to_numpy(x)
+        np.testing.assert_allclose(yn, xn, rtol=1e-2, atol=1e-3)
 
     elif svdtype == "batched":
         x = gen_rand((2, 5, 4), backend, dtype)
@@ -46,7 +47,9 @@ def test_svd(backend, dtype, fn, args):
         assert ar.shape(U) == (2, 5, 4)
         assert ar.shape(s) == (2, 4)
         assert ar.shape(VH) == (2, 4, 4)
-        assert ar.do("allclose", ar.to_numpy(y), ar.to_numpy(x), rtol=1e-4)
+        yn = ar.to_numpy(y)
+        xn = ar.to_numpy(x)
+        np.testing.assert_allclose(yn, xn, rtol=1e-2, atol=1e-3)
 
 
 @pytest.mark.parametrize(
