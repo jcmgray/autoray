@@ -2630,6 +2630,15 @@ def torch_flip_wrap(torch_flip):
     return numpy_like
 
 
+@register_custom_wrapper("torch", "nonzero")
+def torch_nonzero_wrap(torch_nonzero):
+    def numpy_like(x, **kwargs):
+        kwargs.setdefault("as_tuple", True)
+        return torch_nonzero(x, **kwargs)
+
+    return numpy_like
+
+
 class TorchDefaultRNG:
     def __init__(self, seed=None, device=None):
         self._torch = get_torch()
