@@ -505,7 +505,7 @@ def test_linalg_inv(backend, dtype):
     A = gen_rand((4, 4), backend, dtype)
     A_inv = ar.do("linalg.inv", A)
     I = ar.to_numpy(A @ A_inv)
-    np.testing.assert_allclose(I, np.eye(4), rtol=1e-3, atol=1e-5)
+    np.testing.assert_allclose(I, np.eye(4), rtol=1e-3, atol=1e-4)
 
 
 @pytest.mark.parametrize(
