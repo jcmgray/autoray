@@ -204,9 +204,12 @@ XFAILS = {
     # tensorflow
     ("tensorflow", "binomial"): "tensorflow: no binomial interface yet",
     ("tensorflow", "choice"): "tensorflow: no choice interface yet",
-    ("tensorflow", "empty"): "tensorflow doesn't support empty",
+    ("tensorflow", "einsum"): lambda a, kw: (
+        "tensorflow einsum doesn't support interleaved format"
+        if a[0] == "interleaved"
+        else None
+    ),
     ("tensorflow", "exponential"): "tensorflow: no exponential interface yet",
-    ("tensorflow", "full"): "tensorflow doesn't support full",
     ("tensorflow", "gumbel"): "tensorflow: no gumbel interface yet",
     ("tensorflow", "permutation"): "tensorflow: no permutation interface yet",
     ("tensorflow", "poisson"): "tensorflow: no poisson interface yet",

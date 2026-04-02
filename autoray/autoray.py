@@ -2514,6 +2514,13 @@ def tensorflow_solve_triangular(a, b, lower=False, **kwargs):
     return left
 
 
+@astype.register("tensorflow")
+def tensorflow_astype(x, dtype):
+    tf = get_tensorflow()
+    dtype = to_backend_dtype(dtype, like="tensorflow")
+    return tf.cast(x, dtype)
+
+
 # ---------------------------------- torch ---------------------------------- #
 
 
