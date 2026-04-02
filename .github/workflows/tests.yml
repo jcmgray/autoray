@@ -36,6 +36,9 @@ jobs:
         - os: ubuntu-latest
           pixi_environment: testtensorflow
 
+        - os: macos-latest
+          pixi_environment: testmlx
+
     steps:
       - uses: actions/checkout@v6
 
