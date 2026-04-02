@@ -4,6 +4,8 @@ import os
 
 import pytest
 
+import autoray as ar
+
 _ALL_BACKENDS = [
     "cupy",
     "dask",
@@ -428,3 +430,27 @@ def gen_params(backends=None, dtypes=None, fns=None, requires=None):
 
 # backward compat
 BACKENDS = gen_params(backends=...)
+
+
+def gen_rand(shape, backend, dtype="float64"):
+    if "complex" in dtype:
+        re = gen_rand(shape, backend)
+        im = gen_rand(shape, backend)
+        return ar.astype(ar.do("complex", re, im), dtype)
+
+    if backend == "sparse":
+        x = ar.do(
+            "random.uniform",
+            size=shape,
+            like=backend,
+            density=0.5,
+            format="coo",
+            fill_value=0,
+        )
+
+    else:
+        x = ar.do("random.uniform", size=shape, like=backend)
+
+    x = ar.astype(x, ar.to_backend_dtype(dtype, backend))
+    assert ar.get_dtype_name(x) == dtype
+    return x

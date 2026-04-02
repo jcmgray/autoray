@@ -4,44 +4,7 @@ import pytest
 import autoray as ar
 from autoray import shape
 
-from .conftest import gen_params
-
-JAX_RANDOM_KEY = None
-
-
-def gen_rand(shape, backend, dtype="float64"):
-    if "complex" in dtype:
-        re = gen_rand(shape, backend)
-        im = gen_rand(shape, backend)
-        return ar.astype(ar.do("complex", re, im), dtype)
-
-    if backend == "jax":
-        from jax import random as jrandom
-
-        global JAX_RANDOM_KEY
-
-        if JAX_RANDOM_KEY is None:
-            JAX_RANDOM_KEY = jrandom.PRNGKey(42)
-        JAX_RANDOM_KEY, subkey = jrandom.split(JAX_RANDOM_KEY)
-
-        return jrandom.uniform(subkey, shape=shape, dtype=dtype)
-
-    elif backend == "sparse":
-        x = ar.do(
-            "random.uniform",
-            size=shape,
-            like=backend,
-            density=0.5,
-            format="coo",
-            fill_value=0,
-        )
-
-    else:
-        x = ar.do("random.uniform", size=shape, like=backend)
-
-    x = ar.astype(x, ar.to_backend_dtype(dtype, backend))
-    assert ar.get_dtype_name(x) == dtype
-    return x
+from .conftest import gen_params, gen_rand
 
 
 @pytest.mark.parametrize(
@@ -203,7 +166,7 @@ def modified_gram_schmidt(X):
 @pytest.mark.parametrize(
     "backend", gen_params(backends=..., requires="linalg.norm")
 )
-def test_mgs(backend):
+def test_full_fn_mgs(backend):
     x = gen_rand((3, 5), backend)
     Ux = modified_gram_schmidt(x)
     y = ar.do("sum", Ux @ ar.dag(Ux))
@@ -254,47 +217,6 @@ def test_mgs_np_mimic(backend, explicit_namespace):
     Ux = modified_gram_schmidt_np_mimic(x, explicit_namespace)
     y = ar.do("sum", Ux @ ar.dag(Ux))
     assert ar.to_numpy(y) == pytest.approx(3)
-
-
-@pytest.mark.parametrize(
-    "backend,dtype,fn,args",
-    gen_params(
-        backends=...,
-        dtypes=...,
-        fns=[
-            ("linalg.svd", ("matrix",)),
-            ("linalg.svd", ("batched",)),
-        ],
-    ),
-)
-def test_linalg_svd(backend, dtype, fn, args):
-    svdtype = args[0]
-    if svdtype == "matrix":
-        x = gen_rand((5, 4), backend, dtype)
-        U, s, V = ar.do("linalg.svd", x)
-        assert (
-            ar.infer_backend(x)
-            == ar.infer_backend(U)
-            == ar.infer_backend(s)
-            == ar.infer_backend(V)
-            == backend
-        )
-        # XXX: tensorflow can't multiply complex * real
-        s = ar.do("astype", s, U.dtype)
-        y = U @ ar.do("diag", s, like=x) @ V
-        diff = ar.do("sum", ar.do("abs", y - x))
-        assert ar.to_numpy(diff) < 1e-5
-
-    elif svdtype == "batched":
-        x = gen_rand((2, 5, 4), backend, dtype)
-        U, s, VH = ar.do("linalg.svd", x)
-        # XXX: tensorflow can't multiply complex * real
-        s = ar.do("astype", s, U.dtype)
-        y = U @ (ar.do("reshape", s, (2, 4, 1)) * VH)
-        assert ar.shape(U) == (2, 5, 4)
-        assert ar.shape(s) == (2, 4)
-        assert ar.shape(VH) == (2, 4, 4)
-        assert ar.do("allclose", ar.to_numpy(y), ar.to_numpy(x), rtol=1e-4)
 
 
 @pytest.mark.parametrize("backend", gen_params(backends=...))
@@ -386,17 +308,6 @@ def test_triu(backend):
 
 
 @pytest.mark.parametrize(
-    "backend", gen_params(backends=..., requires="linalg.qr")
-)
-@pytest.mark.parametrize("shape", [(4, 3), (4, 4), (3, 4)])
-def test_qr_thin_square_fat(backend, shape):
-    x = gen_rand(shape, backend)
-    Q, R = ar.do("linalg.qr", x)
-    xn, Qn, Rn = map(ar.to_numpy, (x, Q, R))
-    assert ar.do("allclose", xn, Qn @ Rn)
-
-
-@pytest.mark.parametrize(
     "backend", gen_params(backends=..., requires="count_nonzero")
 )
 @pytest.mark.parametrize("array_dtype", ["int", "float", "bool"])
@@ -480,67 +391,6 @@ def test_real_imag(backend, dtype_in):
 
     assert ar.do("allclose", ar.to_numpy(x).real, ar.to_numpy(re))
     assert ar.do("allclose", ar.to_numpy(x).imag, ar.to_numpy(im))
-
-
-@pytest.mark.parametrize(
-    "backend,dtype",
-    gen_params(backends=..., dtypes=..., requires="linalg.solve"),
-)
-def test_linalg_solve(backend, dtype):
-
-    A = gen_rand((4, 4), backend, dtype)
-    b = gen_rand((4, 1), backend, dtype)
-    x = ar.do("linalg.solve", A, b)
-
-    Ax = ar.to_numpy(A @ x)
-    b = ar.to_numpy(b)
-    np.testing.assert_allclose(Ax, b, rtol=1e-2, atol=1e-3)
-
-
-@pytest.mark.parametrize(
-    "backend,dtype",
-    gen_params(backends=..., dtypes=..., requires="linalg.inv"),
-)
-def test_linalg_inv(backend, dtype):
-    A = gen_rand((4, 4), backend, dtype)
-    A_inv = ar.do("linalg.inv", A)
-    I = ar.to_numpy(A @ A_inv)
-    np.testing.assert_allclose(I, np.eye(4), rtol=1e-3, atol=1e-4)
-
-
-@pytest.mark.parametrize(
-    "backend,dtype",
-    gen_params(backends=..., dtypes=..., requires="linalg.eigh"),
-)
-def test_linalg_eigh(backend, dtype):
-
-    A = gen_rand((4, 4), backend, dtype)
-    A = A + ar.dag(A)
-    el, ev = ar.do("linalg.eigh", A)
-    B = (ev * ar.reshape(el, (1, -1))) @ ar.dag(ev)
-    assert ar.do("allclose", ar.to_numpy(A), ar.to_numpy(B), rtol=1e-3)
-
-
-@pytest.mark.parametrize(
-    "backend,dtype",
-    gen_params(backends=..., dtypes=..., requires="linalg.cholesky"),
-)
-def test_linalg_cholesky_upper(backend, dtype):
-    x = gen_rand((4, 4), backend, dtype)
-    xp = ar.get_namespace(x)
-    A = x @ ar.dag(x) + 1e-3 * xp.eye(4)
-
-    U = xp.linalg.cholesky(A, upper=True)
-    reconstructed = ar.dag(U) @ U
-
-    assert xp.shape(U) == (4, 4)
-    ar.do(
-        "testing.assert_allclose",
-        ar.to_numpy(reconstructed),
-        ar.to_numpy(A),
-        rtol=1e-3,
-        atol=1e-6,
-    )
 
 
 @pytest.mark.parametrize("backend", gen_params(backends=..., requires="pad"))
@@ -963,49 +813,9 @@ def test_shape_ndim_builtins():
     "backend",
     gen_params(backends=..., requires="scipy.linalg.expm"),
 )
-def test_scipy_dispatching(backend):
+def test_scipy_expm_dispatching(backend):
     x = gen_rand((3, 3), backend=backend)
     ar.do("scipy.linalg.expm", x)
-
-
-@pytest.mark.parametrize(
-    "backend,dtype",
-    gen_params(
-        backends=...,
-        dtypes=...,
-        requires="scipy.linalg.solve_triangular",
-    ),
-)
-def test_scipy_linalg_solve_triangular(backend, dtype):
-
-    A = gen_rand((4, 4), backend, dtype)
-    xp = ar.get_namespace(A)
-    # make A a well-conditioned triangular matrix
-    Au = xp.triu(A)
-    Au = Au + 2 * xp.eye(4)
-    b = gen_rand((4, 1), backend, dtype)
-
-    # solve with upper triangular (default)
-    x = xp.scipy.linalg.solve_triangular(Au, b)
-    assert ar.do(
-        "allclose",
-        ar.to_numpy(Au @ x),
-        ar.to_numpy(b),
-        rtol=1e-3,
-        atol=1e-6,
-    )
-
-    # solve with lower triangular
-    Al = xp.tril(A)
-    Al = Al + 2 * xp.eye(4)
-    x = xp.scipy.linalg.solve_triangular(Al, b, lower=True)
-    assert ar.do(
-        "allclose",
-        ar.to_numpy(Al @ x),
-        ar.to_numpy(b),
-        rtol=1e-3,
-        atol=1e-6,
-    )
 
 
 def check_array_dtypes(x, y):

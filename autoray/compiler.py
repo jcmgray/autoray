@@ -76,16 +76,11 @@ class CompileJax:
         self._jit_kwargs = kwargs
 
     def setup(self):
-        import jax
+        import jax  # type: ignore
 
         if self._enable_x64 is not None:
-            import jax
-
             jax.config.update("jax_enable_x64", self._enable_x64)
-
         if self._platform_name is not None:
-            import jax
-
             jax.config.update("jax_platform_name", self._platform_name)
 
         self._jit_fn = jax.jit(self._fn, **self._jit_kwargs)
@@ -110,7 +105,7 @@ class CompileTensorFlow:
         self._jit_kwargs = kwargs
 
     def setup(self):
-        import tensorflow as tf
+        import tensorflow as tf  # type: ignore
 
         self._jit_fn = tf.function(**self._jit_kwargs)(self._fn)
         self._fn = None
@@ -128,7 +123,7 @@ class CompileTorch:
     """ """
 
     def __init__(self, fn, **kwargs):
-        import torch
+        import torch  # type: ignore
 
         self.torch = torch
 
@@ -166,7 +161,7 @@ class CompileTorch:
 
 class CompileTorch2:
     def __init__(self, fn, **kwargs):
-        import torch
+        import torch  # type: ignore
 
         self.torch = torch
 
@@ -194,8 +189,8 @@ class CompilePytensor:
         self._output_ref_tree = None
 
     def setup(self, args, kwargs):
-        import pytensor
-        import pytensor.tensor as pt
+        import pytensor  # type: ignore
+        import pytensor.tensor as pt  # type: ignore
 
         flat_arrays, ref_tree = tree_flatten(
             (args, kwargs),

@@ -3,8 +3,7 @@ from numpy.testing import assert_allclose
 
 from autoray import autojit, do, infer_backend, shape, to_numpy
 
-from .conftest import gen_params
-from .test_autoray import gen_rand
+from .conftest import gen_params, gen_rand
 
 _COMPILE_BACKENDS = ["jax", "torch", "tensorflow"]
 BACKENDS = gen_params(backends=_COMPILE_BACKENDS)

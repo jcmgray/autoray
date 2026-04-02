@@ -7,8 +7,7 @@ from numpy.testing import assert_allclose, assert_raises
 import autoray as ar
 from autoray import lazy
 
-from .conftest import BACKENDS, gen_params
-from .test_autoray import gen_rand
+from .conftest import BACKENDS, gen_params, gen_rand
 
 
 def assert_unary_fn_with_kwargs(fn, shapes, seed, kwargs, backend="numpy"):

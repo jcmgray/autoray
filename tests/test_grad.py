@@ -2,8 +2,7 @@ import pytest
 
 from autoray import do
 
-from .conftest import gen_params
-from .test_autoray import gen_rand
+from .conftest import gen_params, gen_rand
 
 _GRAD_BACKENDS = ["jax", "torch", "tensorflow", "paddle", "autograd"]
 
