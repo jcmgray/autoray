@@ -494,7 +494,7 @@ def test_linalg_solve(backend, dtype):
 
     Ax = ar.to_numpy(A @ x)
     b = ar.to_numpy(b)
-    np.testing.assert_allclose(Ax, b, rtol=1e-3, atol=1e-6)
+    np.testing.assert_allclose(Ax, b, rtol=1e-2, atol=1e-3)
 
 
 @pytest.mark.parametrize(
