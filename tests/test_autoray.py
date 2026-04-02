@@ -1,41 +1,10 @@
-import importlib.util
-
 import numpy as np
 import pytest
 
 import autoray as ar
 from autoray import shape
 
-# find backends to tests
-BACKENDS = [pytest.param("numpy")]
-for lib in [
-    "cupy",
-    "dask",
-    "tensorflow",
-    "torch",
-    "mars",
-    "jax",
-    "sparse",
-    "paddle",
-]:
-    if importlib.util.find_spec(lib):
-        BACKENDS.append(pytest.param(lib))
-
-        if lib == "jax":
-            import os
-
-            import jax
-
-            jax.config.update("jax_enable_x64", True)
-            jax.config.update("jax_platform_name", "cpu")
-            os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
-    else:
-        BACKENDS.append(
-            pytest.param(
-                lib, marks=pytest.mark.skipif(True, reason=f"No {lib}.")
-            )
-        )
-
+from .conftest import gen_params
 
 JAX_RANDOM_KEY = None
 
@@ -76,116 +45,95 @@ def gen_rand(shape, backend, dtype="float64"):
 
 
 @pytest.mark.parametrize(
-    "f,args,xfail_backends",
-    (
-        ("all", (), ()),
-        ("clip", (0.2, 0.7), ()),
-        ("conj", (), ()),
-        ("cos", (), ()),
-        ("cosh", (), ()),
-        ("count_nonzero", (), ()),
-        ("cumsum", (0,), ("sparse",)),
-        ("diag", (), ("sparse",)),
-        ("diag", (1,), ("sparse",)),
-        ("diag", (-1,), ("sparse",)),
-        ("exp", (), ()),
-        ("imag", (), ()),
-        ("log", (), ()),
-        ("log10", (), ()),
-        ("max", (-1,), ("sparse",)),
-        ("max", (), ()),
-        ("mean", (), ()),
-        ("mean", (0,), ("sparse",)),
-        ("min", (), ()),
-        ("power", (2,), ("sparse",)),
-        ("prod", (), ()),
-        ("ravel", (), ("sparse",)),
-        ("real", (), ()),
-        ("sin", (), ()),
-        ("sinh", (), ()),
-        ("sqrt", (), ()),
-        ("sum", (), ()),
-        ("sum", (1,), ()),
-        ("tan", (), ()),
-        ("tanh", (), ()),
-        ("trace", (), ("sparse",)),
-        ("tril", (), ()),
-        ("tril", (), (1,)),
-        ("tril", (), (-1,)),
-        ("triu", (), ()),
-        ("triu", (), (1,)),
-        ("triu", (), (-1,)),
+    "backend,fn,args",
+    gen_params(
+        backends=...,
+        fns=[
+            ("all", ()),
+            ("clip", (0.2, 0.7)),
+            ("conj", ()),
+            ("cos", ()),
+            ("cosh", ()),
+            ("count_nonzero", ()),
+            ("cumsum", (0,)),
+            ("diag", ()),
+            ("diag", (1,)),
+            ("diag", (-1,)),
+            ("exp", ()),
+            ("imag", ()),
+            ("log", ()),
+            ("log10", ()),
+            ("max", (-1,)),
+            ("max", ()),
+            ("mean", ()),
+            ("mean", (0,)),
+            ("min", ()),
+            ("power", (2,)),
+            ("prod", ()),
+            ("ravel", ()),
+            ("real", ()),
+            ("sin", ()),
+            ("sinh", ()),
+            ("sqrt", ()),
+            ("sum", ()),
+            ("sum", (1,)),
+            ("tan", ()),
+            ("tanh", ()),
+            ("trace", ()),
+            ("tril", ()),
+            ("tril", (1,)),
+            ("tril", (-1,)),
+            ("triu", ()),
+            ("triu", (1,)),
+            ("triu", (-1,)),
+        ],
     ),
 )
-@pytest.mark.parametrize("backend", BACKENDS)
-def test_unary_functions(f, args, xfail_backends, backend):
-    if backend in xfail_backends:
-        pytest.xfail(f"{backend} doesn't support {f}.")
+def test_unary_functions(backend, fn, args):
 
     xn = ar.do("random.uniform", size=(4, 5), like="numpy")
-    yn = ar.do(f, xn, *args)
+    yn = ar.do(fn, xn, *args)
     x = ar.do("asarray", xn, like=backend)
-    y = ar.do(f, x, *args)
+    y = ar.do(fn, x, *args)
     yt = ar.do("to_numpy", y)
     assert ar.do("allclose", yt, yn)
 
 
 @pytest.mark.parametrize(
-    "f,args,xfail_backends",
-    (
-        ("add", (), ()),
-        ("allclose", (), ("sparse",)),
-        ("divide", (), ()),
-        ("matmul", (), ()),
-        ("multiply", (), ()),
-        ("subtract", (), ()),
+    "backend,fn",
+    gen_params(
+        backends=...,
+        fns=["add", "allclose", "divide", "matmul", "multiply", "subtract"],
     ),
 )
-@pytest.mark.parametrize("backend", BACKENDS)
-def test_binary_functions(f, args, xfail_backends, backend):
-    if backend in xfail_backends:
-        pytest.xfail(f"{backend} doesn't support {f}.")
-
+def test_binary_functions(backend, fn):
     xan = ar.do("random.uniform", size=(3, 3), like="numpy")
     xbn = ar.do("random.uniform", size=(3, 3), like="numpy")
-    yn = ar.do(f, xan, xbn, *args)
-
+    yn = ar.do(fn, xan, xbn)
     xa = ar.do("asarray", xan, like=backend)
     xb = ar.do("asarray", xbn, like=backend)
-    y = ar.do(f, xa, xb, *args)
+    y = ar.do(fn, xa, xb)
     yt = ar.do("to_numpy", y)
-
     assert ar.do("allclose", yt, yn)
 
 
 @pytest.mark.parametrize(
-    "f",
-    [
-        "sum",
-        "prod",
-        "max",
-        "min",
-        "mean",
-    ],
+    "backend,f,args,kwargs",
+    gen_params(
+        backends=...,
+        fns=[
+            (f, (), kw)
+            for f in ("sum", "prod", "max", "min", "mean")
+            for kw in (
+                {},
+                {"axis": 1},
+                {"axis": 1, "keepdims": True},
+                {"axis": (0, 2)},
+            )
+        ],
+    ),
 )
-@pytest.mark.parametrize(
-    "kwargs",
-    [
-        {},
-        {"axis": 1},
-        {"axis": 1, "keepdims": True},
-        {"axis": (0, 2)},
-    ],
-)
-@pytest.mark.parametrize("backend", BACKENDS)
-def test_reduce_functions(f, kwargs, backend):
-    if (
-        backend == "torch"
-        and f == "prod"
-        and isinstance(kwargs.get("axis"), tuple)
-    ):
-        pytest.xfail("Pytorch doesn't support prod with tuple axis.")
-
+def test_reduce_functions(backend, f, args, kwargs):
     x = ar.do("random.normal", size=(2, 3, 4), like="numpy")
     y = ar.do(f, x, **kwargs)
     xb = ar.do("asarray", x, like=backend)
@@ -194,12 +142,10 @@ def test_reduce_functions(f, kwargs, backend):
     assert ar.do("allclose", yt, y)
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
-@pytest.mark.parametrize("fn", ["sqrt", "exp", "sum"])
+@pytest.mark.parametrize(
+    "backend,fn", gen_params(backends=..., fns=["sqrt", "exp", "sum"])
+)
 def test_basic(backend, fn):
-    if (backend == "ctf") and fn in ("sqrt", "sum"):
-        pytest.xfail("ctf doesn't have sqrt, and converts sum output to numpy")
-
     x = gen_rand((2, 3, 4), backend)
     y = ar.do(fn, x)
     if (backend == "sparse") and (fn == "sum"):
@@ -223,7 +169,7 @@ def test_raises_import_error_when_missing():
         ar.do("ones", 1, like="anonexistantbackend")
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("backend", gen_params(backends=...))
 @pytest.mark.parametrize(
     "fn,args",
     [
@@ -235,9 +181,6 @@ def test_raises_import_error_when_missing():
     ],
 )
 def test_attribute_prefs(backend, fn, args):
-    if (backend == "torch") and fn in (ar.real, ar.imag):
-        pytest.xfail("Pytorch doesn't support complex numbers yet...")
-
     x = gen_rand((3, 5), backend)
     y = fn(x, *args)
     assert ar.infer_backend(x) == ar.infer_backend(y) == backend
@@ -257,12 +200,10 @@ def modified_gram_schmidt(X):
     return ar.do("stack", Q, axis=0)
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize(
+    "backend", gen_params(backends=..., requires="linalg.norm")
+)
 def test_mgs(backend):
-    if backend == "sparse":
-        pytest.xfail("Sparse doesn't support linear algebra yet...")
-    if backend == "ctf":
-        pytest.xfail("ctf does not have 'stack' function.")
     x = gen_rand((3, 5), backend)
     Ux = modified_gram_schmidt(x)
     y = ar.do("sum", Ux @ ar.dag(Ux))
@@ -304,59 +245,59 @@ def test_numpy_mimic_dunder_methods():
     dir(np)
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize(
+    "backend", gen_params(backends=..., requires="linalg.norm")
+)
 @pytest.mark.parametrize("explicit_namespace", [True, False])
 def test_mgs_np_mimic(backend, explicit_namespace):
-    if backend == "sparse":
-        pytest.xfail("Sparse doesn't support linear algebra yet...")
-    if backend == "ctf":
-        pytest.xfail("ctf does not have 'stack' function.")
     x = gen_rand((3, 5), backend)
     Ux = modified_gram_schmidt_np_mimic(x, explicit_namespace)
     y = ar.do("sum", Ux @ ar.dag(Ux))
     assert ar.to_numpy(y) == pytest.approx(3)
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
-def test_linalg_svd_square(backend):
-    if backend == "sparse":
-        pytest.xfail("Sparse doesn't support linear algebra yet...")
-    x = gen_rand((5, 4), backend)
-    U, s, V = ar.do("linalg.svd", x)
-    assert (
-        ar.infer_backend(x)
-        == ar.infer_backend(U)
-        == ar.infer_backend(s)
-        == ar.infer_backend(V)
-        == backend
-    )
-    y = U @ ar.do("diag", s, like=x) @ V
-    diff = ar.do("sum", ar.do("abs", y - x))
-    assert ar.to_numpy(diff) < 1e-8
+@pytest.mark.parametrize(
+    "backend,dtype,fn,args",
+    gen_params(
+        backends=...,
+        dtypes=...,
+        fns=[
+            ("linalg.svd", ("matrix",)),
+            ("linalg.svd", ("batched",)),
+        ],
+    ),
+)
+def test_linalg_svd(backend, dtype, fn, args):
+    svdtype = args[0]
+    if svdtype == "matrix":
+        x = gen_rand((5, 4), backend, dtype)
+        U, s, V = ar.do("linalg.svd", x)
+        assert (
+            ar.infer_backend(x)
+            == ar.infer_backend(U)
+            == ar.infer_backend(s)
+            == ar.infer_backend(V)
+            == backend
+        )
+        # XXX: tensorflow can't multiply complex * real
+        s = ar.do("astype", s, U.dtype)
+        y = U @ ar.do("diag", s, like=x) @ V
+        diff = ar.do("sum", ar.do("abs", y - x))
+        assert ar.to_numpy(diff) < 1e-5
+
+    elif svdtype == "batched":
+        x = gen_rand((2, 5, 4), backend, dtype)
+        U, s, VH = ar.do("linalg.svd", x)
+        # XXX: tensorflow can't multiply complex * real
+        s = ar.do("astype", s, U.dtype)
+        y = U @ (ar.do("reshape", s, (2, 4, 1)) * VH)
+        assert ar.shape(U) == (2, 5, 4)
+        assert ar.shape(s) == (2, 4)
+        assert ar.shape(VH) == (2, 4, 4)
+        assert ar.do("allclose", ar.to_numpy(y), ar.to_numpy(x), rtol=1e-4)
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
-@pytest.mark.parametrize("dtype", ["float64", "complex128"])
-def test_linalg_svd_batched(backend, dtype):
-    if backend in ("dask", "sparse"):
-        pytest.xfail("Sparse doesn't support linear algebra yet...")
-
-    if backend == "paddle" and "complex" in dtype:
-        pytest.xfail("Paddle doesn't support complex SVD yet...")
-
-    x = gen_rand((2, 5, 4), backend, dtype)
-    U, s, VH = ar.do("linalg.svd", x)
-    # XXX: tensorflow can't multiply complex * real
-    s = ar.do("astype", s, U.dtype)
-    y = U @ (ar.do("reshape", s, (2, 4, 1)) * VH)
-
-    assert ar.shape(U) == (2, 5, 4)
-    assert ar.shape(s) == (2, 4)
-    assert ar.shape(VH) == (2, 4, 4)
-    assert ar.do("allclose", ar.to_numpy(y), ar.to_numpy(x), rtol=1e-4)
-
-
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("backend", gen_params(backends=...))
 def test_translator_random_uniform(backend):
     from autoray import numpy as anp
 
@@ -372,11 +313,8 @@ def test_translator_random_uniform(backend):
     assert 1000 <= ar.to_numpy(x) < 2000
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("backend", gen_params(backends=...))
 def test_translator_random_normal(backend):
-    if backend == "ctf":
-        pytest.xfail()
-
     from autoray import numpy as anp
 
     x = anp.random.normal(100.0, 0.1, size=(4, 5), like=backend)
@@ -407,7 +345,7 @@ def test_translator_random_normal(backend):
     assert 1000 <= ar.to_numpy(x) < 2000
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("backend", gen_params(backends=..., requires="tril"))
 def test_tril(backend):
     x = gen_rand((4, 4), backend)
     xl = ar.do("tril", x)
@@ -427,7 +365,7 @@ def test_tril(backend):
         assert (xln > 0.0).sum() == 13
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("backend", gen_params(backends=..., requires="triu"))
 def test_triu(backend):
     x = gen_rand((4, 4), backend)
     xl = ar.do("triu", x)
@@ -447,28 +385,22 @@ def test_triu(backend):
         assert (xln > 0.0).sum() == 13
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize(
+    "backend", gen_params(backends=..., requires="linalg.qr")
+)
 @pytest.mark.parametrize("shape", [(4, 3), (4, 4), (3, 4)])
 def test_qr_thin_square_fat(backend, shape):
-    if backend == "sparse":
-        pytest.xfail("Sparse doesn't support linear algebra yet...")
     x = gen_rand(shape, backend)
     Q, R = ar.do("linalg.qr", x)
     xn, Qn, Rn = map(ar.to_numpy, (x, Q, R))
     assert ar.do("allclose", xn, Qn @ Rn)
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize(
+    "backend", gen_params(backends=..., requires="count_nonzero")
+)
 @pytest.mark.parametrize("array_dtype", ["int", "float", "bool"])
 def test_count_nonzero(backend, array_dtype):
-    if backend == "mars":
-        import mars
-
-        if tuple(map(int, mars.__version__.split("."))) < (0, 4, 0):
-            pytest.xfail("mars count_nonzero bug fixed in version 0.4.")
-    if backend == "ctf" and array_dtype == "bool":
-        pytest.xfail("ctf doesn't support bool array dtype")
-
     if array_dtype == "int":
         x = ar.do("asarray", [0, 1, 2, 0, 3], like=backend)
     elif array_dtype == "float":
@@ -485,18 +417,14 @@ def test_pseudo_submodules():
     assert shape(xT) == (3, 2)
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
-@pytest.mark.parametrize("creation", ["ones", "zeros"])
 @pytest.mark.parametrize(
-    "dtype", ["float32", "float64", "complex64", "complex128"]
+    "backend,dtype,fn",
+    gen_params(backends=..., fns=["ones", "zeros"], dtypes=...),
 )
-def test_dtype_specials(backend, creation, dtype):
+def test_dtype_specials(backend, dtype, fn):
     import numpy as np
 
-    x = ar.do(creation, shape=(2, 3), like=backend)
-
-    if backend == "torch" and "complex" in dtype:
-        pytest.xfail("Pytorch doesn't support complex numbers yet...")
+    x = ar.do(fn, shape=(2, 3), like=backend)
 
     x = ar.astype(x, dtype)
     assert ar.get_dtype_name(x) == dtype
@@ -505,23 +433,13 @@ def test_dtype_specials(backend, creation, dtype):
     assert ar.get_dtype_name(x) == dtype
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
-@pytest.mark.parametrize("real_dtype", ["float32", "float64"])
+@pytest.mark.parametrize(
+    "backend,real_dtype",
+    gen_params(
+        backends=..., dtypes=["float32", "float64"], requires="complex"
+    ),
+)
 def test_complex_creation(backend, real_dtype):
-    if backend == "torch":
-        pytest.xfail("Pytorch doesn't support complex numbers yet...")
-    if (backend == "sparse") and (real_dtype == "float32"):
-        pytest.xfail(
-            "Bug in sparse where single precision isn't maintained "
-            "after scalar multiplication."
-        )
-
-    if (backend == "ctf") and (real_dtype == "float32"):
-        pytest.xfail(
-            "ctf currently doesn't preserve single precision when "
-            "multiplying by python scalars."
-        )
-
     x = ar.do(
         "complex",
         ar.astype(
@@ -537,17 +455,18 @@ def test_complex_creation(backend, real_dtype):
     )
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize(
-    "dtype_in,dtype_out",
-    [
-        ("float32", "float32"),
-        ("float64", "float64"),
-        ("complex64", "float32"),
-        ("complex128", "float64"),
-    ],
+    "backend,dtype_in", gen_params(backends=..., dtypes=...)
 )
-def test_real_imag(backend, dtype_in, dtype_out):
+def test_real_imag(backend, dtype_in):
+
+    dtype_out = {
+        "float32": "float32",
+        "float64": "float64",
+        "complex64": "float32",
+        "complex128": "float64",
+    }[dtype_in]
+
     x = gen_rand((3, 4), backend, dtype_in)
 
     re = ar.do("real", x)
@@ -563,19 +482,11 @@ def test_real_imag(backend, dtype_in, dtype_out):
     assert ar.do("allclose", ar.to_numpy(x).imag, ar.to_numpy(im))
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize(
-    "dtype",
-    ["float32", "float64", "complex64", "complex128"],
+    "backend,dtype",
+    gen_params(backends=..., dtypes=..., requires="linalg.solve"),
 )
 def test_linalg_solve(backend, dtype):
-    if backend == "sparse":
-        pytest.xfail("Sparse doesn't support linear algebra yet...")
-
-    if backend == "paddle" and "complex" in dtype:
-        pytest.xfail(
-            "Paddle `linalg.solve` doesn't support complex numbers yet..."
-        )
 
     A = gen_rand((4, 4), backend, dtype)
     b = gen_rand((4, 1), backend, dtype)
@@ -586,20 +497,22 @@ def test_linalg_solve(backend, dtype):
     np.testing.assert_allclose(Ax, b, rtol=1e-3, atol=1e-6)
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize(
-    "dtype",
-    ["float32", "float64", "complex64", "complex128"],
+    "backend,dtype",
+    gen_params(backends=..., dtypes=..., requires="linalg.inv"),
+)
+def test_linalg_inv(backend, dtype):
+    A = gen_rand((4, 4), backend, dtype)
+    A_inv = ar.do("linalg.inv", A)
+    I = ar.to_numpy(A @ A_inv)
+    np.testing.assert_allclose(I, np.eye(4), rtol=1e-3, atol=1e-5)
+
+
+@pytest.mark.parametrize(
+    "backend,dtype",
+    gen_params(backends=..., dtypes=..., requires="linalg.eigh"),
 )
 def test_linalg_eigh(backend, dtype):
-    if backend == "sparse":
-        pytest.xfail("sparse doesn't support linalg.eigh yet.")
-    if backend == "dask":
-        pytest.xfail("dask doesn't support linalg.eigh yet.")
-    if backend == "mars":
-        pytest.xfail("mars doesn't support linalg.eigh yet.")
-    if (backend == "torch") and ("complex" in dtype):
-        pytest.xfail("Pytorch doesn't fully support complex yet.")
 
     A = gen_rand((4, 4), backend, dtype)
     A = A + ar.dag(A)
@@ -608,15 +521,11 @@ def test_linalg_eigh(backend, dtype):
     assert ar.do("allclose", ar.to_numpy(A), ar.to_numpy(B), rtol=1e-3)
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
-@pytest.mark.parametrize("dtype", ["float64", "complex128"])
+@pytest.mark.parametrize(
+    "backend,dtype",
+    gen_params(backends=..., dtypes=..., requires="linalg.cholesky"),
+)
 def test_linalg_cholesky_upper(backend, dtype):
-    if backend in ("dask", "sparse"):
-        pytest.xfail("Sparse doesn't support linear algebra yet...")
-
-    if backend == "paddle" and "complex" in dtype:
-        pytest.xfail("Paddle doesn't support complex cholesky yet...")
-
     x = gen_rand((4, 4), backend, dtype)
     xp = ar.get_namespace(x)
     A = x @ ar.dag(x) + 1e-3 * xp.eye(4)
@@ -625,8 +534,8 @@ def test_linalg_cholesky_upper(backend, dtype):
     reconstructed = ar.dag(U) @ U
 
     assert xp.shape(U) == (4, 4)
-    assert ar.do(
-        "allclose",
+    ar.do(
+        "testing.assert_allclose",
         ar.to_numpy(reconstructed),
         ar.to_numpy(A),
         rtol=1e-3,
@@ -634,12 +543,8 @@ def test_linalg_cholesky_upper(backend, dtype):
     )
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("backend", gen_params(backends=..., requires="pad"))
 def test_pad(backend):
-    if backend == "sparse":
-        pytest.xfail("sparse doesn't support linalg.eigh yet.")
-    if backend == "mars":
-        pytest.xfail("mars doesn't support linalg.eigh yet.")
 
     A = gen_rand((3, 4, 5), backend)
 
@@ -658,7 +563,7 @@ def test_pad(backend):
         )
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("backend", gen_params(backends=...))
 def test_register_function(backend):
     x = ar.do("ones", shape=(2, 3), like=backend)
 
@@ -681,7 +586,7 @@ def test_register_function(backend):
     assert ar.do("test_register", x) == 2
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("backend", gen_params(backends=...))
 def test_register_function_decorator(backend):
     x = ar.do("ones", shape=(2, 3), like=backend)
 
@@ -702,10 +607,8 @@ def test_register_function_decorator(backend):
     assert ar.do("test_register_decorator", x) == 2
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("backend", gen_params(backends=..., requires="take"))
 def test_take(backend):
-    if backend in {"sparse", "paddle"}:
-        pytest.xfail(f"{backend} doesn't fully support take yet")
     num_inds = 4
     A = gen_rand((2, 3, 4), backend)
     if backend == "jax":  # gen_rand doesn't work with ints for JAX
@@ -723,7 +626,9 @@ def test_take(backend):
     assert ar.infer_backend(A) == ar.infer_backend(B)
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize(
+    "backend", gen_params(backends=..., requires="concatenate")
+)
 def test_concatenate(backend):
     mats = [gen_rand((2, 3, 4), backend) for _ in range(3)]
 
@@ -739,7 +644,7 @@ def test_concatenate(backend):
     )
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("backend", gen_params(backends=..., requires="stack"))
 def test_stack(backend):
     mats = [gen_rand((2, 3, 4), backend) for _ in range(3)]
 
@@ -755,36 +660,43 @@ def test_stack(backend):
     )
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
-def test_einsum(backend):
+@pytest.mark.parametrize(
+    "backend,fn,args",
+    gen_params(
+        backends=...,
+        fns=[
+            ("einsum", ("eq",)),
+            ("einsum", ("interleaved",)),
+        ],
+    ),
+)
+def test_einsum(backend, fn, args):
     A = gen_rand((2, 3, 4), backend)
     B = gen_rand((3, 4, 2), backend)
-    C1 = ar.do("einsum", "ijk,jkl->il", A, B, like=backend)
-    C2 = ar.do("einsum", "ijk,jkl->il", A, B)
-    if backend not in ("torch", "tensorflow", "paddle"):
-        # interleaved syntax is not supported
-        C3 = ar.do("einsum", A, [0, 1, 2], B, [1, 2, 3], [0, 3])
-    else:
-        C3 = C1
-    C4 = ar.do("reshape", A, (2, 12)) @ ar.do("reshape", B, (12, 2))
 
-    assert shape(C1) == shape(C2) == shape(C3) == (2, 2)
-    assert ar.do("allclose", ar.to_numpy(C1), ar.to_numpy(C4))
-    assert ar.do("allclose", ar.to_numpy(C2), ar.to_numpy(C4))
-    assert ar.do("allclose", ar.to_numpy(C3), ar.to_numpy(C4))
+    (einsum_type,) = args
+    if einsum_type == "eq":
+        C1 = ar.do(fn, "ijk,jkl->il", A, B, like=backend)
+        C2 = ar.do(fn, "ijk,jkl->il", A, B)
+    elif einsum_type == "interleaved":
+        C1 = ar.do("einsum", A, [0, 1, 2], B, [1, 2, 3], [0, 3], like=backend)
+        C2 = ar.do("einsum", A, [0, 1, 2], B, [1, 2, 3], [0, 3])
+
+    C3 = ar.do("reshape", A, (2, 12)) @ ar.do("reshape", B, (12, 2))
+
+    assert shape(C1) == shape(C2) == (2, 2)
+    assert ar.do("allclose", ar.to_numpy(C1), ar.to_numpy(C3))
+    assert ar.do("allclose", ar.to_numpy(C2), ar.to_numpy(C3))
     assert (
         ar.infer_backend(C1)
         == ar.infer_backend(C2)
         == ar.infer_backend(C3)
-        == ar.infer_backend(C4)
         == backend
     )
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("backend", gen_params(backends=..., requires="trace"))
 def test_trace(backend):
-    if backend == "sparse":
-        pytest.xfail("sparse doesn't support trace yet")
 
     x = gen_rand((4, 4), backend)
     tr = ar.do("trace", x)
@@ -797,40 +709,50 @@ def test_trace(backend):
     assert ar.infer_backend(tr) == backend
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
-def test_moveaxis(backend):
-    x = gen_rand((2, 3, 4), backend)
-    xn = ar.to_numpy(x)
+@pytest.mark.parametrize(
+    "backend,fn,args",
+    gen_params(
+        backends=...,
+        fns=[
+            ("moveaxis", ("single",)),
+            ("moveaxis", ("multiple",)),
+        ],
+    ),
+)
+def test_moveaxis(backend, fn, args):
+    axis_type = args[0]
 
-    # single axis, positive and negative index
-    y = ar.do("moveaxis", x, 0, -1)
-    assert shape(y) == (3, 4, 2)
-    assert ar.infer_backend(y) == backend
-    assert ar.do("allclose", ar.to_numpy(y), ar.do("moveaxis", xn, 0, -1))
+    if axis_type == "single":
+        x = gen_rand((2, 3, 4), backend)
+        xn = ar.to_numpy(x)
 
-    y = ar.do("moveaxis", x, 2, 0)
-    assert shape(y) == (4, 2, 3)
-    assert ar.infer_backend(y) == backend
-    assert ar.do("allclose", ar.to_numpy(y), ar.do("moveaxis", xn, 2, 0))
+        # single axis, positive and negative index
+        y = ar.do("moveaxis", x, 0, -1)
+        assert shape(y) == (3, 4, 2)
+        assert ar.infer_backend(y) == backend
+        assert ar.do("allclose", ar.to_numpy(y), ar.do("moveaxis", xn, 0, -1))
+
+        y = ar.do("moveaxis", x, 2, 0)
+        assert shape(y) == (4, 2, 3)
+        assert ar.infer_backend(y) == backend
+        assert ar.do("allclose", ar.to_numpy(y), ar.do("moveaxis", xn, 2, 0))
+
+    elif axis_type == "multiple":
+        x = gen_rand((2, 3, 4, 5), backend)
+        xn = ar.to_numpy(x)
+
+        y = ar.do("moveaxis", x, [0, 1], [-1, -2])
+        assert shape(y) == (4, 5, 3, 2)
+        assert ar.infer_backend(y) == backend
+        assert ar.do(
+            "allclose", ar.to_numpy(y), ar.do("moveaxis", xn, [0, 1], [-1, -2])
+        )
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
-def test_moveaxis_multiple(backend):
-    x = gen_rand((2, 3, 4, 5), backend)
-    xn = ar.to_numpy(x)
-
-    y = ar.do("moveaxis", x, [0, 1], [-1, -2])
-    assert shape(y) == (4, 5, 3, 2)
-    assert ar.infer_backend(y) == backend
-    assert ar.do(
-        "allclose", ar.to_numpy(y), ar.do("moveaxis", xn, [0, 1], [-1, -2])
-    )
-
-
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize(
+    "backend", gen_params(backends=..., requires="swapaxes")
+)
 def test_swapaxes(backend):
-    if backend == "sparse":
-        pytest.xfail("sparse doesn't support 'swapaxes'")
 
     x = gen_rand((2, 3, 4), backend)
     xn = ar.to_numpy(x)
@@ -847,13 +769,9 @@ def test_swapaxes(backend):
     assert ar.do("allclose", ar.to_numpy(y), ar.do("swapaxes", xn, -1, -3))
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("backend", gen_params(backends=..., requires="split"))
 @pytest.mark.parametrize("int_or_section", ["int", "section", "empty"])
 def test_split(backend, int_or_section):
-    if backend == "sparse":
-        pytest.xfail("sparse doesn't support split yet")
-    if backend == "dask":
-        pytest.xfail("dask doesn't support split yet")
     A = ar.do("ones", (10, 20, 10), like=backend)
     if int_or_section == "section":
         sections = [2, 4, 14]
@@ -870,14 +788,14 @@ def test_split(backend, int_or_section):
         assert ar.shape(splits[2]) == (10, 20, 2)
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
-def test_where(backend):
-    if backend in {"sparse", "paddle"}:
-        pytest.xfail(f"{backend} doesn't fully support `where` yet")
+@pytest.mark.parametrize(
+    "backend", gen_params(backends=..., requires=("nonzero", "arange"))
+)
+def test_nonzero(backend):
     A = ar.do("arange", 10, like=backend)
     B = ar.do("arange", 10, like=backend) + 1
     C = ar.do("stack", [A, B])
-    D = ar.do("where", C < 5)
+    D = ar.do("nonzero", C < 5)
     if backend == "dask":
         for x in D:
             x.compute_chunk_sizes()
@@ -885,10 +803,21 @@ def test_where(backend):
         assert ar.to_numpy(x).shape == (9,)
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
-@pytest.mark.parametrize("dtype_str", ["float32", "float64"])
+@pytest.mark.parametrize("backend", gen_params(backends=..., requires="where"))
+def test_where(backend):
+    x = ar.do("asarray", [-1.0, 0.0, 1.0], like=backend)
+    y = ar.do("asarray", [10.0, 10.0, 10.0], like=backend)
+    out = ar.do("where", x > 0.0, x, y)
+    assert ar.do("allclose", ar.to_numpy(out), [10.0, 10.0, 1.0])
+
+
 @pytest.mark.parametrize(
-    "fn", ["random.normal", "random.uniform", "zeros", "ones", "eye"]
+    "backend,dtype_str,fn",
+    gen_params(
+        backends=...,
+        dtypes=["float32", "float64"],
+        fns=["random.normal", "random.uniform", "zeros", "ones", "eye"],
+    ),
 )
 @pytest.mark.parametrize("str_or_backend", ("str", "backend"))
 def test_dtype_kwarg(backend, dtype_str, fn, str_or_backend):
@@ -909,14 +838,14 @@ def test_dtype_kwarg(backend, dtype_str, fn, str_or_backend):
     assert ar.get_dtype_name(A) == dtype_str
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("backend", gen_params(backends=..., requires="ones"))
 def test_get_common_dtype(backend):
     x = ar.do("ones", (1,), like=backend, dtype="complex64")
     y = ar.do("ones", (1,), like=backend, dtype="float64")
     assert ar.get_common_dtype(x, y) == "complex128"
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("backend", gen_params(backends=..., requires="ones"))
 def test_backend_like(backend):
     assert ar.get_backend() is None
     ar.set_backend("test")
@@ -937,32 +866,12 @@ def test_nested_multihreaded_backend_like():
 
     def foo(backend1, backend2):
         bs = []
-        bs.append(
-            (
-                ar.get_backend(),
-                choose_backend("test", 1),
-            )
-        )
+        bs.append((ar.get_backend(), choose_backend("test", 1)))
         with ar.backend_like(backend1):
-            bs.append(
-                (
-                    ar.get_backend(),
-                    choose_backend("test", 1),
-                )
-            )
+            bs.append((ar.get_backend(), choose_backend("test", 1)))
             with ar.backend_like(backend2):
-                bs.append(
-                    (
-                        ar.get_backend(),
-                        choose_backend("test", 1),
-                    )
-                )
-            bs.append(
-                (
-                    ar.get_backend(),
-                    choose_backend("test", 1),
-                )
-            )
+                bs.append((ar.get_backend(), choose_backend("test", 1)))
+            bs.append((ar.get_backend(), choose_backend("test", 1)))
         bs.append((ar.get_backend(), choose_backend("test", 1)))
         return bs
 
@@ -1050,24 +959,24 @@ def test_shape_ndim_builtins():
         assert ar.ndim(x) == np.ndim(x)
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize(
+    "backend",
+    gen_params(backends=..., requires="scipy.linalg.expm"),
+)
 def test_scipy_dispatching(backend):
-    if backend not in ["numpy", "cupy", "jax"]:
-        pytest.xfail("backend doesn't suport scipy.")
     x = gen_rand((3, 3), backend=backend)
     ar.do("scipy.linalg.expm", x)
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
 @pytest.mark.parametrize(
-    "dtype",
-    ["float32", "float64", "complex64", "complex128"],
+    "backend,dtype",
+    gen_params(
+        backends=...,
+        dtypes=...,
+        requires="scipy.linalg.solve_triangular",
+    ),
 )
 def test_scipy_linalg_solve_triangular(backend, dtype):
-    if backend not in ("numpy", "jax", "torch", "tensorflow"):
-        pytest.xfail(
-            f"{backend} doesn't support scipy.linalg.solve_triangular."
-        )
 
     A = gen_rand((4, 4), backend, dtype)
     xp = ar.get_namespace(A)
@@ -1105,127 +1014,34 @@ def check_array_dtypes(x, y):
         assert x.device == y.device
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+_CREATION_CALLS = {
+    "empty": ((2, 3),),
+    "eye": (3,),
+    "full": ((2, 3), 7),
+    "identity": (4,),
+    "ones": ((2, 3),),
+    "zeros": ((2, 3),),
+}
+
+
 @pytest.mark.parametrize(
-    "dtype", ["float32", "float64", "complex64", "complex128"]
+    "backend,dtype,fn",
+    gen_params(
+        backends=...,
+        dtypes=...,
+        fns=list(_CREATION_CALLS),
+    ),
 )
-class TestCreationRoutines:
-    def test_empty_passes_dtype_device(self, backend, dtype):
-        if backend in ("tensorflow",):
-            pytest.xfail(f"{backend} doesn't support empty yet.")
-        x = gen_rand((1,), backend, dtype)
-        y = ar.do("empty", (2, 3), like=x)
-        check_array_dtypes(x, y)
-
-    def test_empty_passes_dtype_device_namespace(self, backend, dtype):
-        if backend in ("tensorflow",):
-            pytest.xfail(f"{backend} doesn't support empty yet.")
-        x = gen_rand((1,), backend, dtype)
+@pytest.mark.parametrize("use_namespace", [False, True])
+def test_creation_passes_dtype_device(backend, dtype, fn, use_namespace):
+    x = gen_rand((1,), backend, dtype)
+    call_args = _CREATION_CALLS[fn]
+    if use_namespace:
         xp = ar.get_namespace(x)
-        y = xp.empty((2, 3))
-        check_array_dtypes(x, y)
-
-    def test_eye_passes_dtype_device(self, backend, dtype):
-        if backend == "paddle" and "complex" in dtype:
-            pytest.xfail("Paddle doesn't support complex eye yet.")
-        x = gen_rand((1,), backend, dtype)
-        y = ar.do("eye", 3, like=x)
-        check_array_dtypes(x, y)
-
-    def test_eye_passes_dtype_device_namespace(self, backend, dtype):
-        if backend == "paddle" and "complex" in dtype:
-            pytest.xfail("Paddle doesn't support complex eye yet.")
-        x = gen_rand((1,), backend, dtype)
-        xp = ar.get_namespace(x)
-        y = xp.eye(3)
-        check_array_dtypes(x, y)
-
-    def test_full_passes_dtype_device(self, backend, dtype):
-        if backend in ("tensorflow",):
-            pytest.xfail(f"{backend} doesn't support full yet.")
-        x = gen_rand((1,), backend, dtype)
-        y = ar.do("full", (2, 3), 7, like=x)
-        check_array_dtypes(x, y)
-
-    def test_full_passes_dtype_device_namespace(self, backend, dtype):
-        if backend in ("tensorflow",):
-            pytest.xfail(f"{backend} doesn't support full yet.")
-        x = gen_rand((1,), backend, dtype)
-        xp = ar.get_namespace(x)
-        y = xp.full((2, 3), 7)
-        check_array_dtypes(x, y)
-
-    def test_identity_passes_dtype_device(self, backend, dtype):
-        if backend == "paddle" and "complex" in dtype:
-            pytest.xfail("Paddle doesn't support complex identity yet.")
-        x = gen_rand((1,), backend, dtype)
-        y = ar.do("identity", 4, like=x)
-        check_array_dtypes(x, y)
-
-    def test_identity_passes_dtype_device_namespace(self, backend, dtype):
-        if backend == "paddle" and "complex" in dtype:
-            pytest.xfail("Paddle doesn't support complex identity yet.")
-        x = gen_rand((1,), backend, dtype)
-        xp = ar.get_namespace(x)
-        y = xp.identity(4)
-        check_array_dtypes(x, y)
-
-    def test_ones_passes_dtype_device(self, backend, dtype):
-        x = gen_rand((1,), backend, dtype)
-        y = ar.do("ones", (2, 3), like=x)
-        check_array_dtypes(x, y)
-
-    def test_ones_passes_dtype_device_namespace(self, backend, dtype):
-        x = gen_rand((1,), backend, dtype)
-        xp = ar.get_namespace(x)
-        y = xp.ones((2, 3))
-        check_array_dtypes(x, y)
-
-    def test_zeros_passes_dtype_device(self, backend, dtype):
-        x = gen_rand((1,), backend, dtype)
-        y = ar.do("zeros", (2, 3), like=x)
-        check_array_dtypes(x, y)
-
-    def test_zeros_passes_dtype_device_namespace(self, backend, dtype):
-        x = gen_rand((1,), backend, dtype)
-        xp = ar.get_namespace(x)
-        y = xp.zeros((2, 3))
-        check_array_dtypes(x, y)
-
-    # def test_arange_passes_dtype_device(self, backend, dtype):
-    #     if backend in ("sparse",):
-    #         pytest.xfail("Sparse doesn't support arange yet.")
-    #     if backend == "torch" and "complex" in dtype:
-    #         pytest.xfail("torch.arange doesn't support complex numbers yet.")
-    #     if backend == "tensorflow" and "complex" in dtype:
-    #         pytest.xfail("torch.arange doesn't support complex numbers yet.")
-
-    #     x = gen_rand((1,), backend, dtype)
-    #     y = ar.do("arange", 1, 10, like=x)
-    #     check_array_dtypes(x, y)
-
-    # def test_linspace_passes_dtype_device(self, backend, dtype):
-    #     if backend in ("sparse", "tensorflow"):
-    #         pytest.xfail(f"{backend} doesn't support linspace yet.")
-    #     x = gen_rand((1,), backend, dtype)
-    #     y = ar.do("linspace", 10, 20, 11, like=x)
-    #     check_array_dtypes(x, y)
-
-    # def test_logspace_passes_dtype_device(self, backend, dtype):
-    #     if backend in ("sparse", "tensorflow"):
-    #         pytest.xfail(f"{backend} doesn't support logspace yet.")
-    #     x = gen_rand((1,), backend, dtype)
-    #     if backend not in {"dask"}:
-    #         y = ar.do("logspace", 10, 20, 11, like=x)
-    #         check_array_dtypes(x, y)
-
-    # def test_geomspace_passes_dtype_device(self, backend, dtype):
-    #     if backend in ("sparse", "tensorflow"):
-    #         pytest.xfail(f"{backend} doesn't support logspace yet.")
-    #     x = gen_rand((1,), backend, dtype)
-    #     if backend not in {"dask"}:
-    #         y = ar.do("logspace", 10, 20, 11, like=x)
-    #         check_array_dtypes(x, y)
+        y = getattr(xp, fn)(*call_args)
+    else:
+        y = ar.do(fn, *call_args, like=x)
+    check_array_dtypes(x, y)
 
 
 creation_funcs_with_args = [
@@ -1252,11 +1068,10 @@ def test_creation_with_builtins(fn, args, dtype, expected):
     assert y.dtype in expected
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize(
+    "backend", gen_params(backends=..., requires="indices")
+)
 def test_indices(backend):
-    if backend == "sparse":
-        pytest.xfail("Sparse doesn't support `indices` function yet.")
-
     from numpy.testing import assert_array_equal
 
     x = ar.do("indices", (3, 4), like=backend)
@@ -1265,7 +1080,7 @@ def test_indices(backend):
     assert_array_equal(xn, xe)
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("backend", gen_params(backends=...))
 def test_is_array(backend):
     x = gen_rand((2, 3), backend)
     assert ar.is_array(x)
@@ -1277,7 +1092,7 @@ def test_is_array(backend):
     assert not ar.is_array(y)
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("backend", gen_params(backends=...))
 def test_is_scalar(backend):
     x = gen_rand((2, 3), backend)
     assert not ar.is_scalar(x)
@@ -1289,10 +1104,8 @@ def test_is_scalar(backend):
     assert not ar.is_scalar(y)
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize("backend", gen_params(backends=..., requires="array"))
 def test_function_array(backend):
-    if backend == "sparse":
-        pytest.xfail("sparse needs explicit constructor.")
 
     x = 2.0
     z1 = ar.do("array", [x], like=backend)
@@ -1317,10 +1130,10 @@ def test_function_array(backend):
     assert ar.infer_backend(z5) == backend
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize(
+    "backend", gen_params(backends=..., requires="asarray")
+)
 def test_function_asarray(backend):
-    if backend == "sparse":
-        pytest.xfail("sparse needs explicit constructor.")
 
     x = 2.0
     z1 = ar.do("asarray", [x], like=backend)

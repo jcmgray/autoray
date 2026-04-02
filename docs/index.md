@@ -16,12 +16,12 @@ write backend agnostic code that works for:
 * [pytorch](https://pytorch.org/)
 * [jax](https://github.com/google/jax)
 * [cupy](https://github.com/cupy/cupy)
+* [mlx](https://github.com/ml-explore/mlx)
 * [dask](https://github.com/dask/dask)
 * [autograd](https://github.com/HIPS/autograd)
 * [tensorflow](https://github.com/tensorflow/tensorflow)
 * [sparse](https://sparse.pydata.org/)
 * [paddle](https://github.com/paddlepaddle/paddle)
-* [mars](https://github.com/mars-project/mars)
 * ... and indeed **any** library that provides a numpy-*ish* api, even if it
   knows nothing about `autoray`.
 

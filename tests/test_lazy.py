@@ -7,7 +7,8 @@ from numpy.testing import assert_allclose, assert_raises
 import autoray as ar
 from autoray import lazy
 
-from .test_autoray import BACKENDS, gen_rand
+from .conftest import BACKENDS, gen_params
+from .test_autoray import gen_rand
 
 
 def assert_unary_fn_with_kwargs(fn, shapes, seed, kwargs, backend="numpy"):
@@ -83,10 +84,10 @@ def make_strict(larray):
         larray._fn = wrap_strict_check(larray)
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize(
+    "backend", gen_params(backends=..., requires="linalg.norm")
+)
 def test_lazy_mgs(backend):
-    if backend == "sparse":
-        pytest.xfail("Sparse doesn't support 'linalg.norm' yet...")
     x = gen_rand((5, 5), backend)
     lx = lazy.array(x)
     ly = modified_gram_schmidt(lx)
@@ -229,6 +230,10 @@ def test_moveaxis(backend):
 
 @pytest.mark.parametrize("backend", BACKENDS)
 def test_moveaxis_multiple(backend):
+    if backend == "mlx":
+        # this isn't the main test for moveaxis
+        pytest.xfail("mlx doesn't support multi axis move")
+
     x = gen_rand((2, 3, 4, 5), backend)
     lx = lazy.array(x)
     # move multiple axes
@@ -238,10 +243,10 @@ def test_moveaxis_multiple(backend):
     assert_allclose(ar.to_numpy(ly.compute()), ar.to_numpy(y))
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@pytest.mark.parametrize(
+    "backend", gen_params(backends=..., requires="swapaxes")
+)
 def test_swapaxes(backend):
-    if backend == "sparse":
-        pytest.xfail("sparse doesn't support 'swapaxes'")
     x = gen_rand((2, 3, 4, 5), backend)
     lx = lazy.array(x)
     ly = ar.do("swapaxes", lx, 0, 2)
@@ -273,17 +278,15 @@ def test_reshape_chain(backend):
     )
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
-@pytest.mark.parametrize("dtype", ["float64", "complex128"])
+@pytest.mark.parametrize(
+    "backend,dtype",
+    gen_params(
+        backends=...,
+        dtypes=["float64", "complex128"],
+        requires="linalg.svd",
+    ),
+)
 def test_svd(backend, dtype):
-    if backend == "sparse":
-        pytest.xfail("Sparse doesn't support 'linalg.svd' yet...")
-
-    if backend in ("paddle",) and "complex" in dtype:
-        pytest.xfail(
-            f"{backend} `linalg.solve` doesn't support complex dtype..."
-        )
-
     x = lazy.array(gen_rand((4, 5), backend, dtype))
     U, s, VH = ar.do("linalg.svd", x)
     assert ar.shape(U) == (4, 4)
@@ -298,11 +301,12 @@ def test_svd(backend, dtype):
     )
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
-def test_qr(backend):
-    if backend == "sparse":
-        pytest.xfail("Sparse doesn't support 'linalg.qr' yet...")
-    x = lazy.array(gen_rand((4, 5), backend))
+@pytest.mark.parametrize(
+    "backend,dtype",
+    gen_params(backends=..., dtypes=..., requires="linalg.qr"),
+)
+def test_qr(backend, dtype):
+    x = lazy.array(gen_rand((4, 5), backend, dtype))
     Q, R = ar.do("linalg.qr", x)
     assert ar.shape(Q) == (4, 4)
     assert ar.shape(R) == (4, 5)
@@ -311,14 +315,18 @@ def test_qr(backend):
     assert_allclose(
         ar.to_numpy(x.compute()),
         ar.to_numpy(ly.compute()),
+        rtol=1e-4,
+        atol=1e-6,
     )
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
-@pytest.mark.parametrize("dtype", ["float64", "complex128"])
+@pytest.mark.parametrize(
+    "backend,dtype",
+    gen_params(backends=..., dtypes=..., requires="linalg.eig"),
+)
 def test_eig_inv(backend, dtype):
-    if backend in ("cupy", "dask", "torch", "mars", "sparse", "paddle"):
-        pytest.xfail(f"{backend} doesn't support 'linalg.eig' yet...")
+    if backend == "mlx":
+        pytest.xfail("mlx doesn't support complex inv.")
 
     # N.B. the prob that a real gaussian matrix has all real eigenvalues is
     # ``2**(-d * (d - 1) / 4)`` - see Edelman 1997 - so need ``d >> 5``
@@ -332,18 +340,16 @@ def test_eig_inv(backend, dtype):
     assert_allclose(
         ar.to_numpy(x.compute()),
         ar.to_numpy(ly.compute()),
+        rtol=1e-4,
+        atol=1e-6,
     )
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
-@pytest.mark.parametrize("dtype", ["float64", "complex128"])
+@pytest.mark.parametrize(
+    "backend,dtype",
+    gen_params(backends=..., dtypes=..., requires="linalg.eigh"),
+)
 def test_eigh(backend, dtype):
-    if backend in (
-        "dask",
-        "mars",
-        "sparse",
-    ):
-        pytest.xfail(f"{backend} doesn't support 'linalg.eig' yet...")
     x = lazy.array(gen_rand((5, 5), backend, dtype))
     x = x + x.H
     el, ev = ar.do("linalg.eigh", x)
@@ -354,18 +360,20 @@ def test_eigh(backend, dtype):
     assert_allclose(
         ar.to_numpy(x.compute()),
         ar.to_numpy(ly.compute()),
+        rtol=1e-4,
+        atol=1e-6,
     )
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
-@pytest.mark.parametrize("dtype", ["float64", "complex128"])
+@pytest.mark.parametrize(
+    "backend,dtype",
+    gen_params(
+        backends=...,
+        dtypes=...,
+        requires="linalg.cholesky",
+    ),
+)
 def test_cholesky(backend, dtype):
-    if backend in ("sparse",):
-        pytest.xfail(f"{backend} doesn't support 'linalg.cholesky' yet...")
-
-    if backend in ("paddle",) and "complex" in dtype:
-        pytest.xfail(f"{backend} doesn't support complex dtype...")
-
     x = lazy.array(gen_rand((5, 5), backend, dtype))
     x = x @ x.H
     C = ar.do("linalg.cholesky", x)
@@ -375,20 +383,19 @@ def test_cholesky(backend, dtype):
     assert_allclose(
         ar.to_numpy(x.compute()),
         ar.to_numpy(ly.compute()),
+        rtol=1e-4,
     )
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
-@pytest.mark.parametrize("dtype", ["float64", "complex128"])
+@pytest.mark.parametrize(
+    "backend,dtype",
+    gen_params(
+        backends=...,
+        dtypes=["float64", "complex128"],
+        requires="linalg.solve",
+    ),
+)
 def test_solve(backend, dtype):
-    if backend in ("sparse",):
-        pytest.xfail(f"{backend} doesn't support 'linalg.solve' yet...")
-
-    if backend in ("paddle",) and "complex" in dtype:
-        pytest.xfail(
-            f"{backend} `linalg.solve` doesn't support complex dtype..."
-        )
-
     A = lazy.array(gen_rand((5, 5), backend, dtype))
     y = lazy.array(gen_rand((5,), backend, dtype))
 
@@ -839,27 +846,27 @@ def test_concatenate():
     assert_allclose(lxyz.compute(), xyz)
 
 
-@pytest.mark.parametrize("shape_in", [(2, 3, 4)])
 @pytest.mark.parametrize("keepdims", [False, True])
 @pytest.mark.parametrize(
-    "kwargs",
-    [
-        {"axis": 0},
-        {"axis": 2},
-        {"ord": None, "axis": (0, 2)},
-        {"ord": 1, "axis": (0, 2)},
-        {"ord": 2, "axis": (2, 1)},
-    ],
+    "backend,fn,args,kwargs",
+    gen_params(
+        backends=...,
+        fns=[
+            ("linalg.norm", (3,), {"axis": 0}),
+            ("linalg.norm", (3,), {"axis": 2}),
+            ("linalg.norm", (3,), {"ord": None, "axis": (0, 2)}),
+            ("linalg.norm", (3,), {"ord": 1, "axis": (0, 2)}),
+            ("linalg.norm", (3,), {"ord": 2, "axis": (2, 1)}),
+            ("linalg.norm", (2,), {"ord": 2, "axis": (0, 1)}),
+        ],
+    ),
 )
-@pytest.mark.parametrize("backend", BACKENDS)
-def test_norm(shape_in, keepdims, kwargs, backend):
-    if backend in ("sparse",):
-        pytest.xfail(f"{backend} doesn't support all 'linalg.norm' options...")
-
-    if (backend == "dask") and (kwargs.get("ord", None) is not None):
-        pytest.xfail("Dask doesn't support ord != None yet...")
-
-    fn = "linalg.norm"
+def test_norm(keepdims, backend, fn, args, kwargs):
+    (ndim,) = args
+    if ndim == 3:
+        shape_in = (2, 3, 4)
+    else:
+        shape_in = (3, 4)
     kwargs["keepdims"] = keepdims
     assert_unary_fn_with_kwargs(
         fn, [shape_in], seed=1234, kwargs=kwargs, backend=backend

@@ -1314,13 +1314,11 @@ def get_common_dtype(*arrays):
     return _DTYPE_MAP[has_complex, has_double]
 
 
+@compose
 def astype(x, dtype_name, **kwargs):
     """Cast array as type ``dtype_name`` - tries ``x.astype`` first."""
     dtype = to_backend_dtype(dtype_name, like=x)
-    try:
-        return x.astype(dtype, **kwargs)
-    except AttributeError:
-        return do("astype", x, dtype, **kwargs)
+    return x.astype(dtype, **kwargs)
 
 
 def to_numpy(x):
@@ -1366,7 +1364,8 @@ def svd_manual_full_matrices_kwarg(fn):
         U, s, VH = fn(*args, **kwargs)
 
         if not full_matrices:
-            U, VH = U[:, : s.size], VH[: s.size, :]
+            k = s.shape[-1]
+            U, VH = U[..., :, :k], VH[..., :k, :]
 
         return U, s, VH
 
@@ -1423,9 +1422,11 @@ def triu_to_band_part(fn):
 
 
 def cholesky_lower(fn):
+    """Make a cholesky wrapper that translates `upper` to `lower` bool."""
+
     @functools.wraps(fn)
-    def cholesky_numpy_like(a):
-        return fn(a, lower=True)
+    def cholesky_numpy_like(a, upper=False):
+        return fn(a, lower=not upper)
 
     return cholesky_numpy_like
 
@@ -2186,20 +2187,6 @@ register_custom_wrapper("dask", "random.uniform", with_dtype_wrapper)
 register_function("dask", "complex", complex_add_re_im)
 register_function("dask", "to_numpy", dask_to_numpy)
 
-# ---------------------------------- mars ----------------------------------- #
-
-
-def mars_to_numpy(x):
-    return x.to_numpy()
-
-
-register_module_alias("mars", "mars.tensor")
-
-register_custom_wrapper("mars", "linalg.cholesky", cholesky_lower)
-
-register_function("mars", "complex", complex_add_re_im)
-register_function("mars", "to_numpy", mars_to_numpy)
-
 
 # ----------------------------------- ctf ----------------------------------- #
 
@@ -2910,7 +2897,7 @@ def torch_transpose(x, axes=None):
     return x.permute(*axes)
 
 
-@register_function("torch", "astype")
+@astype.register("torch")
 def torch_astype(x, dtype):
     return x.to(dtype=to_backend_dtype(dtype, like=x))
 
@@ -3444,3 +3431,6 @@ def mlx_eye_wrap(fn):
             return fn(N, dtype=dtype, **kwargs)
 
     return numpy_like
+
+
+register_custom_wrapper("mlx", "linalg.svd", svd_manual_full_matrices_kwarg)

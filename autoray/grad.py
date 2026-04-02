@@ -1,7 +1,7 @@
 from .autoray import do, register_function
 
 _GRAD_BACKENDS = {"jax", "torch", "tensorflow", "paddle", "autograd"}
-_NO_GRAD_BACKENDS = {"numpy", "cupy", "dask", "sparse", "mars"}
+_NO_GRAD_BACKENDS = {"numpy", "cupy", "dask", "sparse"}
 
 
 # -------------------- stop_gradient -------------------- #
@@ -18,7 +18,7 @@ def torch_stop_gradient(x):
 
 
 def tensorflow_stop_gradient(x):
-    import tensorflow as tf
+    import tensorflow as tf  # type: ignore
 
     return tf.stop_gradient(x)
 

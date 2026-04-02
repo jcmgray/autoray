@@ -3,11 +3,11 @@ from numpy.testing import assert_allclose
 
 from autoray import autojit, do, infer_backend, shape, to_numpy
 
-from .test_autoray import BACKENDS, gen_rand
+from .conftest import gen_params
+from .test_autoray import gen_rand
 
-BACKENDS = [
-    p for p in BACKENDS if p.values[0] in ("jax", "torch", "tensorflow")
-]
+_COMPILE_BACKENDS = ["jax", "torch", "tensorflow"]
+BACKENDS = gen_params(backends=_COMPILE_BACKENDS)
 
 
 def modified_gram_schmidt(X):
