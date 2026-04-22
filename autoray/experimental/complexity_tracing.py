@@ -201,10 +201,12 @@ def prime_factors(n) -> list[int]:
     while n % 2 == 0:
         fs.append(2)
         n = n // 2
-    for i in range(3, int(math.sqrt(n)) + 1, 2):
+    i = 3
+    while i * i <= n:
         while n % i == 0:
             fs.append(i)
-            n = n / i
+            n = n // i
+        i += 2
     if n > 2:
         fs.append(n)
     return fs
