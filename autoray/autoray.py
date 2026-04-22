@@ -29,7 +29,7 @@ from collections import OrderedDict, defaultdict
 from inspect import signature
 
 
-def do(fn, *args, like=None, **kwargs):
+def do(fn: str, *args, like=None, **kwargs):
     """Do function named ``fn`` on ``(*args, **kwargs)``, peforming single
     dispatch to retrieve ``fn`` based on whichever library defines the class of
     the ``args[0]``, or the ``like`` keyword argument if specified.
@@ -92,8 +92,41 @@ def do(fn, *args, like=None, **kwargs):
         <tf.Tensor: id=91, shape=(3, 3), dtype=float32>
     """
     backend = _choose_backend(fn, args, kwargs, like=like)
-    func = get_lib_fn(backend, fn)
+
+    # inline get_lib_fn for speed
+    try:
+        func = _FUNCS[backend, fn]
+    except KeyError:
+        func = import_lib_fn(backend, fn)
+
     return func(*args, **kwargs)
+
+
+class DoFunc:
+    """Get an automatic dispatch (i.e. backend selection deferred to call time)
+    callable for function named ``fn``.
+
+    Slightly faster equivalent to ``functools.partial(do, fn)``.
+    """
+
+    __slots__ = ("fn",)
+
+    def __init__(self, fn: str):
+        self.fn = fn
+
+    def __call__(self, *args, like=None, **kwargs):
+        backend = _choose_backend(self.fn, args, kwargs, like=like)
+
+        # inline get_lib_fn for speed
+        try:
+            func = _FUNCS[backend, self.fn]
+        except KeyError:
+            func = import_lib_fn(backend, self.fn)
+
+        return func(*args, **kwargs)
+
+    def __repr__(self):
+        return f"<DoFunc {self.fn}>"
 
 
 # ------------------------- efficiently dispatching ------------------------- #
@@ -133,8 +166,18 @@ def _default_infer_from_sig_threadaware(fn, args, kwargs):
     )
 
 
-def _always_the_same(fn, args, kwargs, backend):
-    return backend
+class ConstantInferrer:
+    """A simple dispatch inferrer that always returns the same backend. Used
+    with `set_backend` to set a uniform constant backend for all calls.
+    """
+
+    __slots__ = ("backend",)
+
+    def __init__(self, backend):
+        self.backend = backend
+
+    def __call__(self, fn, args, kwargs):
+        return self.backend
 
 
 def get_backend(get_globally="auto"):
@@ -197,10 +240,10 @@ def set_backend(like, set_globally="auto"):
         inferrer = _default_infer_from_sig
     elif isinstance(like, str):
         backend = like
-        inferrer = functools.partial(_always_the_same, backend=backend)
+        inferrer = ConstantInferrer(backend)
     else:
         backend = _infer_class_backend_cached(like.__class__)
-        inferrer = functools.partial(_always_the_same, backend=backend)
+        inferrer = ConstantInferrer(backend)
 
     if set_globally == "auto":
         set_globally = threading.get_ident() == _importing_thrid
@@ -1777,8 +1820,8 @@ class AutoNamespace:
             return self._get_submodule(name)
 
         if self._backend is None:
-            # use autoray.do and auto dispatch
-            return functools.partial(do, name)
+            # use auto dispatch
+            return DoFunc(name)
 
         fn = get_lib_fn(self._backend, name)
 
