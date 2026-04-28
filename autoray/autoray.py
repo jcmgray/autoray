@@ -91,14 +91,16 @@ def do(fn: str, *args, like=None, **kwargs):
         >>> do('eye', 3, like=x_tf)
         <tf.Tensor: id=91, shape=(3, 3), dtype=float32>
     """
+    # dispatch (& possibly inject device/dtype into kwargs)
     backend = _choose_backend(fn, args, kwargs, like=like)
 
-    # inline get_lib_fn for speed
+    # get the function! (inline get_lib_fn for speed)
     try:
         func = _FUNCS[backend, fn]
     except KeyError:
         func = import_lib_fn(backend, fn)
 
+    # call the function!
     return func(*args, **kwargs)
 
 
@@ -107,6 +109,30 @@ class DoFunc:
     callable for function named ``fn``.
 
     Slightly faster equivalent to ``functools.partial(do, fn)``.
+
+    Examples
+    --------
+
+    `DoFunc` objects have a fixed operation but can still be called on any type
+    of array:
+
+        >>> sqrt = DoFunc('sqrt')
+        >>> sqrt
+        <DoFunc sqrt>
+
+        >>> import numpy as np
+        >>> sqrt(np.random.uniform(size=[5]))
+        array([0.32464973, 0.90379787, 0.85037325, 0.88729814, 0.46768083])
+
+        >>> import cupy as cp
+        >>> sqrt(cp.random.uniform(size=[5]))
+        array([0.44541656, 0.88713113, 0.92626237, 0.64080557, 0.69620767])
+
+        >>> import tensorflow as tf
+        >>> sqrt(tf.random.uniform(shape=[5]))
+        <tf.Tensor: shape=(5,), dtype=float32, numpy=
+        array([0.3206495 , 0.8056399 , 0.5973012 , 0.13028008, 0.9820518 ],
+            dtype=float32)>
     """
 
     __slots__ = ("fn",)
@@ -115,14 +141,16 @@ class DoFunc:
         self.fn = fn
 
     def __call__(self, *args, like=None, **kwargs):
+        # dispatch (& possibly inject device/dtype into kwargs)
         backend = _choose_backend(self.fn, args, kwargs, like=like)
 
-        # inline get_lib_fn for speed
+        # get the function! (inline get_lib_fn for speed)
         try:
             func = _FUNCS[backend, self.fn]
         except KeyError:
             func = import_lib_fn(backend, self.fn)
 
+        # call the function!
         return func(*args, **kwargs)
 
     def __repr__(self):
