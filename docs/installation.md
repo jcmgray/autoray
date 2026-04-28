@@ -2,29 +2,33 @@
 
 `autoray` is available on both [pypi](https://pypi.org/project/autoray/) and
 [conda-forge](https://anaconda.org/conda-forge/autoray). While `autoray` is
-pure python and has no direct dependencies itself, the recommended distribution
-would be [mambaforge](https://github.com/conda-forge/miniforge#mambaforge)
-for installing the various backend array libraries and their dependencies.
+pure python and has no direct dependencies itself, the preferred way to install
+it is with [pixi](https://pixi.sh), which creates isolated and reproducible
+environments that can mix packages from [`conda-forge`](https://conda-forge.org/) (the default) and also [`pypi`](https://pypi.org/).
+
+**Installing with `pixi` (preferred):**
+```bash
+pixi init autoray-project
+cd autoray-project
+pixi add autoray
+```
 
 **Installing with `pip`:**
 ```bash
 pip install autoray
+# or
+uv pip install autoray
 ```
+It is recommended to use [`uv`](https://docs.astral.sh/uv/) to install and
+manage purely pypi based environments.
 
-**Installing with `conda`:**
+**Installing with `conda` / `mamba`:**
 ```bash
 conda install -c conda-forge autoray
 ```
+[`miniforge`](https://github.com/conda-forge/miniforge) is the recommended way
+to manage and install a conda-based environment.
 
-**Installing with `mambaforge`:**
-```bash
-mamba install autoray
-```
-```{hint}
-Mamba is a faster version of `conda`, and the -forge distritbution comes
-pre-configured with only the `conda-forge` channel, which further simplifies
-and speeds up installing dependencies.
-```
 
 **Installing the latest version directly from github:**
 

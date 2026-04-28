@@ -111,6 +111,7 @@ automatic_dispatch.md
 lazy_computation.ipynb
 compilation.ipynb
 development.md
+changelog.md
 ```
 
 ```{toctree}

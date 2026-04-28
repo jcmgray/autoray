@@ -35,6 +35,7 @@ extensions = [
     "autoapi.extension",
     "myst_nb",
     "sphinx_copybutton",
+    "sphinx.ext.autosectionlabel",
     "sphinx.ext.extlinks",
     "sphinx.ext.intersphinx",
     "sphinx.ext.linkcode",
@@ -50,6 +51,7 @@ myst_enable_extensions = [
     "dollarmath",
     "html_image",
 ]
+autosectionlabel_prefix_document = True
 
 # sphinx-autoapi
 autoapi_dirs = ["../autoray"]
@@ -65,16 +67,19 @@ html_theme = "furo"
 html_theme_options = {
     "sidebar_hide_name": True,
     "light_css_variables": {
-        #     "color-brand-primary": "hsl(72, 75%, 40%)",
-        #     "color-brand-content": "hsl(238, 50%, 60%)",
-        "font-stack": "Atkinson Hyperlegible, sans-serif",
+        "color-brand-primary": "#4764af",
+        "color-brand-content": "#4764af",
+        "font-stack": "Atkinson Hyperlegible Next, sans-serif",
         "font-stack--monospace": "Spline Sans Mono, monospace",
         "font-stack--headings": "Spline Sans Mono, monospace",
     },
-    # "dark_css_variables": {
-    #     "color-brand-primary": "hsl(72, 75%, 60%)",
-    #     "color-brand-content": "hsl(238, 75%, 70%)",
-    # },
+    "dark_css_variables": {
+        "color-brand-primary": "#5d83e2",
+        "color-brand-content": "#5d83e2",
+        "font-stack": "Atkinson Hyperlegible Next, sans-serif",
+        "font-stack--monospace": "Spline Sans Mono, monospace",
+        "font-stack--headings": "Spline Sans Mono, monospace",
+    },
     "light_logo": "autoray-header.png",
     "dark_logo": "autoray-header.png",
 }
@@ -141,3 +146,13 @@ def linkcode_resolve(domain, info):
             f"https://github.com/jcmgray/autoray/blob/"
             f"v{autoray.__version__}/autoray/{fn}{linespec}"
         )
+
+
+extlinks = {
+    "issue": ("https://github.com/jcmgray/autoray/issues/%s", "GH %s"),
+    "pull": ("https://github.com/jcmgray/autoray/pull/%s", "PR %s"),
+}
+intersphinx_mapping = {
+    "python": ("https://docs.python.org/3/", None),
+    "numpy": ("https://numpy.org/doc/stable/", None),
+}
