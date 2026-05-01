@@ -72,6 +72,18 @@ def test_complicated_signature():
     assert_allclose(y, x.sum(0))
 
 
+def test_astype_lazy_dtype():
+    @autojit
+    def foo(x, y):
+        return do("astype", x, y.dtype) + y
+
+    x = gen_rand((3, 4), "numpy", dtype="float32")
+    y = gen_rand((3, 4), "numpy", dtype="float64")
+    z = foo(x, y)
+    assert z.dtype.name == "float64"
+    assert_allclose(z, x.astype("float64") + y)
+
+
 def test_multi_output():
     @autojit
     def foo(a, b, c):

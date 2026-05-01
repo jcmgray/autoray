@@ -933,8 +933,8 @@ class LazyArray:
     def reshape(self, shape, **kwargs):
         return reshape(self, shape, **kwargs)
 
-    def astype(self, dtype_name):
-        return lazy_astype(self, dtype_name)
+    def astype(self, dtype):
+        return lazy_astype(self, dtype)
 
     @property
     def dtype(self):
@@ -2090,9 +2090,14 @@ def lazy_get_dtype_name(x):
 
 
 @lazy_cache("astype")
-def lazy_astype(x, dtype_name):
+def lazy_astype(x, dtype):
     x = ensure_lazy(x)
-    return x.to(fn=astype, args=(x, dtype_name))
+    if isinstance(dtype, LazyArray):
+        # allow dtype to be lazily determined
+        deps = (x, dtype)
+    else:
+        deps = (x,)
+    return x.to(fn=astype, args=(x, dtype), deps=deps)
 
 
 register_function("autoray.lazy", "get_dtype_name", lazy_get_dtype_name)
