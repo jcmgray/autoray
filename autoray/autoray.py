@@ -1899,6 +1899,12 @@ class AutoNamespace:
 
 
 _NAMESPACE_CACHE = {}
+# Remember which classes have already raised AttributeError on `.device` /
+# `.dtype`, so we don't re-probe them. On some backends (notably jax tracers)
+# constructing the AttributeError is itself O(jaxpr-size), so re-probing in a
+# hot loop is quadratic.
+_NO_DEVICE_ATTR = set()
+_NO_DTYPE_ATTR = set()
 
 
 def get_namespace(like=None, device=None, dtype=None, submodule=None):
@@ -1931,16 +1937,16 @@ def get_namespace(like=None, device=None, dtype=None, submodule=None):
         if not isinstance(like, str):
             # array
             cls = like.__class__
-            if device is None:
+            if device is None and cls not in _NO_DEVICE_ATTR:
                 try:
                     device = like.device
                 except AttributeError:
-                    device = None
-            if dtype is None:
+                    _NO_DEVICE_ATTR.add(cls)
+            if dtype is None and cls not in _NO_DTYPE_ATTR:
                 try:
                     dtype = like.dtype
                 except AttributeError:
-                    dtype = None
+                    _NO_DTYPE_ATTR.add(cls)
         else:
             # manually specified backend string
             cls = like
