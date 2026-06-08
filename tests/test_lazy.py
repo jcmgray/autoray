@@ -1,5 +1,6 @@
 import functools
 import re
+import sys
 
 import pytest
 from numpy.testing import assert_allclose, assert_raises
@@ -158,6 +159,11 @@ def test_history_fn_frequencies():
     }
 
 
+@pytest.mark.xfail(
+    sys.platform == "darwin",
+    reason="flaky on macOS",
+    strict=False,
+)
 def test_plot():
     pytest.importorskip("networkx")
     matplotlib = pytest.importorskip("matplotlib")

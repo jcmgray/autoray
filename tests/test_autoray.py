@@ -878,6 +878,51 @@ def test_creation_with_builtins(fn, args, dtype, expected):
     assert y.dtype in expected
 
 
+@pytest.mark.parametrize("use_namespace", [False, True])
+@pytest.mark.parametrize("fn, args", creation_funcs_with_args)
+@pytest.mark.parametrize("dtype, expected", creation_builtins)
+def test_creation_with_builtins_namespace_consistent(
+    fn, args, dtype, expected, use_namespace
+):
+    # a builtin scalar `like` has no .dtype, so its python type *is* the
+    # dtype; the do() and get_namespace() paths must agree on this.
+    x = dtype(4)
+    if use_namespace:
+        y = getattr(ar.get_namespace(x), fn)(*args)
+    else:
+        y = ar.do(fn, *args, like=x)
+    assert y.dtype in expected
+    assert ar.infer_backend(y) == "numpy"
+
+
+@pytest.mark.parametrize("like", [[1, 2, 3], [1.0, 2.0], (1, 2)])
+@pytest.mark.parametrize("fn, args", creation_funcs_with_args)
+def test_creation_with_sequence_like_default_dtype(fn, args, like):
+    # a non-scalar sequence has no meaningful dtype: creation routines should
+    # fall back to the backend default (never object dtype), and the do() and
+    # get_namespace() paths must agree.
+    y_do = ar.do(fn, *args, like=like)
+    y_ns = getattr(ar.get_namespace(like), fn)(*args)
+    assert y_do.dtype != np.dtype(object)
+    assert y_do.dtype == y_ns.dtype
+    assert ar.infer_backend(y_do) == ar.infer_backend(y_ns) == "numpy"
+
+
+def test_choose_backend_does_not_inject_none_defaults():
+    class NoDefaults:
+        pass
+
+    ar.register_backend(NoDefaults, "torch")
+
+    kwargs = {}
+    backend = ar.autoray._choose_backend(
+        "zeros", ((2,),), kwargs, like=NoDefaults()
+    )
+
+    assert backend == "torch"
+    assert kwargs == {}
+
+
 @pytest.mark.parametrize(
     "backend", gen_params(backends=..., requires="indices")
 )

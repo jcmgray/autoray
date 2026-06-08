@@ -421,6 +421,110 @@ def infer_backend_multi(*arrays):
     )
 
 
+_backend_device_dtype_dispatchers = {}
+
+
+def _make_device_dtype_dispatch(like):
+    """Make a dispatcher function that possibly looks up default device and
+    dtype if those are not given. Whether the dispatcher should look up those
+    attributes is cached on `like.__class__`.
+    """
+    if like is None or isinstance(like, str):
+        # not an array -> just pass args through
+
+        def _dispatcher(like, device, dtype):
+            return like, device, dtype
+
+        return _dispatcher
+
+    # else is array:
+    # A) pre-calc backend
+    backend = _infer_class_backend_cached(like.__class__)
+    # B) cache whether we should check dtype/device since relying on try/except
+    # can be unexpectedly slow (https://github.com/jcmgray/autoray/pull/30)
+    try:
+        like.device
+        has_device = True
+    except AttributeError:
+        has_device = False
+    try:
+        like.dtype
+        has_dtype = True
+    except AttributeError:
+        has_dtype = False
+
+    if not has_device and not has_dtype:
+        # check for builtin scalars, whose dtype is just their type
+        if isinstance(like, (int, float, complex)):
+            scalar_dtype = like.__class__
+        else:
+            scalar_dtype = None
+
+        def _dispatcher(like, device, dtype):
+            if dtype is None:
+                dtype = scalar_dtype
+            return backend, device, dtype
+
+    elif not has_device and has_dtype:
+
+        def _dispatcher(like, device, dtype):
+            if dtype is None:
+                dtype = like.dtype
+            return backend, device, dtype
+
+    elif has_device and not has_dtype:
+
+        def _dispatcher(like, device, dtype):
+            if device is None:
+                device = like.device
+            return backend, device, dtype
+
+    elif has_device and has_dtype:
+
+        def _dispatcher(like, device, dtype):
+            if device is None:
+                device = like.device
+            if dtype is None:
+                dtype = like.dtype
+            return backend, device, dtype
+
+    return _dispatcher
+
+
+def infer_backend_device_dtype(like, device=None, dtype=None):
+    """Infer the backend, device and dtype from `like`, with optional overrides
+    for device and dtype. The dispatcher is cached on `like.__class__` to avoid
+    repeated lookups of the same attributes for the same type of array.
+
+    Parameters
+    ----------
+    like : array-like or str or None
+        The array to infer the backend, device and dtype from. If str, an
+        explicit backend name. If None, the backend None is simply returned.
+    device : str or device_like, optional
+        If given, an explicit device to use. If None, and `like` is an array
+        with a device attribute, that is used.
+    dtype : str or dtype_like, optional
+        If given, an explicit dtype to use. If None, and `like` is an array
+        with a dtype attribute, that is used.
+
+    Returns
+    -------
+    backend : str or None
+        The inferred backend name, or None if `like` is None.
+    device : str or device_like or None
+        The inferred device, or None if not given and not found on `like`.
+    dtype : str or dtype_like or None
+        The inferred dtype, or None if not given and not found on `like`.
+    """
+    try:
+        f = _backend_device_dtype_dispatchers[like.__class__]
+    except KeyError:
+        f = _make_device_dtype_dispatch(like)
+        _backend_device_dtype_dispatchers[like.__class__] = f
+    return f(like, device=device, dtype=dtype)
+
+
 # the set of functions that create new arrays, with `dtype` and possibly
 # `device` kwargs, that should be inferred from the like argument
 _CREATION_ROUTINES = {
@@ -489,10 +593,11 @@ def _choose_backend(fn, args, kwargs, like=None):
         return like
     else:
         # explicit example array
-        backend = _infer_class_backend_cached(like.__class__)
 
-        # check if we should set some extra defaults based on the example array
         if fn in _CREATION_ROUTINES:
+            # possibly inject device and dtype from like into fn kwargs
+            backend, device, dtype = infer_backend_device_dtype(like)
+
             try:
                 # check for backend specific defaults
                 inject_dtype, inject_device = _CREATION_INJECT[backend, fn]
@@ -501,10 +606,12 @@ def _choose_backend(fn, args, kwargs, like=None):
                 inject_dtype, inject_device = _CREATION_ROUTINES[fn]
                 _CREATION_INJECT[backend, fn] = (inject_dtype, inject_device)
 
-            if inject_dtype:
-                kwargs.setdefault("dtype", getattr(like, "dtype", type(like)))
-            if inject_device:
-                kwargs.setdefault("device", like.device)
+            if inject_dtype and dtype is not None and "dtype" not in kwargs:
+                kwargs["dtype"] = dtype
+            if inject_device and device is not None and "device" not in kwargs:
+                kwargs["device"] = device
+        else:
+            backend = _infer_class_backend_cached(like.__class__)
 
         return backend
 
@@ -1736,7 +1843,9 @@ register_dispatch("subtract", binary_dispatcher, raw_signature=False)
 
 
 class InjectDtypeDevice:
-    """Wrapper that injects defaultdtype and device arguments into a function"""
+    """Wrapper that possibly injects default dtype and device arguments, if not
+    None, into the kwargs of function `fn`.
+    """
 
     __slots__ = ("_fn", "_device", "_dtype")
 
@@ -1799,27 +1908,9 @@ class AutoNamespace:
         dtype=None,
         submodule=None,
     ):
-        if like is None:
-            # use autoray.do and auto dispatch
-            self._backend = None
-        elif isinstance(like, str):
-            # commit to a specific given backend
-            self._backend = like
-        else:
-            # commit to a specific backend inferred from array-like
-            self._backend = _infer_class_backend_cached(like.__class__)
-
-        if device is None:
-            if like is not None:
-                if hasattr(like, "device"):
-                    device = like.device
-        self._device = device
-
-        if dtype is None:
-            if like is not None:
-                if hasattr(like, "dtype"):
-                    dtype = like.dtype
-        self._dtype = dtype
+        self._backend, self._device, self._dtype = infer_backend_device_dtype(
+            like, device, dtype
+        )
         self._submodule = submodule
 
     def _get_submodule(self, name):
@@ -1927,29 +2018,8 @@ def get_namespace(like=None, device=None, dtype=None, submodule=None):
     AutoNamespace
         An automatic namespace object.
     """
-    if like is not None:
-        if not isinstance(like, str):
-            # array
-            cls = like.__class__
-            if device is None:
-                try:
-                    device = like.device
-                except AttributeError:
-                    device = None
-            if dtype is None:
-                try:
-                    dtype = like.dtype
-                except AttributeError:
-                    dtype = None
-        else:
-            # manually specified backend string
-            cls = like
-    else:
-        # namespace functions will dispatch at call time
-        cls = None
-
-    key = (cls, device, dtype, submodule)
-
+    backend, device, dtype = infer_backend_device_dtype(like, device, dtype)
+    key = (backend, device, dtype, submodule)
     try:
         xp = _NAMESPACE_CACHE[key]
     except KeyError:
@@ -1959,7 +2029,6 @@ def get_namespace(like=None, device=None, dtype=None, submodule=None):
             dtype=dtype,
             submodule=submodule,
         )
-
     return xp
 
 
