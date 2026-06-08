@@ -74,7 +74,7 @@ pixi run docs-serve
 ```
 
 More developer details are in the
-[development guide](https://autoray.readthedocs.io/en/latest/development.html).
+[development guide](https://autoray.readthedocs.io/en/latest/develop.html).
 
 
 ## Contribution Checklist
