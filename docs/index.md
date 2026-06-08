@@ -115,7 +115,7 @@ compilation.ipynb
 ```{toctree}
 :caption: Development
 
-development.md
+develop.md
 changelog.md
 ```
 
