@@ -151,6 +151,7 @@ def linkcode_resolve(domain, info):
 extlinks = {
     "issue": ("https://github.com/jcmgray/autoray/issues/%s", "GH #%s"),
     "pull": ("https://github.com/jcmgray/autoray/pull/%s", "PR #%s"),
+    "pr": ("https://github.com/jcmgray/autoray/pull/%s", "PR #%s"),
 }
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3/", None),

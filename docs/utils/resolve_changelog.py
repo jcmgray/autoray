@@ -103,6 +103,7 @@ def resolve_links(text):
 
     # 2. Resolve {issue}`NUM` and {pr}`NUM` -> #NUM
     text = re.sub(r"\{issue\}`(\d+)`", r"#\1", text)
+    text = re.sub(r"\{pull\}`(\d+)`", r"#\1", text)
     text = re.sub(r"\{pr\}`(\d+)`", r"#\1", text)
 
     return text
