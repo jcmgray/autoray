@@ -110,12 +110,16 @@ installation.md
 automatic_dispatch.md
 lazy_computation.ipynb
 compilation.ipynb
+```
+
+```{toctree}
+:caption: Development
+
 development.md
 changelog.md
 ```
 
 ```{toctree}
-:caption: Links
 :hidden:
 
 GitHub Repository <https://github.com/jcmgray/autoray>
