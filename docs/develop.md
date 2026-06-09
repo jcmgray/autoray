@@ -8,6 +8,9 @@ documentation fixes, examples, tests, or new features. If you are planning a
 larger change, opening an issue first is often the easiest way to check the
 approach before spending too much time on implementation.
 
+Please also read the
+[`autoray` Code of Conduct](https://github.com/jcmgray/autoray/blob/main/CODE_OF_CONDUCT.md).
+
 Things to check if new functionality is added:
 
 1. Ensure functions are unit tested. Use `gen_params()` from
