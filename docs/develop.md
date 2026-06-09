@@ -26,6 +26,11 @@ Things to check if new functionality is added:
 6. Add to changelog and elsewhere in docs.
 
 
+### AI Policy
+
+Please treat the [numpy AI policy](https://numpy.org/devdocs/dev/ai_policy.html) as a rough guide.
+
+
 ## Development Setup
 
 `autoray` uses [pixi](https://pixi.sh) to manage development environments
