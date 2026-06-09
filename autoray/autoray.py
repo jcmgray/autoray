@@ -528,8 +528,6 @@ def infer_backend_device_dtype(like, device=None, dtype=None):
 # the set of functions that create new arrays, with `dtype` and possibly
 # `device` kwargs, that should be inferred from the like argument
 _CREATION_ROUTINES = {
-    "array": (False, False),
-    "asarray": (False, False),
     "empty": (True, False),
     "eye": (True, False),
     "full": (True, False),
@@ -537,7 +535,11 @@ _CREATION_ROUTINES = {
     "ones": (True, False),
     "zeros": (True, False),
     "random.default_rng": (False, False),
-    # TODO: should these be included?
+    # mark the following as creation routines despite (False, False) defaults
+    # -> so specific backends can optionally inject dtype/device for them
+    "array": (False, False),
+    "asarray": (False, False),
+    # TODO: should these be included? probably not
     # "arange",
     # "geomspace",
     # "linspace",
@@ -548,23 +550,10 @@ _CREATION_ROUTINES = {
 _CREATION_INJECT = {}
 
 
-def register_creation_routine(
-    backend, fn, inject_dtype=True, inject_device=False
-):
-    """Register a function that creates a new array, with `dtype` and possibly
-    `device` kwargs, that should be inferred from the like argument. This is
-    not necessary for array creation routines that don't accept either.
-
-    Parameters
-    ----------
-    backend : str
-        The backend to register the function for.
-    fn : str
-        The name of the function to register.
-    inject_dtype : bool, optional
-        Whether to inject a `dtype` argument based on the `like` argument.
-    inject_device : bool, optional
-        Whether to inject a `device` argument based on the `like` argument.
+def _register_creation_inject(backend, fn, inject_dtype, inject_device):
+    """Record whether ``dtype`` and/or ``device`` should be injected into the
+    call to creation routine ``fn`` for ``backend``, based on the ``like``
+    argument. See ``register_function``.
     """
     if fn not in _CREATION_ROUTINES:
         import warnings
@@ -577,6 +566,34 @@ def register_creation_routine(
         )
 
     _CREATION_INJECT[backend, fn] = (inject_dtype, inject_device)
+
+
+def register_creation_routine(
+    backend, fn, inject_dtype=True, inject_device=False
+):
+    """Register a function that creates a new array, with `dtype` and possibly
+    `device` kwargs, that should be inferred from the like argument. This is
+    not necessary for array creation routines that don't accept either.
+
+    .. deprecated:: 0.8.12
+        Prefer ``register_function(backend, fn, inject_dtype=...,
+        inject_device=...)``, which can register the location, name, wrapper
+        and creation-injection behaviour of a function in a single call.
+
+    Parameters
+    ----------
+    backend : str
+        The backend to register the function for.
+    fn : str
+        The name of the function to register.
+    inject_dtype : bool, optional
+        Whether to inject a `dtype` argument based on the `like` argument.
+    inject_device : bool, optional
+        Whether to inject a `device` argument based on the `like` argument.
+    """
+    register_function(
+        backend, fn, inject_dtype=inject_dtype, inject_device=inject_device
+    )
 
 
 def _choose_backend(fn, args, kwargs, like=None):
@@ -786,6 +803,9 @@ def register_module_alias(alias, module):
 def register_submodule_alias(backend, fn, module):
     """Register an alias for a submodule location of a function.
 
+    .. deprecated:: 0.8.12
+        Prefer ``register_function(backend, fn, module=module)``.
+
     Parameters
     ----------
     backend : str
@@ -795,11 +815,14 @@ def register_submodule_alias(backend, fn, module):
     module : str
         The module where the function is located.
     """
-    _SUBMODULE_ALIASES[backend, fn] = module
+    register_function(backend, fn, module=module)
 
 
 def register_func_alias(backend, fn, alias):
     """Register an alias for a function name.
+
+    .. deprecated:: 0.8.12
+        Prefer ``register_function(backend, fn, alias=alias)``.
 
     Parameters
     ----------
@@ -810,12 +833,16 @@ def register_func_alias(backend, fn, alias):
     alias : str
         The name of the function in the backend.
     """
-    _FUNC_ALIASES[backend, fn] = alias
+    register_function(backend, fn, alias=alias)
 
 
 def register_custom_wrapper(backend, fn, wrapper=None):
     """Register a custom wrapper for a function. The wrapper is called lazily
     so that no imports are done until the function is actually used.
+
+    .. deprecated:: 0.8.12
+        Prefer ``register_function(backend, fn, wrapper=wrapper)``, or as a
+        decorator ``register_function(backend, fn, wrapper=True)``.
 
     Parameters
     ----------
@@ -829,18 +856,28 @@ def register_custom_wrapper(backend, fn, wrapper=None):
         with ``backend`` and ``fn`` only.
     """
     if wrapper is None:
-
-        def decorator(wrapper):
-            register_custom_wrapper(backend, fn, wrapper)
-            return wrapper
-
-        return decorator
-
-    _CUSTOM_WRAPPERS[backend, fn] = wrapper
+        return register_function(backend, fn, wrapper=True)
+    register_function(backend, fn, wrapper=wrapper)
 
 
-def register_function(backend, name, fn=None, wrap=False):
-    """Directly provide a custom implementation.
+def register_function(
+    backend,
+    name,
+    fn=None,
+    *,
+    wrap=False,
+    module=None,
+    alias=None,
+    wrapper=None,
+    inject_dtype=None,
+    inject_device=None,
+):
+    """Customize how a single function ``name`` is dispatched for ``backend``.
+
+    This is the unified entry point for all function-level registration. It can
+    set where the function lives (``module``), what it is called in the backend
+    (``alias``), a lazy ``wrapper`` to apply on import, creation-routine
+    ``dtype``/``device`` injection, and/or a direct implementation ``fn``.
 
     Parameters
     ----------
@@ -849,15 +886,104 @@ def register_function(backend, name, fn=None, wrap=False):
     name : str
         Name of the function, e.g. `'sum'` or `'linalg.svd'`.
     fn : callable, optional
-        The function to register. If not supplied, this function can be used
-        as a decorator with ``backend`` and ``name`` only.
+        A direct implementation to use. If not supplied, and no other keyword
+        argument is given, this function can be used as a decorator with
+        ``backend`` and ``name`` only.
     wrap : bool, optional
         Whether to wrap the old function like ``fn(old_fn)`` rather than
         directly supply the entire new function. This wrapper is eagerly called
-        when registering, unlike `register_custom_wrapper`.
-    """
-    if fn is None:
+        when registering, unlike ``wrapper``.
+    module : str, optional
+        Register the submodule location of the function, for when it is found
+        somewhere other than the expected ``backend`` namespace, e.g.
+        ``'scipy.linalg'``.
+    alias : str, optional
+        Register a different name that the function is called in the backend,
+        e.g. ``'absolute'`` for ``'abs'``.
+    wrapper : callable, optional
+        Register a custom wrapper, called lazily as ``wrapper(old_fn)`` the
+        first time the function is imported, for when kwargs need translating
+        or results modifying. Pass ``wrapper=True`` with ``fn=None`` to use
+        this as a decorator that captures the wrapper.
+    inject_dtype : bool, optional
+        Mark ``name`` as a creation routine that should have a ``dtype``
+        argument injected based on the ``like`` argument. Defaults to ``True``
+        when ``inject_device`` is given.
+    inject_device : bool, optional
+        Mark ``name`` as a creation routine that should have a ``device``
+        argument injected based on the ``like`` argument.
 
+    Examples
+    --------
+    Register a relocated, renamed and wrapped function in a single call::
+
+        register_function(
+            "paddle", "random.normal",
+            module="paddle", alias="randn", wrapper=scale_normal_manually,
+        )
+
+    Supply a direct implementation::
+
+        register_function("numpy", "complex", complex_add_re_im)
+
+    Use as a decorator for a direct implementation::
+
+        @register_function("torch", "to_numpy")
+        def torch_to_numpy(x):
+            return x.detach().cpu().numpy()
+    """
+    if (fn is not None) and (not wrap):
+        ignored = [
+            kw
+            for kw, val in (
+                ("module", module),
+                ("alias", alias),
+                ("wrapper", wrapper),
+            )
+            if val is not None
+        ]
+        if ignored:
+            raise ValueError(
+                f"{ignored} have no effect when a direct implementation "
+                "'fn' is supplied without 'wrap=True', since it fully "
+                "defines the function and bypasses the import machinery."
+            )
+
+    # function-level metadata: location, name, lazy wrapper, creation inject
+    if module is not None:
+        _SUBMODULE_ALIASES[backend, name] = module
+    if alias is not None:
+        _FUNC_ALIASES[backend, name] = alias
+    if (wrapper is not None) and (wrapper is not True):
+        _CUSTOM_WRAPPERS[backend, name] = wrapper
+    if (inject_dtype is not None) or (inject_device is not None):
+        _register_creation_inject(
+            backend,
+            name,
+            True if inject_dtype is None else inject_dtype,
+            False if inject_device is None else inject_device,
+        )
+
+    if fn is None:
+        if wrapper is True:
+            # decorator form capturing a lazy wrapper
+            def wrapper_decorator(wrapper_fn):
+                _CUSTOM_WRAPPERS[backend, name] = wrapper_fn
+                return wrapper_fn
+
+            return wrapper_decorator
+
+        if (
+            module is not None
+            or alias is not None
+            or wrapper is not None
+            or inject_dtype is not None
+            or inject_device is not None
+        ):
+            # pure metadata registration -> nothing to decorate
+            return None
+
+        # back-compat: decorator form capturing a direct implementation
         def decorator(fn):
             register_function(backend, name, fn, wrap=wrap)
             return fn
@@ -2072,12 +2198,12 @@ def numpy_to_numpy(x):
 
 register_module_alias("numpy.scipy", "scipy")
 
-register_submodule_alias("numpy", "linalg.expm", "scipy.linalg")
-register_submodule_alias("numpy", "linalg.lu", "scipy.linalg")
+register_function("numpy", "linalg.expm", module="scipy.linalg")
+register_function("numpy", "linalg.lu", module="scipy.linalg")
 
-register_custom_wrapper("numpy", "linalg.svd", svd_not_full_matrices_wrapper)
-register_custom_wrapper("numpy", "random.normal", with_dtype_wrapper)
-register_custom_wrapper("numpy", "random.uniform", with_dtype_wrapper)
+register_function("numpy", "linalg.svd", wrapper=svd_not_full_matrices_wrapper)
+register_function("numpy", "random.normal", wrapper=with_dtype_wrapper)
+register_function("numpy", "random.uniform", wrapper=with_dtype_wrapper)
 
 register_function("numpy", "complex", complex_add_re_im)
 
@@ -2091,7 +2217,7 @@ def cupy_to_numpy(x):  # pragma: no cover
 
 register_module_alias("cupy.scipy", "cupyx.scipy")
 
-register_custom_wrapper("cupy", "linalg.svd", svd_not_full_matrices_wrapper)
+register_function("cupy", "linalg.svd", wrapper=svd_not_full_matrices_wrapper)
 
 register_function("cupy", "complex", complex_add_re_im)
 
@@ -2252,14 +2378,14 @@ register_backend(JaxDefaultRNG, "jax")
 register_module_alias("jax.scipy", "jax.scipy")
 register_module_alias("jax", "jax.numpy")
 
-register_submodule_alias("jax", "complex", "jax.lax")
-register_submodule_alias("jax", "linalg.expm", "jax.scipy.linalg")
-register_submodule_alias("jax", "linalg.householder_product", "jax.lax.linalg")
+register_function("jax", "complex", module="jax.lax")
+register_function("jax", "linalg.expm", module="jax.scipy.linalg")
+register_function("jax", "linalg.householder_product", module="jax.lax.linalg")
 
 # n.b. jax supports fat QR but *not* when computing gradients
 #     https://github.com/jax-ml/jax/issues/23533
-register_custom_wrapper("jax", "linalg.qr", qr_allow_fat)
-register_custom_wrapper("jax", "linalg.svd", svd_not_full_matrices_wrapper)
+register_function("jax", "linalg.qr", wrapper=qr_allow_fat)
+register_function("jax", "linalg.svd", wrapper=svd_not_full_matrices_wrapper)
 
 # --------------------------------- aesara ---------------------------------- #
 
@@ -2278,8 +2404,8 @@ def aesara_shape(x):
 
 register_module_alias("autograd", "autograd.numpy")
 
-register_custom_wrapper(
-    "autograd", "linalg.svd", svd_not_full_matrices_wrapper
+register_function(
+    "autograd", "linalg.svd", wrapper=svd_not_full_matrices_wrapper
 )
 
 register_function("autograd", "complex", complex_add_re_im)
@@ -2304,7 +2430,7 @@ def dask_to_numpy(x):
     return x.compute()
 
 
-@register_custom_wrapper("dask", "eye")
+@register_function("dask", "eye", wrapper=True)
 def dask_eye_wrapper(eye_fn):
     # Make M work as positional argument
     @functools.wraps(eye_fn)
@@ -2316,13 +2442,13 @@ def dask_eye_wrapper(eye_fn):
 
 register_module_alias("dask", "dask.array")
 
-register_func_alias("dask", "abs", "absolute")
-register_func_alias("dask", "identity", "eye")
+register_function("dask", "abs", alias="absolute")
+register_function("dask", "identity", alias="eye")
 
-register_custom_wrapper("dask", "linalg.cholesky", cholesky_lower)
-register_custom_wrapper("dask", "linalg.svd", svd_manual_full_matrices_kwarg)
-register_custom_wrapper("dask", "random.normal", with_dtype_wrapper)
-register_custom_wrapper("dask", "random.uniform", with_dtype_wrapper)
+register_function("dask", "linalg.cholesky", wrapper=cholesky_lower)
+register_function("dask", "linalg.svd", wrapper=svd_manual_full_matrices_kwarg)
+register_function("dask", "random.normal", wrapper=with_dtype_wrapper)
+register_function("dask", "random.uniform", wrapper=with_dtype_wrapper)
 
 register_function("dask", "complex", complex_add_re_im)
 register_function("dask", "to_numpy", dask_to_numpy)
@@ -2348,18 +2474,21 @@ def ctf_get_dtype_name(x):
     return x.dtype.__name__
 
 
-register_submodule_alias("ctf", "complex128", "numpy")
-register_submodule_alias("ctf", "complex64", "numpy")
-register_submodule_alias("ctf", "float32", "numpy")
-register_submodule_alias("ctf", "float64", "numpy")
-register_submodule_alias("ctf", "linalg.eigh", "ctf")
-register_submodule_alias("ctf", "linalg.norm", "ctf")
-register_submodule_alias("ctf", "linalg.qr", "ctf")
-register_submodule_alias("ctf", "linalg.svd", "ctf")
+register_function("ctf", "complex128", module="numpy")
+register_function("ctf", "complex64", module="numpy")
+register_function("ctf", "float32", module="numpy")
+register_function("ctf", "float64", module="numpy")
+register_function("ctf", "linalg.eigh", module="ctf")
+register_function("ctf", "linalg.norm", module="ctf")
+register_function("ctf", "linalg.qr", module="ctf")
+register_function("ctf", "linalg.svd", module="ctf")
 
-register_func_alias("ctf", "random.uniform", "random")
-
-register_custom_wrapper("ctf", "random.uniform", scale_random_uniform_manually)
+register_function(
+    "ctf",
+    "random.uniform",
+    alias="random",
+    wrapper=scale_random_uniform_manually,
+)
 
 register_function("ctf", "allclose", allclose)
 register_function("ctf", "array", ctf_array)
@@ -2395,9 +2524,9 @@ for f in (
     # arrays but errors when both inputs are dense - we want nested calls to
     # tensordot to handle this
 ):
-    register_submodule_alias("sparse", f, "numpy")
+    register_function("sparse", f, module="numpy")
 
-register_func_alias("sparse", "identity", "eye")
+register_function("sparse", "identity", alias="eye")
 
 
 @register_function("sparse", "array")
@@ -2485,7 +2614,7 @@ def get_tensorflow():
     return tf
 
 
-@register_custom_wrapper("tensorflow", "pad")
+@register_function("tensorflow", "pad", module="tensorflow", wrapper=True)
 def tensorflow_pad_wrap(tf_pad):
     def numpy_like(array, pad_width, mode="constant", constant_values=0):
         if mode != "constant":
@@ -2504,7 +2633,7 @@ def tensorflow_pad_wrap(tf_pad):
     return numpy_like
 
 
-@register_custom_wrapper("tensorflow", "linalg.norm")
+@register_function("tensorflow", "linalg.norm", wrapper=True)
 def tensorflow_wrap_norm(tf_norm):
     def wrapped_norm(x, ord=None, axis=None, keepdims=False, **kwargs):
         if ord is None:
@@ -2585,19 +2714,19 @@ register_module_alias("tensorflow.random", "tensorflow.random")
 register_module_alias("tensorflow", "tensorflow.experimental.numpy")
 
 # these aren't in experimental.numpy
-register_submodule_alias("tensorflow", "astype", "tensorflow")
-register_submodule_alias("tensorflow", "cast", "tensorflow")
-register_submodule_alias("tensorflow", "complex", "tensorflow")
-register_submodule_alias("tensorflow", "pad", "tensorflow")
+register_function("tensorflow", "cast", module="tensorflow")
+register_function("tensorflow", "complex", module="tensorflow")
 
-register_func_alias("tensorflow", "astype", "cast")
+register_function("tensorflow", "astype", module="tensorflow", alias="cast")
 
-register_custom_wrapper("tensorflow", "linalg.solve", binary_allow_1d_rhs_wrap)
-register_custom_wrapper("tensorflow", "linalg.svd", svd_sUV_to_UsVH_wrapper)
-register_custom_wrapper(
+register_function(
+    "tensorflow", "linalg.solve", wrapper=binary_allow_1d_rhs_wrap
+)
+register_function("tensorflow", "linalg.svd", wrapper=svd_sUV_to_UsVH_wrapper)
+register_function(
     "tensorflow",
     "random.normal",
-    make_translator(
+    wrapper=make_translator(
         [
             ("loc", ("mean", 0.0)),
             ("scale", ("stddev", 1.0)),
@@ -2605,10 +2734,10 @@ register_custom_wrapper(
         ]
     ),
 )
-register_custom_wrapper(
+register_function(
     "tensorflow",
     "random.uniform",
-    make_translator(
+    wrapper=make_translator(
         [
             ("low", ("minval", 0.0)),
             ("high", ("maxval", 1.0)),
@@ -2682,7 +2811,7 @@ def torch_size(x):
     return x.numel()
 
 
-@register_custom_wrapper("torch[alt]", "linalg.solve")
+@register_function("torch[alt]", "linalg.solve", wrapper=True)
 def torch_linalg_solve_wrap(fn):
     @binary_allow_1d_rhs_wrap
     def numpy_like(a, b):
@@ -2691,7 +2820,7 @@ def torch_linalg_solve_wrap(fn):
     return numpy_like
 
 
-@register_custom_wrapper("torch", "tensordot")
+@register_function("torch", "tensordot", wrapper=True)
 def torch_tensordot_wrap(fn):
     @functools.wraps(fn)
     def numpy_like(a, b, axes=2):
@@ -2700,7 +2829,7 @@ def torch_tensordot_wrap(fn):
     return numpy_like
 
 
-@register_custom_wrapper("torch[alt]", "split")
+@register_function("torch[alt]", "split", wrapper=True)
 def torch_split_wrap(fn):
     # for torch >=1.8 we can use tensor_split instead, but in current stable
     # release this function has not been added
@@ -2727,8 +2856,18 @@ def torch_split_wrap(fn):
     return numpy_like
 
 
-@register_custom_wrapper("torch", "ones")
-@register_custom_wrapper("torch", "zeros")
+def torch_maybe_convert_dtype_from_str(fn):
+    @functools.wraps(fn)
+    def numpy_like(*args, dtype=None, **kwargs):
+        if dtype is not None:
+            dtype = to_backend_dtype(dtype, like="torch")
+        return fn(*args, dtype=dtype, **kwargs)
+
+    return numpy_like
+
+
+@register_function("torch", "ones", wrapper=True)
+@register_function("torch", "zeros", wrapper=True)
 def torch_zeros_ones_wrap(fn):
     @functools.wraps(fn)
     def numpy_like(shape, dtype=None, **kwargs):
@@ -2739,7 +2878,7 @@ def torch_zeros_ones_wrap(fn):
     return numpy_like
 
 
-@register_custom_wrapper("torch", "eye")
+@register_function("torch", "eye", wrapper=True)
 def torch_eye_wrap(fn):
     @functools.wraps(fn)
     def numpy_like(N, M=None, dtype=None, **kwargs):
@@ -2753,7 +2892,7 @@ def torch_eye_wrap(fn):
     return numpy_like
 
 
-@register_custom_wrapper("torch", "sort")
+@register_function("torch", "sort", wrapper=True)
 def torch_sort_wrap(fn):
     @functools.wraps(fn)
     def numpy_like(a, axis=-1):
@@ -2762,7 +2901,7 @@ def torch_sort_wrap(fn):
     return numpy_like
 
 
-@register_custom_wrapper("torch", "flip")
+@register_function("torch", "flip", wrapper=True)
 def torch_flip_wrap(torch_flip):
     def numpy_like(x, axis=None):
         if axis is None:
@@ -2777,7 +2916,7 @@ def torch_flip_wrap(torch_flip):
     return numpy_like
 
 
-@register_custom_wrapper("torch", "nonzero")
+@register_function("torch", "nonzero", wrapper=True)
 def torch_nonzero_wrap(torch_nonzero):
     def numpy_like(x, **kwargs):
         kwargs.setdefault("as_tuple", True)
@@ -2904,93 +3043,99 @@ def torch_default_rng(seed, **kwargs):
 
 register_backend(TorchDefaultRNG, "torch")
 
-register_submodule_alias("torch", "linalg.expm", "torch")
-register_submodule_alias("torch", "scipy.linalg.expm", "torch")
-register_submodule_alias("torch", "random.normal", "torch")
-register_submodule_alias("torch", "random.uniform", "torch")
+register_function("torch", "linalg.expm", module="torch", alias="matrix_exp")
+register_function(
+    "torch", "scipy.linalg.expm", module="torch", alias="matrix_exp"
+)
+register_function(
+    "torch",
+    "random.normal",
+    module="torch",
+    alias="randn",
+    wrapper=scale_random_normal_manually,
+)
+register_function(
+    "torch",
+    "random.uniform",
+    module="torch",
+    alias="rand",
+    wrapper=scale_random_uniform_manually,
+)
 
-register_func_alias("torch", "array", "tensor")
-register_func_alias("torch", "asarray", "as_tensor")
-register_func_alias("torch", "clip", "clamp")
-register_func_alias("torch", "concatenate", "cat")
-register_func_alias("torch", "conjugate", "conj")
-register_func_alias("torch", "equal", "eq")
-register_func_alias("torch", "expand_dims", "unsqueeze")
-register_func_alias("torch", "identity", "eye")
-register_func_alias("torch", "linalg.expm", "matrix_exp")
-register_func_alias("torch", "max", "amax")
-register_func_alias("torch", "min", "amin")
-register_func_alias("torch", "power", "pow")
-register_func_alias("torch", "random.normal", "randn")
-register_func_alias("torch", "random.uniform", "rand")
-register_func_alias("torch", "scipy.linalg.expm", "matrix_exp")
-register_func_alias("torch", "split", "tensor_split")
-register_func_alias("torch", "take_along_axis", "take_along_dim")
+register_function("torch", "array", alias="tensor")
+register_function("torch", "asarray", alias="as_tensor")
+register_function("torch", "clip", alias="clamp")
+register_function("torch", "concatenate", alias="cat")
+register_function("torch", "conjugate", alias="conj")
+register_function("torch", "equal", alias="eq")
+register_function("torch", "expand_dims", alias="unsqueeze")
+register_function("torch", "identity", alias="eye")
+register_function("torch", "max", alias="amax")
+register_function("torch", "min", alias="amin")
+register_function("torch", "power", alias="pow")
+register_function("torch", "split", alias="tensor_split")
+register_function("torch", "take_along_axis", alias="take_along_dim")
 
-register_custom_wrapper(
+register_function(
     "torch",
     "clip",
-    make_translator(
+    wrapper=make_translator(
         [("a", ("input",)), ("a_min", ("min",)), ("a_max", ("max",))]
     ),
 )
-register_custom_wrapper(
+register_function(
     "torch",
     "concatenate",
-    make_translator([("arrays", ("tensors",)), ("axis", ("dim", 0))]),
+    wrapper=make_translator([("arrays", ("tensors",)), ("axis", ("dim", 0))]),
 )
-register_custom_wrapper(
+register_function(
     "torch",
     "count_nonzero",
-    make_translator([("a", ("input",)), ("axis", ("dim", None))]),
+    wrapper=make_translator([("a", ("input",)), ("axis", ("dim", None))]),
 )
-register_custom_wrapper(
+register_function(
     "torch",
     "diagonal",
-    make_translator(
+    wrapper=make_translator(
         [("a", ("input",)), ("axis1", ("dim1", 0)), ("axis2", ("dim2", 1))]
     ),
 )
-register_custom_wrapper(
-    "torch", "empty", make_translator([("shape", ("size",))])
+register_function(
+    "torch", "empty", wrapper=make_translator([("shape", ("size",))])
 )
-register_custom_wrapper(
+register_function(
     "torch",
     "expand_dims",
-    make_translator([("a", ("input",)), ("axis", ("dim",))]),
+    wrapper=make_translator([("a", ("input",)), ("axis", ("dim",))]),
 )
-register_custom_wrapper("torch", "linalg.svd", svd_not_full_matrices_wrapper)
-register_custom_wrapper("torch", "random.normal", scale_random_normal_manually)
-register_custom_wrapper(
-    "torch", "random.uniform", scale_random_uniform_manually
-)
+register_function("torch", "linalg.svd", wrapper=svd_not_full_matrices_wrapper)
 
-register_custom_wrapper(
+register_function(
     "torch",
     "stack",
-    make_translator([("arrays", ("tensors",)), ("axis", ("dim", 0))]),
+    wrapper=make_translator([("arrays", ("tensors",)), ("axis", ("dim", 0))]),
 )
-register_custom_wrapper(
+register_function(
     "torch",
     "tril",
-    make_translator([("m", ("input",)), ("k", ("diagonal", 0))]),
+    wrapper=make_translator([("m", ("input",)), ("k", ("diagonal", 0))]),
 )
-register_custom_wrapper(
+register_function(
     "torch",
     "triu",
-    make_translator([("m", ("input",)), ("k", ("diagonal", 0))]),
+    wrapper=make_translator([("m", ("input",)), ("k", ("diagonal", 0))]),
 )
-register_custom_wrapper(
+register_function(
     "torch",
     "take_along_axis",
-    make_translator(
+    wrapper=make_translator(
         [("arr", ("input",)), ("indices", ("indices",)), ("axis", ("dim", -1))]
     ),
 )
-register_custom_wrapper(
+register_function(
     "torch",
     "linalg.norm",
-    make_translator(
+    wrapper=make_translator(
         [
             ("x", ("input",)),
             ("ord", ("ord", None)),
@@ -3007,33 +3152,31 @@ _torch_reduce_translation = [
 ]
 for f in ("sum", "max", "min", "prod", "mean", "median", "std", "var"):
     # TODO: search "keepdim" in torch docs to find more
-    register_custom_wrapper(
-        "torch", f, make_translator(_torch_reduce_translation)
+    register_function(
+        "torch", f, wrapper=make_translator(_torch_reduce_translation)
     )
 
 
 for f in _CREATION_ROUTINES:
-    register_creation_routine("torch", f, inject_device=True)
-register_creation_routine(
-    "torch", "array", inject_dtype=False, inject_device=True
-)
-register_creation_routine(
-    "torch", "asarray", inject_dtype=False, inject_device=True
-)
-register_creation_routine(
+    register_function("torch", f, inject_device=True)
+register_function("torch", "array", inject_dtype=False, inject_device=True)
+register_function("torch", "asarray", inject_dtype=False, inject_device=True)
+register_function(
     "torch", "random.default_rng", inject_dtype=False, inject_device=True
 )
 
 # for older versions of torch, can provide some alternative implementations
 register_module_alias("torch[alt]", "torch")
 
-register_submodule_alias("torch[alt]", "linalg.norm", "torch")
-register_submodule_alias("torch[alt]", "linalg.qr", "torch")
-register_submodule_alias("torch[alt]", "linalg.solve", "torch")
-register_submodule_alias("torch[alt]", "linalg.svd", "torch")
+register_function("torch[alt]", "linalg.norm", module="torch")
+register_function("torch[alt]", "linalg.solve", module="torch")
 
-register_custom_wrapper("torch[alt]", "linalg.qr", qr_allow_fat)
-register_custom_wrapper("torch[alt]", "linalg.svd", svd_UsV_to_UsVH_wrapper)
+register_function(
+    "torch[alt]", "linalg.qr", module="torch", wrapper=qr_allow_fat
+)
+register_function(
+    "torch[alt]", "linalg.svd", module="torch", wrapper=svd_UsV_to_UsVH_wrapper
+)
 
 
 @register_function("torch", "to_numpy")
@@ -3254,32 +3397,39 @@ def paddle_split_wrap(fn):
 
 register_module_alias("paddle[alt]", "paddle")
 
-register_submodule_alias("paddle", "random.normal", "paddle")
-register_submodule_alias("paddle", "random.uniform", "paddle")
+register_function("paddle", "asarray", alias="to_tensor")
+register_function("paddle", "concatenate", alias="concat")
+register_function("paddle", "identity", alias="eye")
+register_function("paddle", "power", alias="pow")
+register_function("paddle", "split", alias="tensor_split")
 
-register_func_alias("paddle", "asarray", "to_tensor")
-register_func_alias("paddle", "concatenate", "concat")
-register_func_alias("paddle", "identity", "eye")
-register_func_alias("paddle", "power", "pow")
-register_func_alias("paddle", "random.normal", "randn")
-register_func_alias("paddle", "random.uniform", "rand")
-register_func_alias("paddle", "split", "tensor_split")
-
-register_custom_wrapper(
-    "paddle", "random.normal", scale_random_normal_manually
+register_function(
+    "paddle",
+    "random.normal",
+    module="paddle",
+    alias="randn",
+    wrapper=scale_random_normal_manually,
 )
-register_custom_wrapper(
-    "paddle", "random.uniform", scale_random_uniform_manually
+register_function(
+    "paddle",
+    "random.uniform",
+    module="paddle",
+    alias="rand",
+    wrapper=scale_random_uniform_manually,
 )
-register_custom_wrapper("paddle[alt]", "split", paddle_split_wrap)
-register_custom_wrapper(
-    "paddle", "tril", make_translator([("m", ("x",)), ("k", ("diagonal", 0))])
+register_function("paddle[alt]", "split", wrapper=paddle_split_wrap)
+register_function(
+    "paddle",
+    "tril",
+    wrapper=make_translator([("m", ("x",)), ("k", ("diagonal", 0))]),
 )
-register_custom_wrapper(
-    "paddle", "triu", make_translator([("m", ("x",)), ("k", ("diagonal", 0))])
+register_function(
+    "paddle",
+    "triu",
+    wrapper=make_translator([("m", ("x",)), ("k", ("diagonal", 0))]),
 )
 for f in ("sum", "max", "min", "prod", "mean", "std", "var"):
-    register_custom_wrapper("paddle", f, paddle_wrap_reduction)
+    register_function("paddle", f, wrapper=paddle_wrap_reduction)
 
 
 @register_function("paddle", "imag")
@@ -3405,9 +3555,11 @@ def pytensor_wrap_svd_with_shapes(fn):
 
 register_module_alias("pytensor", "pytensor.tensor")
 
-register_custom_wrapper("pytensor", "linalg.qr", pytensor_wrap_qr_with_shapes)
-register_custom_wrapper(
-    "pytensor", "linalg.svd", pytensor_wrap_svd_with_shapes
+register_function(
+    "pytensor", "linalg.qr", wrapper=pytensor_wrap_qr_with_shapes
+)
+register_function(
+    "pytensor", "linalg.svd", wrapper=pytensor_wrap_svd_with_shapes
 )
 
 
@@ -3563,8 +3715,8 @@ def mlx_ravel(x, *args, **kwargs):
     return x.reshape(-1, *args, **kwargs)
 
 
-@register_custom_wrapper("mlx", "ones")
-@register_custom_wrapper("mlx", "zeros")
+@register_function("mlx", "ones", wrapper=True)
+@register_function("mlx", "zeros", wrapper=True)
 def mlx_zeros_ones_wrap(fn):
     @functools.wraps(fn)
     def numpy_like(shape, dtype=None, **kwargs):
@@ -3575,7 +3727,7 @@ def mlx_zeros_ones_wrap(fn):
     return numpy_like
 
 
-@register_custom_wrapper("mlx", "eye")
+@register_function("mlx", "eye", wrapper=True)
 def mlx_eye_wrap(fn):
     @functools.wraps(fn)
     def numpy_like(N, M=None, dtype=None, **kwargs):
@@ -3589,4 +3741,4 @@ def mlx_eye_wrap(fn):
     return numpy_like
 
 
-register_custom_wrapper("mlx", "linalg.svd", svd_manual_full_matrices_kwarg)
+register_function("mlx", "linalg.svd", wrapper=svd_manual_full_matrices_kwarg)

@@ -222,6 +222,37 @@ has a simple translation mechanism for:
 * when functions have a different signature (e.g.
   `tensordot(a, b, axes) -> torch.tensordot(a, b, dims)`)
 
+All of these are handled through keyword arguments of
+[`register_function`](autoray.register_function), so a single function can have
+its location, name and signature translated in one call:
+
+```python
+# paddle's 'random.normal' lives at paddle.randn and needs its kwargs rescaling
+ar.register_function(
+    backend='paddle',
+    fn='random.normal',
+    module='paddle',
+    alias='randn',
+    wrapper=scale_normal_manually,
+)
+```
+
+where `module` sets the submodule location, `alias` the backend name, and
+`wrapper` a lazy `wrapper(old_fn)` translation applied the first time the
+function is imported. Array *creation* routines can additionally pass
+`inject_dtype=True` / `inject_device=True` so that `dtype` / `device` are
+inferred from the `like` argument.
+
+```{note}
+The narrower
+[`register_submodule_alias`](autoray.autoray.register_submodule_alias),
+[`register_func_alias`](autoray.autoray.register_func_alias),
+[`register_custom_wrapper`](autoray.autoray.register_custom_wrapper) and
+[`register_creation_routine`](autoray.autoray.register_creation_routine) helpers
+still exist but are now thin wrappers around
+[`register_function`](autoray.register_function) - prefer the unified call.
+```
+
 If you want to directly provide a missing or *alternative* implementation of
 some function for a particular backend you can swap one in with
 [`register_function`](autoray.register_function):
