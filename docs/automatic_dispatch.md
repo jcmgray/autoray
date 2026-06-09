@@ -230,7 +230,7 @@ its location, name and signature translated in one call:
 # paddle's 'random.normal' lives at paddle.randn and needs its kwargs rescaling
 ar.register_function(
     backend='paddle',
-    fn='random.normal',
+    name='random.normal',
     module='paddle',
     alias='randn',
     wrapper=scale_normal_manually,
@@ -253,11 +253,13 @@ still exist but are now thin wrappers around
 [`register_function`](autoray.register_function) - prefer the unified call.
 ```
 
-If you want to directly provide a missing or *alternative* implementation of
-some function for a particular backend you can swap one in with
-[`register_function`](autoray.register_function):
+If you want to *directly* provide a missing or *alternative* implementation of
+some function for a particular backend you can also swap one in with the `fn`
+kwarg of [`register_function`](autoray.register_function) or use it as a
+decorator:
 
 ```python
+@ar.register_function('torch', 'linalg.svd')
 def my_custom_torch_svd(x):
     import torch
 
@@ -265,8 +267,6 @@ def my_custom_torch_svd(x):
     u, s, v = torch.svd(x)
 
     return u, s, v.T
-
-ar.register_function('torch', 'linalg.svd', my_custom_torch_svd)
 
 x = ar.do('random.uniform', size=(3, 4), like='torch')
 
@@ -281,15 +281,17 @@ ar.do('linalg.svd', x)
 #          [ 0.2468, -0.8423, -0.0993,  0.4687]]))
 ```
 
-If you want to make use of the existing function you can supply ``wrap=True``
-in which case the custom function supplied should act like a decorator:
+If you want to make use of the existing loaded function (unlike `wrapper` which
+is a declaration of how to wrap the *raw* function only) you can supply
+``wrap=True`` in which case the custom function supplied should act like a
+decorator:
 
 ```python
 def my_custom_sum_wrapper(old_fn):
 
     def new_fn(*args, **kwargs):
         print('Hello sum!')
-        return old_fn(*args **kwargs)
+        return old_fn(*args, **kwargs)
 
     return new_fn
 
@@ -301,8 +303,7 @@ ar.do('sum', x)
 ```
 
 Though be careful, if you call [`register_function`](autoray.register_function)
-again it will now wrap the
-*new* function! Note you can combine
+again it will now wrap the *new* function! Note you can combine
 [`register_backend`](autoray.register_backend) and
 [`register_function`](autoray.register_function) to dynamically define array
 types and functions from anywhere. See also
