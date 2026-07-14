@@ -65,6 +65,50 @@ def test_random_default_rng(backend, fn, args, kwargs):
     assert ar.do("allclose", x, x2)
 
 
+@pytest.mark.parametrize("fn", ["normal", "random", "uniform"])
+@pytest.mark.parametrize(
+    "dtype_name", ["float16", "bfloat16", "float32", "float64"]
+)
+def test_torch_default_rng_inherits_float_dtype(fn, dtype_name):
+    torch = pytest.importorskip("torch")
+    devices = ["cpu"]
+    if torch.cuda.is_available():
+        devices.append("cuda")
+
+    for device in devices:
+        like = torch.empty((), dtype=getattr(torch, dtype_name), device=device)
+        rng = ar.do("random.default_rng", 42, like=like)
+        x = getattr(rng, fn)(size=(2, 3))
+        assert x.dtype == like.dtype
+        assert x.device == like.device
+
+
+@pytest.mark.parametrize("fn", ["normal", "random", "uniform"])
+def test_torch_default_rng_explicit_dtype_overrides_like(fn):
+    torch = pytest.importorskip("torch")
+    like = torch.empty((), dtype=torch.float64)
+    rng = ar.do("random.default_rng", 42, like=like)
+    x = getattr(rng, fn)(size=(2, 3), dtype=torch.float32)
+    assert x.dtype == torch.float32
+
+
+@pytest.mark.parametrize("dtype_name", ["bool", "int64", "complex64"])
+def test_torch_default_rng_ignores_non_float_dtype(dtype_name):
+    torch = pytest.importorskip("torch")
+    like = torch.empty((), dtype=getattr(torch, dtype_name))
+    rng = ar.do("random.default_rng", 42, like=like)
+    x = rng.normal(size=(2, 3))
+    assert x.dtype == torch.get_default_dtype()
+
+
+def test_torch_default_rng_integer_distribution_ignores_float_dtype():
+    torch = pytest.importorskip("torch")
+    like = torch.empty((), dtype=torch.float64)
+    rng = ar.do("random.default_rng", 42, like=like)
+    x = rng.integers(0, 10, size=(2, 3))
+    assert x.dtype == torch.int64
+
+
 def test_jax_jit_random():
     pytest.importorskip("jax")
 

@@ -674,7 +674,7 @@ _COMPOSED_FUNCTION_GENERATORS = {}
 def import_lib_fn(backend, fn):
     # first check explicitly composed functions -> if the function hasn't been
     # called directly yet, it won't have been loaded into the cache, and needs
-    # generating before e.g. the ``do`` verrsion will work
+    # generating before e.g. the ``do`` version will work
     if fn in _COMPOSED_FUNCTION_GENERATORS:
         return _COMPOSED_FUNCTION_GENERATORS[fn](backend)
 
@@ -2926,11 +2926,21 @@ def torch_nonzero_wrap(torch_nonzero):
 
 
 class TorchDefaultRNG:
-    def __init__(self, seed=None, device=None):
+    def __init__(self, seed=None, device=None, dtype=None):
         self._torch = get_torch()
         self._generator = self._torch.Generator(device=device)
+        if isinstance(dtype, str):
+            dtype = to_backend_dtype(dtype, like="torch")
+        if (dtype is not None) and dtype.is_floating_point:
+            self._dtype = dtype
+        else:
+            self._dtype = None
         if seed is not None:
             self._generator.manual_seed(seed)
+
+    def _set_default_dtype(self, kwargs):
+        if self._dtype is not None:
+            kwargs.setdefault("dtype", self._dtype)
 
     # def binomial(self, n, p, size=None, **kwargs):
     #     raise NotImplementedError()
@@ -2958,6 +2968,7 @@ class TorchDefaultRNG:
 
     def normal(self, loc=0.0, scale=1.0, size=None, **kwargs):
         size = _handle_size_to_shape(size)
+        self._set_default_dtype(kwargs)
         x = self._torch.randn(size, generator=self._generator, **kwargs)
         if scale != 1.0:
             x = x * scale
@@ -2967,6 +2978,7 @@ class TorchDefaultRNG:
 
     def random(self, size=None, **kwargs):
         size = _handle_size_to_shape(size)
+        self._set_default_dtype(kwargs)
         return self._torch.rand(size, generator=self._generator, **kwargs)
 
     def permutation(self, x, **kwargs):
@@ -2982,6 +2994,7 @@ class TorchDefaultRNG:
 
     def uniform(self, low=0.0, high=1.0, size=None, **kwargs):
         size = _handle_size_to_shape(size)
+        self._set_default_dtype(kwargs)
         x = self._torch.rand(size, generator=self._generator, **kwargs)
         if low != 0.0 or high != 1.0:
             x = x * (high - low) + low
@@ -3162,7 +3175,7 @@ for f in _CREATION_ROUTINES:
 register_function("torch", "array", inject_dtype=False, inject_device=True)
 register_function("torch", "asarray", inject_dtype=False, inject_device=True)
 register_function(
-    "torch", "random.default_rng", inject_dtype=False, inject_device=True
+    "torch", "random.default_rng", inject_dtype=True, inject_device=True
 )
 
 # for older versions of torch, can provide some alternative implementations
