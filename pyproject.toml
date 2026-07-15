@@ -1,4 +1,4 @@
-3.10[project]
+[project]
 name = "autoray"
 description = "Abstract your array operations."
 readme = { file = "README.md", content-type = "text/markdown" }
