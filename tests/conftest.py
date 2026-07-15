@@ -94,7 +94,6 @@ XFAILS = {
         if a[0] == "interleaved"
         else None
     ),
-    ("mlx", "empty"): "mlx: no `empty` function yet",
     ("mlx", "exponential"): "mlx: no exponential interface yet",
     ("mlx", "indices"): "mlx doesn't support indices",
     (
