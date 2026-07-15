@@ -21532,7 +21532,7 @@ packages:
   - numpy ; extra == 'tests'
   - pytest ; extra == 'tests'
   - pytest-cov ; extra == 'tests'
-  requires_python: '>=3.10'
+  requires_python: '>=3.11'
 - pypi: https://download-r2.pytorch.org/whl/cpu/torch-2.13.0%2Bcpu-cp313-cp313-manylinux_2_28_x86_64.whl
   name: torch
   version: 2.13.0+cpu
