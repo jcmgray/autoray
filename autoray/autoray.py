@@ -2145,7 +2145,7 @@ def get_namespace(like=None, device=None, dtype=None, submodule=None):
         An automatic namespace object.
     """
     backend, device, dtype = infer_backend_device_dtype(like, device, dtype)
-    key = (backend, device, dtype, submodule)
+    key = (backend, str(device), str(dtype), submodule)
     try:
         xp = _NAMESPACE_CACHE[key]
     except KeyError:
