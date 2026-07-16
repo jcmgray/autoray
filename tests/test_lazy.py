@@ -54,6 +54,14 @@ def test_manual_construct():
     assert_allclose(y.compute(), x.sum(0))
 
 
+def test_to_device_unsupported():
+    x = lazy.array(gen_rand((2, 3), "numpy"))
+    with pytest.raises(TypeError, match="cannot be moved to a device"):
+        ar.to_device(x, "cpu")
+    with pytest.raises(TypeError, match="cannot be moved to a device"):
+        ar.to(x, device="cpu")
+
+
 def modified_gram_schmidt(X):
     Q = []
     for j in range(0, ar.shape(X)[0]):
@@ -893,3 +901,32 @@ def test_allclose():
     e = b + 1e-4
     assert not ar.do("allclose", b, e).compute()
     assert ar.do("allclose", b, e, atol=1e-3).compute()
+
+
+def test_lazy_to_numpy_to_device_from_numpy():
+    import numpy as np
+
+    x = lazy.Variable((2, 3), backend="numpy")
+
+    # eager conversions are explicitly unsupported
+    with pytest.raises(TypeError, match="compute"):
+        ar.to_numpy(x)
+    with pytest.raises(TypeError, match="device"):
+        ar.to_device(x, "cuda:0")
+
+    # but no device requested is a no-op
+    assert ar.to_device(x, None) is x
+
+    # from_numpy creates a lazy leaf node
+    xn = np.random.uniform(size=(2, 3))
+    lx = ar.do("from_numpy", xn, like="autoray.lazy")
+    assert isinstance(lx, lazy.LazyArray)
+    assert_allclose(lx.compute(), xn)
+
+    # with a dtype the cast is lazy too
+    ly = ar.do("from_numpy", xn, dtype="float32", like="autoray.lazy")
+    assert isinstance(ly, lazy.LazyArray)
+    assert ar.get_dtype_name(ly.compute()) == "float32"
+
+    with pytest.raises(TypeError, match="device"):
+        ar.do("from_numpy", xn, device="cuda:0", like="autoray.lazy")

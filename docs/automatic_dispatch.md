@@ -159,12 +159,27 @@ Functions for dealing with dtypes:
 * [`autoray.astype`](autoray.astype) - cast an array to a given dtype,
   specified as a string.
 
-And for converting any array to a numpy array:
+And for converting arrays between backends, dtypes and devices:
 
-* [`autoray.to_numpy`](autoray.to_numpy)
+* [`autoray.to`](autoray.to) - convert an array, or nested collection
+  ("pytree") of arrays, to a target backend, dtype and/or device, all
+  specifiable in a single string such as `"torch-float32-cuda:0"`, e.g.
+  `ar.to(xs, "torch-float32-cuda:0")`. Only floating point and complex
+  arrays are cast when a dtype is given, so e.g. integer index arrays are
+  preserved.
+* [`autoray.to_numpy`](autoray.to_numpy) - convert any array to a numpy array
+* [`autoray.from_numpy`](autoray.from_numpy) - convert a numpy array to a
+  target backend array, directly with a given dtype and on a given device
+  where possible. If `like` is an example array, unspecified dtype and
+  device are inferred from it
+* [`autoray.to_device`](autoray.to_device) - move an array to a device, e.g.
+  `"cuda:0"`, with `"gpu"` accepted as an alias for `"cuda"` where relevant.
+  A bare device type such as `"gpu"` means 'ensure on this type of device',
+  and won't migrate arrays between device indices
 
 ```{hint}
-All of these can be called via [`do`](autoray.do) as well, e.g.
+All of these, apart from [`to`](autoray.to) which dispatches per leaf
+internally, can be called via [`do`](autoray.do) as well, e.g.
 `do('shape', x)`.
 ```
 

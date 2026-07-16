@@ -24,6 +24,7 @@ import itertools
 import math
 import numbers
 import operator
+import re
 import threading
 from collections import OrderedDict, defaultdict
 from inspect import signature
@@ -534,6 +535,8 @@ _CREATION_ROUTINES = {
     "identity": (True, False),
     "ones": (True, False),
     "zeros": (True, False),
+    # composed function, all implementations accept dtype and device
+    "from_numpy": (True, True),
     "random.default_rng": (False, False),
     # mark the following as creation routines despite (False, False) defaults
     # -> so specific backends can optionally inject dtype/device for them
@@ -1586,12 +1589,25 @@ def to_backend_dtype(dtype_name, like):
     return _to_backend_dtype_from_str_cached(dtype_name, like)
 
 
+_BUILTIN_DTYPE_NAMES = {
+    bool: "bool",
+    int: "int64",
+    float: "float64",
+    complex: "complex128",
+}
+
+
 @functools.cache
 def _dtype_to_name_cached(dtype):
     try:
         return dtype.name
     except AttributeError:
-        return str(dtype).split(".")[-1].lower()
+        if isinstance(dtype, type):
+            # builtin like ``float``
+            return _BUILTIN_DTYPE_NAMES.get(dtype, dtype.__name__.rstrip("_"))
+        else:
+            # scalar dtype like numpy.float32 or torch.complex128
+            return str(dtype).split(".")[-1].lower()
 
 
 @compose
@@ -1625,9 +1641,233 @@ def astype(x, dtype_name, **kwargs):
     return x.astype(dtype, **kwargs)
 
 
+@compose
 def to_numpy(x):
-    """Get a numpy version of array ``x``."""
-    return do("to_numpy", x)
+    """Get a numpy version of array ``x``, via ``np.asarray`` by default."""
+    return do("asarray", x, like="numpy")
+
+
+_DTYPE_MATCHER = re.compile(r"bool|(b?float|u?int|complex)\d+")
+_DEVICE_MATCHER = re.compile(r"(cpu|cuda|gpu|mps|tpu|xpu|meta)(:\d+)?")
+
+
+@functools.cache
+def _parse_compound_backend_spec(spec):
+    """Parse a composite string specifier like ``"torch-float32-cuda:0"``
+    into a ``(backend, dtype, device)`` tuple, each a string or None. Token
+    order is not important: dtype and device tokens are recognized by
+    pattern, and a single remaining token, if any, is taken as the backend.
+    """
+    backend = dtype = device = None
+    for token in spec.split("-"):
+        if _DTYPE_MATCHER.fullmatch(token):
+            if dtype is not None:
+                raise ValueError(
+                    f"Found multiple dtypes ('{dtype}', '{token}') "
+                    f"in spec '{spec}'."
+                )
+            dtype = token
+        elif _DEVICE_MATCHER.fullmatch(token):
+            if device is not None:
+                raise ValueError(
+                    f"Found multiple devices ('{device}', '{token}') "
+                    f"in spec '{spec}'."
+                )
+            device = token
+        elif backend is None:
+            backend = token
+        else:
+            raise ValueError(
+                f"Found multiple backends ('{backend}', '{token}') "
+                f"in spec '{spec}'."
+            )
+    return backend, dtype, device
+
+
+def _dtype_is_inexact(dtype_name):
+    """Whether string ``dtype_name`` is a floating point or complex dtype."""
+    return ("float" in dtype_name) or ("complex" in dtype_name)
+
+
+@compose
+def to_device(x, device):
+    """Move array ``x`` to ``device``, returning it unchanged if ``device``
+    is None. A bare device type without an index, e.g. ``"gpu"`` or
+    ``"cuda"``, means 'ensure on this type of device': arrays already on
+    such a device are not migrated between indices. The default
+    implementation tries ``x.to(device)``, treating backends without any
+    device concept as 'cpu'.
+
+    Parameters
+    ----------
+    x : array
+        The array to move.
+    device : str or device-like or None
+        The device to move to, e.g. ``"cuda:0"``.
+
+    Returns
+    -------
+    array
+    """
+    if device is None:
+        return x
+    try:
+        return x.to(device)
+    except AttributeError:
+        if str(device).partition(":")[0] == "cpu":
+            # treat backends with no device concept as cpu
+            return x
+        raise ValueError(
+            f"Don't know how to move array of type {type(x)} "
+            f"to device '{device}'."
+        )
+
+
+@compose
+def from_numpy(x, dtype=None, device=None, backend=None):
+    """Convert a numpy array (or array-like) ``x`` into a ``like`` backend
+    array, directly with the given ``dtype`` and on the given ``device``
+    where possible. It is registered as a creation routine, so if ``like``
+    is an example array, unspecified ``dtype`` and ``device`` default to
+    matching it. The default implementation is ``asarray`` then
+    ``to_device``, but backends can register more direct routes, e.g. a
+    single ``torch.as_tensor`` call.
+
+    Parameters
+    ----------
+    x : array-like
+        The numpy array (or nested iterable) to convert.
+    dtype : str or dtype, optional
+        The target dtype.
+    device : str or device-like, optional
+        The target device, e.g. ``"cuda:0"``.
+    like : str or array, optional
+        The target backend, as an explicit name, or an example array to
+        also infer default ``dtype`` and ``device`` from. Handled by the
+        dispatch layer.
+
+    Returns
+    -------
+    array
+
+    See Also
+    --------
+    to, to_numpy, to_device
+    """
+    if dtype is not None:
+        if isinstance(dtype, str):
+            dtype = to_backend_dtype(dtype, backend)
+        x = do("asarray", x, dtype=dtype, like=backend)
+    else:
+        x = do("asarray", x, like=backend)
+    return to_device(x, device)
+
+
+def to(tree, like=None, *, backend=None, dtype=None, device=None):
+    """Convert an array, or nested collection ("pytree") of arrays, to a
+    target backend, dtype and/or device. All three can be specified together
+    in a single string such as ``"torch-float32-cuda:0"``, in any order, or
+    explicitly via the keyword arguments, which take precedence. Unspecified
+    properties are left unchanged, and non-array leaves are passed through
+    untouched. Note that, matching ``torch.nn.Module.to`` semantics, only
+    floating point and complex arrays are cast when a ``dtype`` is given, so
+    that e.g. integer index arrays are preserved.
+
+    Parameters
+    ----------
+    tree : array or pytree of arrays
+        The array or nested collection (tuple, list, dict, or any registered
+        container) of arrays to convert.
+    like : str or array, optional
+        The conversion target. If a string, a dash separated specifier like
+        ``"backend-dtype-device"``, with each part optional. If an array, the
+        backend, dtype and device to target are inferred from it.
+    backend : str, optional
+        Explicit target backend, taking precedence over ``like``.
+    dtype : str or dtype, optional
+        Explicit target dtype, taking precedence over ``like``. Only applied to
+        floating point and complex arrays.
+    device : str or device-like, optional
+        Explicit target device, taking precedence over ``like``.
+
+    Returns
+    -------
+    array or pytree of arrays
+        The converted array or collection, matching the structure of ``tree``.
+
+    Examples
+    --------
+
+        >>> import numpy as np
+        >>> xs = {"a": np.random.rand(2, 3), "b": np.arange(3)}
+        >>> ys = to(xs, "torch-float32")
+        >>> ys["a"].dtype
+        torch.float32
+        >>> ys["b"].dtype  # integer arrays are not cast
+        torch.int64
+
+    See Also
+    --------
+    to_device, astype, to_numpy, tree_map
+    """
+    if like is not None:
+        if isinstance(like, str):
+            # custom specifier
+            lbackend, ldtype, ldevice = _parse_compound_backend_spec(like)
+            # but explictly supplied kwargs take precedence
+            if backend is None:
+                backend = lbackend
+            if dtype is None:
+                dtype = ldtype
+            if device is None:
+                device = ldevice
+        else:
+            # example array
+            lbackend, device, dtype = infer_backend_device_dtype(
+                like, device=device, dtype=dtype
+            )
+            if backend is None:
+                backend = lbackend
+
+    # ensure dtype is a string
+    if (dtype is not None) and (not isinstance(dtype, str)):
+        dtype = _dtype_to_name_cached(dtype)
+
+    # only cast between floating point and complex dtypes
+    cast = (dtype is not None) and _dtype_is_inexact(dtype)
+
+    def _to_leaf(x):
+        if not is_array(x):
+            return x
+
+        if cast and _dtype_is_inexact(get_dtype_name(x)):
+            leaf_dtype = dtype
+        else:
+            leaf_dtype = None
+
+        old_backend = infer_backend(x)
+        new_backend = backend if backend is not None else old_backend
+
+        if new_backend != old_backend:
+            # convert between backends via numpy, going directly to the
+            # new dtype and device where possible
+            return from_numpy(
+                to_numpy(x),
+                dtype=leaf_dtype,
+                device=device,
+                like=new_backend,
+            )
+
+        if (leaf_dtype is not None) and (get_dtype_name(x) != leaf_dtype):
+            # right backend already
+            x = astype(x, leaf_dtype)
+
+        if device is None:
+            return x
+
+        return to_device(x, device)
+
+    return tree_map(_to_leaf, tree)
 
 
 # -------------------------- some common wrappers --------------------------- #
@@ -1731,6 +1971,22 @@ def cholesky_lower(fn):
     @functools.wraps(fn)
     def cholesky_numpy_like(a, upper=False):
         return fn(a, lower=not upper)
+
+    return cholesky_numpy_like
+
+
+def cholesky_manual_upper(fn):
+    """Make a cholesky wrapper adding `upper` for backends that only compute
+    the lower factor.
+    """
+
+    @functools.wraps(fn)
+    def cholesky_numpy_like(a, upper=False):
+        L = fn(a)
+        if upper:
+            xp = get_namespace(L)
+            return xp.conj(xp.swapaxes(L, -2, -1))
+        return L
 
     return cholesky_numpy_like
 
@@ -2190,12 +2446,6 @@ register_function("builtins", "complex", complex)
 # ---------------------------------- numpy ---------------------------------- #
 
 
-@register_function("numpy", "to_numpy")
-@register_function("builtins", "to_numpy")
-def numpy_to_numpy(x):
-    return do("asarray", x, like="numpy")
-
-
 register_module_alias("numpy.scipy", "scipy")
 
 register_function("numpy", "linalg.expm", module="scipy.linalg")
@@ -2215,7 +2465,61 @@ def cupy_to_numpy(x):  # pragma: no cover
     return x.get()
 
 
+def _cupy_parse_device(device):  # pragma: no cover
+    """Check a device string is valid for cupy, returning the gpu index, or
+    None for a bare 'gpu' / 'cuda' (meaning any gpu).
+    """
+    prefix, _, index = device.partition(":")
+    if prefix == "cpu":
+        raise ValueError(
+            "cupy arrays cannot be moved to 'cpu', use `to_numpy`."
+        )
+    if prefix not in ("gpu", "cuda"):
+        raise ValueError(
+            f"Unsupported device '{device}' for cupy, "
+            "expected 'gpu' or 'cuda'."
+        )
+    return int(index) if index else None
+
+
+@to_device.register("cupy")
+def cupy_to_device(x, device):  # pragma: no cover
+    if device is None:
+        return x
+
+    import cupy
+
+    if isinstance(device, str):
+        device = _cupy_parse_device(device)
+        if device is None:
+            # bare 'gpu' / 'cuda': already on gpu
+            return x
+    else:
+        device = getattr(device, "id", device)
+
+    with cupy.cuda.Device(device):
+        return cupy.asarray(x)
+
+
+@from_numpy.register("cupy")
+def cupy_from_numpy(x, dtype=None, device=None):  # pragma: no cover
+    import cupy
+
+    if isinstance(dtype, str):
+        dtype = to_backend_dtype(dtype, like="cupy")
+    if isinstance(device, str):
+        # None (bare 'gpu' / 'cuda') means current device
+        device = _cupy_parse_device(device)
+    else:
+        device = getattr(device, "id", device)
+
+    with cupy.cuda.Device(device):
+        return cupy.asarray(x, dtype=dtype)
+
+
 register_module_alias("cupy.scipy", "cupyx.scipy")
+
+register_function("cupy", "linalg.cholesky", wrapper=cholesky_manual_upper)
 
 register_function("cupy", "linalg.svd", wrapper=svd_not_full_matrices_wrapper)
 
@@ -2224,16 +2528,47 @@ register_function("cupy", "complex", complex_add_re_im)
 # ----------------------------------- jax ----------------------------------- #
 
 
-@register_function("jax", "to_numpy")
-def jax_to_numpy(x):
-    return do("asarray", x, like="numpy")
-
-
 @functools.cache
 def get_jax():
     import jax  # type: ignore
 
     return jax
+
+
+def _jax_parse_device(device):
+    """Parse a device string like "cuda:0" into (platform, index)."""
+    platform, _, index = device.partition(":")
+    platform = {"cuda": "gpu"}.get(platform, platform)
+    return platform, index
+
+
+@to_device.register("jax")
+def jax_to_device(x, device):
+    if device is None:
+        return x
+    jax = get_jax()
+    if isinstance(device, str):
+        platform, index = _jax_parse_device(device)
+        if not index:
+            try:
+                if x.device.platform == platform:
+                    # bare device type and already on it: don't migrate
+                    return x
+            except AttributeError:
+                pass
+        device = jax.devices(platform)[int(index) if index else 0]
+    return jax.device_put(x, device)
+
+
+@from_numpy.register("jax")
+def jax_from_numpy(x, dtype=None, device=None):
+    jax = get_jax()
+    if isinstance(dtype, str):
+        dtype = to_backend_dtype(dtype, like="jax")
+    if isinstance(device, str):
+        platform, index = _jax_parse_device(device)
+        device = jax.devices(platform)[int(index) if index else 0]
+    return jax.numpy.asarray(x, dtype=dtype, device=device)
 
 
 class JaxDefaultRNG:
@@ -2752,6 +3087,44 @@ def tensorflow_to_numpy(x):
     return x.numpy()
 
 
+def _tensorflow_translate_device(device):
+    """Translate a device string like "cuda:0" to tensorflow form."""
+    return (
+        device.replace("cuda", "GPU")
+        .replace("gpu", "GPU")
+        .replace("cpu", "CPU")
+    )
+
+
+@to_device.register("tensorflow")
+def tensorflow_to_device(x, device):
+    if device is None:
+        return x
+    tf = get_tensorflow()
+    if isinstance(device, str):
+        device = _tensorflow_translate_device(device)
+        if ":" not in device:
+            if f"{device}:" in x.device:
+                # bare device type and already on it: don't migrate
+                return x
+            device += ":0"
+    with tf.device(device):
+        return tf.identity(x)
+
+
+@from_numpy.register("tensorflow")
+def tensorflow_from_numpy(x, dtype=None, device=None):
+    tf = get_tensorflow()
+    if isinstance(dtype, str):
+        dtype = to_backend_dtype(dtype, like="tensorflow")
+    if device is None:
+        return tf.experimental.numpy.asarray(x, dtype=dtype)
+    if isinstance(device, str):
+        device = _tensorflow_translate_device(device)
+    with tf.device(device):
+        return tf.experimental.numpy.asarray(x, dtype=dtype)
+
+
 @register_function("tensorflow", "indices")
 def tensorflow_indices(dimensions):
     _meshgrid = get_lib_fn("tensorflow", "meshgrid")
@@ -3197,6 +3570,31 @@ def torch_to_numpy(x):
     return x.detach().cpu().numpy()
 
 
+@to_device.register("torch")
+def torch_to_device(x, device):
+    if device is None:
+        return x
+    if isinstance(device, str):
+        # accept 'gpu' as an alias for 'cuda'
+        device = device.replace("gpu", "cuda")
+        prefix, _, index = device.partition(":")
+        if (not index) and (x.device.type == prefix):
+            # bare device type and already on it: don't migrate
+            return x
+    return x.to(device)
+
+
+@from_numpy.register("torch")
+def torch_from_numpy(x, dtype=None, device=None):
+    torch = get_torch()
+    if isinstance(dtype, str):
+        dtype = to_backend_dtype(dtype, like="torch")
+    if isinstance(device, str):
+        # accept 'gpu' as an alias for 'cuda'
+        device = device.replace("gpu", "cuda")
+    return torch.as_tensor(x, dtype=dtype, device=device)
+
+
 @register_function("torch", "copy")
 def torch_copy(x):
     return x.detach().clone()
@@ -3581,16 +3979,28 @@ register_function(
 register_module_alias("mlx", "mlx.core")
 
 
-@register_function("mlx", "to_numpy")
-def mlx_to_numpy(x):
-    return do("asarray", x, like="numpy")
-
-
 @functools.cache
 def get_mlx():
     import mlx.core as mx
 
     return mx
+
+
+@to_device.register("mlx")
+def mlx_to_device(x, device):
+    if device is None:
+        return x
+    if str(device).partition(":")[0] in ("cpu", "gpu", "cuda"):
+        import warnings
+
+        warnings.warn(
+            f"mlx device requested ('{device}'), but mlx arrays live in "
+            "unified memory and have no device themselves: instead each "
+            "operation chooses where it runs, see `mx.set_default_device` "
+            "and `stream` kwargs."
+        )
+        return x
+    raise TypeError(f"Unknown device '{device}' for mlx.")
 
 
 class MlxDefaultRNG:
@@ -3736,6 +4146,22 @@ def mlx_zeros_ones_wrap(fn):
         if dtype is not None:
             dtype = to_backend_dtype(dtype, like="mlx")
         return fn(shape, dtype=dtype, **kwargs)
+
+    return numpy_like
+
+
+@register_function("mlx", "array", wrapper=True)
+@register_function("mlx", "asarray", wrapper=True)
+def mlx_array_asarray_wrap(fn):
+    @functools.wraps(fn)
+    def numpy_like(x, dtype=None, **kwargs):
+        if (dtype is None) and hasattr(x, "dtype"):
+            # mlx otherwise ignores the input dtype and applies its own
+            # defaults, e.g. silently downcasting float64 -> float32
+            dtype = get_dtype_name(x)
+        if dtype is not None:
+            dtype = to_backend_dtype(dtype, like="mlx")
+        return fn(x, dtype=dtype, **kwargs)
 
     return numpy_like
 

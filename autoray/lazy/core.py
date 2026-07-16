@@ -2085,10 +2085,37 @@ def identity(n, *, backend="numpy", **kwargs):
 # ---------------------------- autoray specials ----------------------------- #
 
 
+@register_function("autoray.lazy", "get_dtype_name")
 def lazy_get_dtype_name(x):
     return x.dtype
 
 
+@register_function("autoray.lazy", "to_numpy")
+def lazy_to_numpy(x):
+    raise TypeError(
+        "LazyArray objects cannot be converted to numpy eagerly, "
+        "call `.compute()` first."
+    )
+
+
+@register_function("autoray.lazy", "to_device")
+def lazy_to_device(x, device):
+    if device is None:
+        return x
+    raise TypeError("LazyArray objects cannot be moved to a device.")
+
+
+@register_function("autoray.lazy", "from_numpy")
+def lazy_from_numpy(x, dtype=None, device=None):
+    if device is not None:
+        raise TypeError("LazyArray objects cannot be moved to a device.")
+    lx = array(x)
+    if dtype is not None:
+        lx = lazy_astype(lx, dtype)
+    return lx
+
+
+@register_function("autoray.lazy", "astype")
 @lazy_cache("astype")
 def lazy_astype(x, dtype):
     x = ensure_lazy(x)
@@ -2098,7 +2125,3 @@ def lazy_astype(x, dtype):
     else:
         deps = (x,)
     return x.to(fn=astype, args=(x, dtype), deps=deps)
-
-
-register_function("autoray.lazy", "get_dtype_name", lazy_get_dtype_name)
-register_function("autoray.lazy", "astype", lazy_astype)

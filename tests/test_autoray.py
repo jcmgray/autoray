@@ -1011,3 +1011,178 @@ def test_function_asarray(backend):
     z5 = ar.do("asarray", z4, like=z4)
     assert ar.do("shape", z5) == (1,)
     assert ar.infer_backend(z5) == backend
+
+
+def test_to_spec_parsing():
+    from autoray.autoray import _parse_compound_backend_spec
+
+    assert _parse_compound_backend_spec("torch-float32-cuda:1") == (
+        "torch",
+        "float32",
+        "cuda:1",
+    )
+    # token order is not important
+    assert _parse_compound_backend_spec("cuda:1-float32-torch") == (
+        "torch",
+        "float32",
+        "cuda:1",
+    )
+    assert _parse_compound_backend_spec("torch") == ("torch", None, None)
+    assert _parse_compound_backend_spec("complex64") == (
+        None,
+        "complex64",
+        None,
+    )
+    assert _parse_compound_backend_spec("cpu") == (None, None, "cpu")
+    assert _parse_compound_backend_spec("numpy-bool") == (
+        "numpy",
+        "bool",
+        None,
+    )
+    with pytest.raises(ValueError, match="backends"):
+        _parse_compound_backend_spec("torch-numpy")
+    with pytest.raises(ValueError, match="dtypes"):
+        _parse_compound_backend_spec("float32-float64")
+    with pytest.raises(ValueError, match="devices"):
+        _parse_compound_backend_spec("cpu-cuda:0")
+
+
+@pytest.mark.parametrize(
+    "backend,dtype,fn",
+    gen_params(backends=..., dtypes=..., fns=["to"], requires="from_numpy"),
+)
+def test_to_backend_preserves_dtype(backend, dtype, fn):
+    x = np.random.uniform(size=(2, 3)).astype(dtype)
+    y = getattr(ar, fn)(x, backend)
+    assert ar.infer_backend(y) == backend
+    assert ar.get_dtype_name(y) == dtype
+    np.testing.assert_allclose(ar.to_numpy(y), x)
+    # and back
+    z = ar.to(y, "numpy")
+    assert ar.infer_backend(z) == "numpy"
+    assert ar.get_dtype_name(z) == dtype
+    np.testing.assert_allclose(z, x)
+
+
+@pytest.mark.parametrize(
+    "backend,dtype",
+    gen_params(backends=..., dtypes=..., requires="from_numpy"),
+)
+def test_to_dtype_casts_only_inexact(backend, dtype):
+    tree = {
+        "a": np.random.uniform(size=(2, 3)),
+        "b": [
+            np.arange(4, dtype="int64"),
+            np.random.uniform(size=2).astype("float32"),
+        ],
+    }
+    new = ar.to(tree, f"{backend}-{dtype}")
+    assert ar.infer_backend(new["a"]) == backend
+    assert ar.get_dtype_name(new["a"]) == dtype
+    assert ar.get_dtype_name(new["b"][1]) == dtype
+    # integer arrays change backend but are not cast
+    assert ar.infer_backend(new["b"][0]) == backend
+    assert ar.get_dtype_name(new["b"][0]) == "int64"
+
+
+@pytest.mark.parametrize(
+    "backend,fn,args", gen_params(backends=..., fns=[("to_device", ("cpu",))])
+)
+def test_to_device_cpu(backend, fn, args):
+    (device,) = args
+    x = gen_rand((3,), backend)
+
+    y = ar.to(x, device=device)
+    assert ar.infer_backend(y) == backend
+    np.testing.assert_allclose(ar.to_numpy(y), ar.to_numpy(x))
+
+    # directly: bare device type already matching is a no-op
+    z = getattr(ar, fn)(x, device)
+    assert z is x
+
+    # via spec string
+    w = ar.to(x, f"{backend}-{device}")
+    assert ar.infer_backend(w) == backend
+
+
+@pytest.mark.parametrize(
+    "backend", gen_params(backends=..., requires="from_numpy")
+)
+def test_to_example_array(backend):
+    example = gen_rand((2,), backend, "float32")
+    tree = (
+        np.random.uniform(size=(2, 2)),
+        np.arange(4, dtype="int64"),
+    )
+    new = ar.to(tree, example)
+    assert isinstance(new, tuple)
+    assert ar.infer_backend(new[0]) == backend
+    assert ar.get_dtype_name(new[0]) == "float32"
+    # integer array converted but not cast
+    assert ar.infer_backend(new[1]) == backend
+    assert ar.get_dtype_name(new[1]) == "int64"
+
+
+@pytest.mark.parametrize(
+    "backend", gen_params(backends=..., requires="from_numpy")
+)
+def test_from_numpy(backend):
+    x = np.random.uniform(size=(2, 3))
+
+    # explicit dtype
+    y = ar.do("from_numpy", x, dtype="float32", like=backend)
+    assert ar.infer_backend(y) == backend
+    assert ar.get_dtype_name(y) == "float32"
+    np.testing.assert_allclose(ar.to_numpy(y), x, rtol=1e-6)
+
+    # dtype preserved by default
+    z = ar.from_numpy(x, like=backend)
+    assert ar.infer_backend(z) == backend
+    assert ar.get_dtype_name(z) == "float64"
+
+    # example array injects dtype
+    example = gen_rand((2,), backend, "float32")
+    w = ar.from_numpy(x, like=example)
+    assert ar.infer_backend(w) == backend
+    assert ar.get_dtype_name(w) == "float32"
+
+
+def test_to_kwargs_and_defaults():
+    x = np.random.uniform(size=3)
+    i = np.arange(3, dtype="int64")
+
+    # no target specified: no-op
+    y = ar.to(x)
+    assert ar.infer_backend(y) == "numpy"
+    assert ar.get_dtype_name(y) == "float64"
+
+    # dtype only spec: backend unchanged
+    ys = ar.to({"x": x, "i": i}, "complex128")
+    assert ar.infer_backend(ys["x"]) == "numpy"
+    assert ar.get_dtype_name(ys["x"]) == "complex128"
+    assert ar.get_dtype_name(ys["i"]) == "int64"
+
+    # explicit kwarg takes precedence over spec
+    y = ar.to(x, "numpy-float32", dtype="float64")
+    assert ar.get_dtype_name(y) == "float64"
+
+    # backend dtype objects also accepted
+    y = ar.to(x, dtype=np.dtype("float32"))
+    assert ar.get_dtype_name(y) == "float32"
+
+    # as are scalar types and builtins
+    y = ar.to(x, dtype=np.float32)
+    assert ar.get_dtype_name(y) == "float32"
+    y = ar.to(x, dtype=complex)
+    assert ar.get_dtype_name(y) == "complex128"
+
+    # non float or complex target dtypes don't cast anything
+    y = ar.to(x, dtype="int32")
+    assert ar.get_dtype_name(y) == "float64"
+
+    # non-array leaves pass through untouched
+    tree = {"a": x, "b": "hello", "c": 3}
+    new = ar.to(tree, "numpy-float32")
+    assert ar.get_dtype_name(new["a"]) == "float32"
+    assert new["b"] == "hello"
+    assert new["c"] == 3

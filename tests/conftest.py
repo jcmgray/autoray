@@ -64,6 +64,9 @@ XFAILS = {
         "cupy",
         "scipy.linalg.solve_triangular",
     ): "cupy doesn't support scipy.linalg.solve_triangular",
+    ("cupy", "to_device"): lambda a, kw: (
+        "cupy arrays cannot be moved to cpu" if a and a[0] == "cpu" else None
+    ),
     # dask
     # https://github.com/dask/dask/issues/12335
     ("dask", "linalg.cholesky", "complex64"): "dask complex cholesky broken",
@@ -175,6 +178,7 @@ XFAILS = {
     ("sparse", "asarray"): "sparse needs explicit constructor",
     ("sparse", "cumsum"): "sparse doesn't support cumsum",
     ("sparse", "diag"): "sparse doesn't support diag",
+    ("sparse", "from_numpy"): "sparse needs explicit constructor",
     ("sparse", "indices"): "sparse doesn't support indices",
     ("sparse", "linalg.cholesky"): "sparse doesn't support linalg",
     ("sparse", "linalg.eig"): "sparse doesn't support linalg",
