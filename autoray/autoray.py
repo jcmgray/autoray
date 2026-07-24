@@ -1769,9 +1769,10 @@ def to(tree, like=None, *, backend=None, dtype=None, device=None):
     in a single string such as ``"torch-float32-cuda:0"``, in any order, or
     explicitly via the keyword arguments, which take precedence. Unspecified
     properties are left unchanged, and non-array leaves are passed through
-    untouched. Note that, matching ``torch.nn.Module.to`` semantics, only
-    floating point and complex arrays are cast when a ``dtype`` is given, so
-    that e.g. integer index arrays are preserved.
+    untouched. Repeated references to the same input array are converted once
+    and share the same output array. Note that, matching ``torch.nn.Module.to``
+    semantics, only floating point and complex arrays are cast when a ``dtype``
+    is given, so that e.g. integer index arrays are preserved.
 
     Parameters
     ----------
@@ -1836,10 +1837,7 @@ def to(tree, like=None, *, backend=None, dtype=None, device=None):
     # only cast between floating point and complex dtypes
     cast = (dtype is not None) and _dtype_is_inexact(dtype)
 
-    def _to_leaf(x):
-        if not is_array(x):
-            return x
-
+    def _convert_array(x):
         if cast and _dtype_is_inexact(get_dtype_name(x)):
             leaf_dtype = dtype
         else:
@@ -1866,6 +1864,19 @@ def to(tree, like=None, *, backend=None, dtype=None, device=None):
             return x
 
         return to_device(x, device)
+
+    converted_arrays = {}
+
+    def _to_leaf(x):
+        if not is_array(x):
+            return x
+
+        x_id = id(x)
+        try:
+            return converted_arrays[x_id]
+        except KeyError:
+            y = converted_arrays[x_id] = _convert_array(x)
+            return y
 
     return tree_map(_to_leaf, tree)
 

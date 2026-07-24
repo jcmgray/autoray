@@ -1085,6 +1085,17 @@ def test_to_dtype_casts_only_inexact(backend, dtype):
     assert ar.get_dtype_name(new["b"][0]) == "int64"
 
 
+def test_to_converts_repeated_arrays_once():
+    x = np.random.uniform(size=(2, 3))
+    tree = {"a": x, "b": [x]}
+
+    new = ar.to(tree, dtype="float32")
+
+    assert new["a"] is new["b"][0]
+    assert new["a"] is not x
+    assert ar.get_dtype_name(new["a"]) == "float32"
+
+
 @pytest.mark.parametrize(
     "backend,fn,args", gen_params(backends=..., fns=[("to_device", ("cpu",))])
 )

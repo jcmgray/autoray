@@ -6,7 +6,7 @@ Release notes for `autoray`.
 
 **Enhancements:**
 
-- Added [`to`](autoray.to) for converting arrays, or nested collections ("pytrees") of arrays, to a target backend, dtype and/or device, all specifiable in a single string such as `"torch-float32-cuda:0"`, via explicit kwargs, or an example array. Matching `torch.nn.Module.to` semantics, only floating point and complex arrays are cast when a dtype is given, so e.g. integer index arrays are preserved.
+- Added [`to`](autoray.to) for converting arrays, or nested collections ("pytrees") of arrays, to a target backend, dtype and/or device, all specifiable in a single string such as `"torch-float32-cuda:0"`, via explicit kwargs, or an example array. Repeated references to the same input array are converted once and share the same output array. Matching `torch.nn.Module.to` semantics, only floating point and complex arrays are cast when a dtype is given, so e.g. integer index arrays are preserved.
 - Added [`to_device`](autoray.to_device) composed function for moving arrays between devices, with `"gpu"` accepted as an alias for `"cuda"` where relevant, and a bare device type such as `"gpu"` meaning 'ensure on this type of device', without migrating arrays between device indices.
 - Added [`from_numpy`](autoray.from_numpy) composed creation routine for converting a numpy array into a backend array, directly with a given dtype and on a given device where possible, e.g. via a single `torch.as_tensor` call. An example array supplied as `like` supplies its backend, dtype and device as defaults.
 - Made [`to_numpy`](autoray.to_numpy) a composed function with default implementation `np.asarray`, so that unknown backends are handled automatically.

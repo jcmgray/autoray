@@ -77,7 +77,7 @@ source = ["autoray"]
 
 [tool.ruff]
 line-length = 79
-target-version = "py310"
+target-version = "py311"
 lint.ignore = ["E741"]
 
 # ---------------------------------- pixi ----------------------------------- #
