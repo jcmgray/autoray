@@ -109,6 +109,43 @@ def test_torch_default_rng_integer_distribution_ignores_float_dtype():
     assert x.dtype == torch.int64
 
 
+@pytest.mark.parametrize(
+    "fn,args,kwargs",
+    [
+        ("choice", (10,), {"size": (2, 3)}),
+        ("integers", (10,), {"size": (2, 3)}),
+        ("normal", (), {"size": (2, 3)}),
+        ("permutation", (10,), {}),
+        ("random", (), {"size": (2, 3)}),
+        ("uniform", (), {"size": (2, 3)}),
+    ],
+)
+def test_torch_default_rng_generates_on_cuda(fn, args, kwargs):
+    torch = pytest.importorskip("torch")
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA is not available")
+
+    like = torch.empty((), device="cuda")
+    rng = ar.do("random.default_rng", 42, like=like)
+    x = getattr(rng, fn)(*args, **kwargs)
+    assert x.device == like.device
+
+
+def test_torch_default_rng_uses_generator_device_by_default():
+    torch = pytest.importorskip("torch")
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA is not available")
+
+    default_device = torch.get_default_device()
+    try:
+        torch.set_default_device("cuda")
+        rng = ar.do("random.default_rng", 42, like="torch")
+        x = rng.normal(size=(2, 3))
+        assert x.device == rng._generator.device
+    finally:
+        torch.set_default_device(default_device)
+
+
 def test_jax_jit_random():
     pytest.importorskip("jax")
 

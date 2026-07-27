@@ -3314,18 +3314,23 @@ class TorchDefaultRNG:
     def __init__(self, seed=None, device=None, dtype=None):
         self._torch = get_torch()
         self._generator = self._torch.Generator(device=device)
+
         if isinstance(dtype, str):
             dtype = to_backend_dtype(dtype, like="torch")
         if (dtype is not None) and dtype.is_floating_point:
             self._dtype = dtype
         else:
             self._dtype = None
+
         if seed is not None:
             self._generator.manual_seed(seed)
 
     def _set_default_dtype(self, kwargs):
         if self._dtype is not None:
             kwargs.setdefault("dtype", self._dtype)
+
+    def _set_default_device(self, kwargs):
+        kwargs.setdefault("device", self._generator.device)
 
     # def binomial(self, n, p, size=None, **kwargs):
     #     raise NotImplementedError()
@@ -3344,6 +3349,7 @@ class TorchDefaultRNG:
             high = low
             low = 0
         size = _handle_size_to_shape(size)
+        self._set_default_device(kwargs)
         return self._torch.randint(
             low, high, size, generator=self._generator, **kwargs
         )
@@ -3354,6 +3360,7 @@ class TorchDefaultRNG:
     def normal(self, loc=0.0, scale=1.0, size=None, **kwargs):
         size = _handle_size_to_shape(size)
         self._set_default_dtype(kwargs)
+        self._set_default_device(kwargs)
         x = self._torch.randn(size, generator=self._generator, **kwargs)
         if scale != 1.0:
             x = x * scale
@@ -3364,10 +3371,12 @@ class TorchDefaultRNG:
     def random(self, size=None, **kwargs):
         size = _handle_size_to_shape(size)
         self._set_default_dtype(kwargs)
+        self._set_default_device(kwargs)
         return self._torch.rand(size, generator=self._generator, **kwargs)
 
     def permutation(self, x, **kwargs):
         if isinstance(x, int):
+            self._set_default_device(kwargs)
             return self._torch.randperm(x, generator=self._generator, **kwargs)
 
         axis = kwargs.get("axis", 0)
@@ -3380,6 +3389,7 @@ class TorchDefaultRNG:
     def uniform(self, low=0.0, high=1.0, size=None, **kwargs):
         size = _handle_size_to_shape(size)
         self._set_default_dtype(kwargs)
+        self._set_default_device(kwargs)
         x = self._torch.rand(size, generator=self._generator, **kwargs)
         if low != 0.0 or high != 1.0:
             x = x * (high - low) + low
@@ -3418,6 +3428,7 @@ class TorchDefaultRNG:
                 high=a.shape[0],
                 size=(size,),
                 generator=self._generator,
+                device=self._generator.device,
             )
 
         # then take the samples!

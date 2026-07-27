@@ -23,7 +23,7 @@ Release notes for `autoray`.
 
 - Fixed [`get_namespace`](autoray.get_namespace) caching for backends with unhashable device objects such as `cupy.cuda.Device`.
 - Added cupy `linalg.cholesky` support for the `upper` kwarg via the new generic [`cholesky_manual_upper`](autoray.autoray.cholesky_manual_upper) wrapper.
-- Torch: `random.default_rng` now only injects floating point dtypes from the `like` argument.
+- Torch: `random.default_rng` now only inherits floating point dtypes from the `like` argument and creates generated arrays on the same device as its generator.
 
 ## v0.8.11 (2026-06-08)
 
