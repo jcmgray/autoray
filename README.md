@@ -48,18 +48,20 @@ caches) the correct function to match the equivalent numpy call:
 ```python
 import autoray as ar
 
+
 def noised_svd(x):
     # automatic dispatch based on supplied array
-    U, s, VH = ar.do('linalg.svd', x)
+    U, s, VH = ar.do("linalg.svd", x)
 
     # automatic dispatch based on different array
-    sn = s + 0.1 * ar.do('random.normal', size=ar.shape(s), like=s)
+    sn = s + 0.1 * ar.do("random.normal", size=ar.shape(s), like=s)
 
     # automatic dispatch for multiple arrays for certain functions
-    return ar.do('einsum', 'ij,j,jk->ik', U, sn, VH)
+    return ar.do("einsum", "ij,j,jk->ik", U, sn, VH)
+
 
 # explicit backend given by string
-x = ar.do('random.uniform', size=(100, 100), like="torch")
+x = ar.do("random.uniform", size=(100, 100), like="torch")
 
 # this function now works for any backend
 y = noised_svd(x)
@@ -77,8 +79,8 @@ module:
 from autoray import numpy as np
 
 # set a temporary default backend
-with ar.backend_like('cupy'):
-    z = np.ones((3, 4), dtype='float32')
+with ar.backend_like("cupy"):
+    z = np.ones((3, 4), dtype="float32")
 
 np.exp(z)
 # array([[2.7182817, 2.7182817, 2.7182817, 2.7182817],

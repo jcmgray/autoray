@@ -29,7 +29,7 @@ backend is inferred:
 ***1. Automatic backend:***
 
 ```python
-do('sqrt', x)
+do("sqrt", x)
 ```
 
 Here the backend is inferred from ``x``. By default dispatch happens on the
@@ -39,7 +39,7 @@ know to dispatch on other arguments.
 ***2. Backend 'like' another array:***
 
 ```python
-do('random.normal', size=(2, 3, 4), like=x)
+do("random.normal", size=(2, 3, 4), like=x)
 ```
 
 Here the backend is inferred from another array and can thus be implicitly
@@ -50,7 +50,7 @@ device to match ``like`` in this case.
 ***3. Explicit backend:***
 
 ```python
-do('einsum', eq, x, y, like='customlib')
+do("einsum", eq, x, y, like="customlib")
 ```
 
 Here one simply supplies the desired function backend explicitly.
@@ -58,9 +58,9 @@ Here one simply supplies the desired function backend explicitly.
 ***4. Context manager***
 
 ```python
-with backend_like('autoray.lazy'):
-    xy = do('tensordot', x, y, 1)
-    z = do('trace', xy)
+with backend_like("autoray.lazy"):
+    xy = do("tensordot", x, y, 1)
+    z = do("trace", xy)
 ```
 
 Here you set a default backend for a whole block of code. This default
@@ -132,7 +132,7 @@ def matmul_chain(*arrays):
     # if the arrays might be a mix of backends, use infer_backend_multi,
     # but here we just dispatch on the first array
     backend = infer_backend(arrays[0])
-    fn = get_lib_fn(backend, 'matmul')
+    fn = get_lib_fn(backend, "matmul")
     return functools.reduce(fn, arrays)
 ```
 
@@ -202,7 +202,7 @@ specific class with the function
 [`register_backend`](autoray.register_backend):
 
 ```python
-register_backend(mylib.myobjs.MyClass, 'mylib.myfuncs')
+register_backend(mylib.myobjs.MyClass, "mylib.myfuncs")
 ```
 Now when `autoray` encounters an instance of `MyClass` it will look for
 functions in `mylib.myfuncs` instead of `mylib`. You could also use an
@@ -244,10 +244,10 @@ its location, name and signature translated in one call:
 ```python
 # paddle's 'random.normal' lives at paddle.randn and needs its kwargs rescaling
 ar.register_function(
-    backend='paddle',
-    name='random.normal',
-    module='paddle',
-    alias='randn',
+    backend="paddle",
+    name="random.normal",
+    module="paddle",
+    alias="randn",
     wrapper=scale_normal_manually,
 )
 ```
@@ -274,18 +274,19 @@ kwarg of [`register_function`](autoray.register_function) or use it as a
 decorator:
 
 ```python
-@ar.register_function('torch', 'linalg.svd')
+@ar.register_function("torch", "linalg.svd")
 def my_custom_torch_svd(x):
     import torch
 
-    print('Hello SVD!')
+    print("Hello SVD!")
     u, s, v = torch.svd(x)
 
     return u, s, v.T
 
-x = ar.do('random.uniform', size=(3, 4), like='torch')
 
-ar.do('linalg.svd', x)
+x = ar.do("random.uniform", size=(3, 4), like="torch")
+
+ar.do("linalg.svd", x)
 # Hello SVD!
 # (tensor([[-0.5832,  0.6188, -0.5262],
 #          [-0.5787, -0.7711, -0.2655],
@@ -305,14 +306,15 @@ decorator:
 def my_custom_sum_wrapper(old_fn):
 
     def new_fn(*args, **kwargs):
-        print('Hello sum!')
+        print("Hello sum!")
         return old_fn(*args, **kwargs)
 
     return new_fn
 
-ar.register_function('torch', 'sum', my_custom_sum_wrapper, wrap=True)
 
-ar.do('sum', x)
+ar.register_function("torch", "sum", my_custom_sum_wrapper, wrap=True)
+
+ar.do("sum", x)
 # Hello sum!
 # tensor(5.4099)
 ```
@@ -343,13 +345,15 @@ register alternative implementations for specific backends. For instance:
 from autoray import compose
 from numba import njit
 
+
 @compose
 def my_func(x):
     # get how many elements are needed to sum to 20
-    return ar.do('sum', ar.do('cumsum', x, 0) < 20)
+    return ar.do("sum", ar.do("cumsum", x, 0) < 20)
+
 
 # register a numba implementation
-@my_func.register('numpy')
+@my_func.register("numpy")
 @njit
 def my_func_numba(x):
     s = 0.0
@@ -359,8 +363,9 @@ def my_func_numba(x):
         i += 1
     return i - 1
 
+
 # any calls like this now dispatch to my_func_numba
-do('my_func', x_numpy)
+do("my_func", x_numpy)
 ```
 
 
