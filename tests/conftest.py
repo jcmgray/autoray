@@ -176,6 +176,11 @@ XFAILS = {
     ("sparse", "arange"): "sparse doesn't support arange",
     ("sparse", "array"): "sparse needs explicit constructor",
     ("sparse", "asarray"): "sparse needs explicit constructor",
+    ("sparse", "count_nonzero"): lambda a, kw: (
+        "sparse doesn't support count_nonzero with axis"
+        if kw.get("axis") is not None
+        else None
+    ),
     ("sparse", "cumsum"): "sparse doesn't support cumsum",
     ("sparse", "diag"): "sparse doesn't support diag",
     ("sparse", "from_numpy"): "sparse needs explicit constructor",

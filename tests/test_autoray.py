@@ -4,7 +4,7 @@ import pytest
 import autoray as ar
 from autoray import shape
 
-from .conftest import gen_params, gen_rand
+from .conftest import gen_params, gen_rand, xfail_if
 
 
 @pytest.mark.parametrize(
@@ -320,6 +320,19 @@ def test_count_nonzero(backend, array_dtype):
         x = ar.do("asarray", [False, True, True, False, True], like=backend)
     nz = ar.do("count_nonzero", x)
     assert ar.to_numpy(nz) == 3
+
+
+@pytest.mark.parametrize(
+    "backend", gen_params(backends=..., requires="count_nonzero")
+)
+def test_count_nonzero_axis(backend):
+    xfail_if(backend, fn="count_nonzero", kwargs={"axis": 0})
+    x = ar.do("asarray", [[0, 1, 2], [0, 0, 3]], like=backend)
+    assert ar.to_numpy(ar.do("count_nonzero", x)) == 3
+    nz0 = ar.to_numpy(ar.do("count_nonzero", x, axis=0))
+    assert list(nz0) == [0, 1, 2]
+    nz1 = ar.to_numpy(ar.do("count_nonzero", x, axis=1))
+    assert list(nz1) == [2, 1]
 
 
 def test_pseudo_submodules():

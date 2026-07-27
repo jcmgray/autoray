@@ -740,7 +740,8 @@ def import_lib_fn(backend, fn):
         # check if there is a backup function (e.g. for older library version)
         backend_alt = backend + "[alt]"
         if backend_alt in _MODULE_ALIASES:
-            return import_lib_fn(backend_alt, fn)
+            lib_fn = _FUNCS[backend, fn] = get_lib_fn(backend_alt, fn)
+            return lib_fn
 
         raise ImportError(
             f"autoray couldn't find function '{fn}' for "
@@ -3988,6 +3989,7 @@ register_function(
 # ----------------------------------- mlx ----------------------------------- #
 
 register_module_alias("mlx", "mlx.core")
+register_module_alias("mlx[alt]", "mlx.core")
 
 
 @functools.cache
@@ -4139,9 +4141,10 @@ def mlx_random_normal(loc=0.0, scale=1.0, size=None, **kwargs):
 register_function("mlx", "complex", complex_add_re_im)
 
 
-@register_function("mlx", "count_nonzero")
-def mlx_count_nonzero(x):
-    return (x != 0).sum()
+# mlx got count_nonzero in v0.32, this is just a fallback
+@register_function("mlx[alt]", "count_nonzero")
+def mlx_count_nonzero(x, axis=None, keepdims=False):
+    return (x != 0).sum(axis=axis, keepdims=keepdims)
 
 
 @register_function("mlx", "ravel")

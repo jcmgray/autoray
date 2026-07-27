@@ -13,6 +13,8 @@ Release notes for `autoray`.
 - Reworked [`register_function`](autoray.register_function) into the single entry point for all function-level registration, taking `module=`, `alias=`, `wrapper=`, `inject_dtype=` and `inject_device=`, deprecating `register_creation_routine`.
 - Dtype name resolution now handles scalar types such as `np.float32` and builtins such as `float` and `complex`, anywhere a dtype is specified.
 - MLX: `array` and `asarray` now preserve the input array's dtype rather than applying mlx defaults, e.g. no longer silently downcasting float64 to float32.
+- MLX: `count_nonzero` now uses the native mlx implementation where available (v0.32+), falling back to a manual version which also supports the `axis` and `keepdims` kwargs.
+- The `"backend[alt]"` fallback, used when a function is missing from an older version of a library, now also finds directly registered implementations, and caches its result against the original backend so the lookup only happens once.
 - MLX: requesting a device warns that mlx arrays live in unified memory with per-op computation placement, rather than failing generically.
 - Lazy: [`to_numpy`](autoray.to_numpy) and [`to_device`](autoray.to_device) on `LazyArray`s now raise explicit errors, while [`from_numpy`](autoray.from_numpy) creates a lazy leaf node.
 - Added the `testcupy` pixi environment, and refreshed the contributing and developer guides, including a code of conduct and AI policy.
