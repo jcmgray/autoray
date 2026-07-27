@@ -746,7 +746,7 @@ def import_lib_fn(backend, fn):
         raise ImportError(
             f"autoray couldn't find function '{fn}' for "
             f"backend '{backend.replace('[alt]', '')}'."
-        )
+        ) from None
 
     return lib_fn
 
