@@ -1210,3 +1210,164 @@ def test_to_kwargs_and_defaults():
     assert ar.get_dtype_name(new["a"]) == "float32"
     assert new["b"] == "hello"
     assert new["c"] == 3
+
+
+# each test below registers something after autoray caches the lookup
+# the fake backend names and local classes keep the global registries clean
+
+
+def test_register_function_direct_seen_by_new_namespace():
+    ar.autoray.register_module_alias("faux_direct", "numpy")
+    x = np.ones(3)
+
+    # fill the _FUNCS entry and make a namespace
+    assert ar.do("sum", x, like="faux_direct") == 3.0
+    xp = ar.get_namespace(like="faux_direct")
+    assert xp.sum(x) == 3.0
+
+    ar.register_function("faux_direct", "sum", lambda a, **kw: "custom")
+    assert ar.do("sum", x, like="faux_direct") == "custom"
+
+    # a new namespace must not get the old function
+    assert ar.get_namespace(like="faux_direct").sum(x) == "custom"
+
+
+def test_register_function_alias_after_import():
+    ar.autoray.register_module_alias("faux_alias", "numpy")
+    x = np.array([1.0, -2.0])
+
+    assert list(ar.do("abs", x, like="faux_alias")) == [1.0, 2.0]
+
+    # autoray must remove the import, because only import_lib_fn reads this
+    ar.register_function("faux_alias", "abs", alias="negative")
+    assert list(ar.do("abs", x, like="faux_alias")) == [-1.0, 2.0]
+
+
+def test_register_function_wrapper_after_import():
+    ar.autoray.register_module_alias("faux_wrapper", "numpy")
+    x = np.ones(3)
+
+    assert ar.do("sum", x, like="faux_wrapper") == 3.0
+
+    def add_one(fn):
+        def wrapped(*args, **kwargs):
+            return fn(*args, **kwargs) + 1
+
+        return wrapped
+
+    ar.register_function("faux_wrapper", "sum", wrapper=add_one)
+    assert ar.do("sum", x, like="faux_wrapper") == 4.0
+
+
+def test_register_function_module_after_import():
+    ar.autoray.register_module_alias("faux_module", "numpy")
+
+    # numpy.sqrt gives a numpy scalar, but math.sqrt gives a python float
+    assert type(ar.do("sqrt", 4.0, like="faux_module")) is np.float64
+
+    ar.register_function("faux_module", "sqrt", module="math")
+    assert type(ar.do("sqrt", 4.0, like="faux_module")) is float
+
+
+def test_register_function_seen_by_to_backend_dtype():
+    ar.autoray.register_module_alias("faux_dtype", "numpy")
+
+    assert ar.to_backend_dtype("float32", "faux_dtype") is np.float32
+
+    # to_backend_dtype keeps its own cache of results from get_lib_fn
+    ar.register_function("faux_dtype", "float32", "sentinel")
+    assert ar.to_backend_dtype("float32", "faux_dtype") == "sentinel"
+
+
+def test_register_backend_after_class_inferred():
+    class Foo:
+        pass
+
+    f = Foo()
+    lib = Foo.__module__.split(".")[0]
+
+    # fill all three backend caches
+    assert ar.infer_backend(f) == lib
+    assert ar.infer_backend_multi(f, f) == lib
+    assert ar.autoray.infer_backend_device_dtype(f)[0] == lib
+
+    ar.register_backend(Foo, "faux_registered")
+    assert ar.infer_backend(f) == "faux_registered"
+    assert ar.infer_backend_multi(f, f) == "faux_registered"
+    assert ar.autoray.infer_backend_device_dtype(f)[0] == "faux_registered"
+
+
+def test_register_backend_alias_after_class_inferred():
+    class Bar:
+        pass
+
+    # give a different module, so the alias cannot change other tests
+    Bar.__module__ = "faux_lib.submod"
+    b = Bar()
+
+    assert ar.infer_backend(b) == "faux_lib"
+
+    ar.autoray.register_backend_alias("faux_lib", "faux_lib_target")
+    assert ar.infer_backend(b) == "faux_lib_target"
+
+
+def test_tree_register_container_after_class_seen():
+    class MyCont:
+        def __init__(self, items):
+            self.items = list(items)
+
+    def my_map(f, tree, is_leaf):
+        return MyCont(ar.tree_map(f, x, is_leaf) for x in tree.items)
+
+    def my_iter(tree, is_leaf):
+        for x in tree.items:
+            yield from ar.tree_iter(x, is_leaf)
+
+    def my_apply(f, tree, is_leaf):
+        for x in tree.items:
+            ar.tree_apply(f, x, is_leaf)
+
+    t = MyCont([1, 2])
+
+    # these return at the is_leaf test, so they fill only IS_CONTAINER_CACHE
+    assert ar.tree_flatten(t) == [t]
+    assert list(ar.tree_iter(t)) == [t]
+    assert ar.tree_map(lambda x: x, t) is t
+
+    ar.autoray.tree_register_container(MyCont, my_map, my_iter, my_apply)
+
+    assert ar.tree_flatten(t) == [1, 2]
+    assert list(ar.tree_iter(t)) == [1, 2]
+    assert ar.tree_map(lambda x: x + 1, t).items == [2, 3]
+
+    # IS_CONTAINER_CACHE uses the class, so new objects also get the old result
+    assert ar.tree_flatten(MyCont([3, 4])) == [3, 4]
+
+
+def test_tree_register_container_overrides_existing():
+    class MyList(list):
+        pass
+
+    def rev_map(f, tree, is_leaf):
+        return MyList(ar.tree_map(f, x, is_leaf) for x in reversed(tree))
+
+    def rev_iter(tree, is_leaf):
+        for x in reversed(tree):
+            yield from ar.tree_iter(x, is_leaf)
+
+    def rev_apply(f, tree, is_leaf):
+        for x in reversed(tree):
+            ar.tree_apply(f, x, is_leaf)
+
+    t = MyList([1, 2])
+
+    # this is already a container, so it fills the three dispatch caches
+    assert ar.tree_flatten(t) == [1, 2]
+    assert list(ar.tree_iter(t)) == [1, 2]
+    assert ar.tree_map(lambda x: x + 1, t) == [2, 3]
+
+    ar.autoray.tree_register_container(MyList, rev_map, rev_iter, rev_apply)
+
+    assert ar.tree_flatten(t) == [2, 1]
+    assert list(ar.tree_iter(t)) == [2, 1]
+    assert ar.tree_map(lambda x: x + 1, t) == [3, 2]

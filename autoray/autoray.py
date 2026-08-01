@@ -354,8 +354,8 @@ def register_backend(cls, name):
     if not isinstance(cls, type):
         raise TypeError("The array class itself should be supplied.")
 
-    global _CUSTOM_BACKENDS
     _CUSTOM_BACKENDS[cls] = name
+    _invalidate_backend_inference_caches()
 
 
 @functools.lru_cache(None)
@@ -423,6 +423,13 @@ def infer_backend_multi(*arrays):
 
 
 _backend_device_dtype_dispatchers = {}
+
+
+def _invalidate_backend_inference_caches():
+    """Remove all cache entries that depend on the backend of a class."""
+    _infer_class_backend_cached.cache_clear()
+    _infer_class_backend_multi_cached.cache_clear()
+    _backend_device_dtype_dispatchers.clear()
 
 
 def _make_device_dtype_dispatch(like):
@@ -789,6 +796,7 @@ def register_backend_alias(alias, backend):
         The actual backend name.
     """
     _BACKEND_ALIASES[alias] = backend
+    _invalidate_backend_inference_caches()
 
 
 def register_module_alias(alias, module):
@@ -968,11 +976,21 @@ def register_function(
             False if inject_device is None else inject_device,
         )
 
+    if (module is not None) or (alias is not None) or (wrapper is not None):
+        # remove the cached imports, because only ``import_lib_fn`` reads these
+        _FUNCS.pop((backend, name), None)
+        _FUNCS.pop((backend + "[alt]", name), None)
+
+    # remove all namespaces, because each one keeps the functions that it found
+    _NAMESPACE_CACHE.clear()
+    # the dtype cache also keeps results from ``get_lib_fn``
+    _to_backend_dtype_from_str_cached.cache_clear()
+
     if fn is None:
         if wrapper is True:
             # decorator form capturing a lazy wrapper
             def wrapper_decorator(wrapper_fn):
-                _CUSTOM_WRAPPERS[backend, name] = wrapper_fn
+                register_function(backend, name, wrapper=wrapper_fn)
                 return wrapper_fn
 
             return wrapper_decorator
@@ -1097,6 +1115,12 @@ def tree_register_container(cls, mapper, iterator, applier):
     TREE_MAP_REGISTRY[cls] = mapper
     TREE_ITER_REGISTRY[cls] = iterator
     TREE_APPLY_REGISTRY[cls] = applier
+
+    # a parent class can change the result, so remove all of the entries
+    IS_CONTAINER_CACHE.clear()
+    TREE_MAPPER_CACHE.clear()
+    TREE_ITER_CACHE.clear()
+    TREE_APPLIER_CACHE.clear()
 
 
 IS_CONTAINER_CACHE = {}

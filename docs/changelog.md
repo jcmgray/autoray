@@ -2,7 +2,17 @@
 
 Release notes for `autoray`.
 
-## v0.9.0 (unreleased)
+## v0.9.1
+
+**Bug Fixes:**
+
+- Registration now removes the cache entries that depend on it. A registration applies immediately, also to functions and classes that autoray used before. Previously, [`register_function`](autoray.register_function) with `module=`, `alias=` or `wrapper=` had no effect if the code called the function first, because only the first import of a function reads these three arguments.
+- [`register_backend`](autoray.register_backend) and [`register_backend_alias`](autoray.autoray.register_backend_alias) now clear the caches that hold the backend of each class. Autoray then finds the new backend, also for a class that it used before.
+- [`tree_register_container`](autoray.autoray.tree_register_container) now clears the pytree dispatch caches. Autoray then uses the new functions for a container class, also if it used that class as a leaf before, or if it used the functions of a parent class.
+- Registration also clears the namespaces from [`get_namespace`](autoray.get_namespace) and the dtype cache of [`to_backend_dtype`](autoray.to_backend_dtype). A namespace object that you already have keeps the functions that it found. This is the correct behavior: get a new namespace to use a later registration.
+
+
+## v0.9.0 (2026-07-15)
 
 **Enhancements:**
 
