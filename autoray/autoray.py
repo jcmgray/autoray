@@ -3468,7 +3468,7 @@ class TorchDefaultRNG:
 
 
 @register_function("torch", "random.default_rng")
-def torch_default_rng(seed, **kwargs):
+def torch_default_rng(seed=None, **kwargs):
     if isinstance(seed, TorchDefaultRNG):
         return seed
     return TorchDefaultRNG(seed, **kwargs)

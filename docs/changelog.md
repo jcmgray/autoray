@@ -2,7 +2,7 @@
 
 Release notes for `autoray`.
 
-## v0.9.1
+## v0.9.1 (2026-08-03)
 
 **Bug Fixes:**
 
@@ -10,6 +10,8 @@ Release notes for `autoray`.
 - [`register_backend`](autoray.register_backend) and [`register_backend_alias`](autoray.autoray.register_backend_alias) now clear the caches that hold the backend of each class. Autoray then finds the new backend, also for a class that it used before.
 - [`tree_register_container`](autoray.autoray.tree_register_container) now clears the pytree dispatch caches. Autoray then uses the new functions for a container class, also if it used that class as a leaf before, or if it used the functions of a parent class.
 - Registration also clears the namespaces from [`get_namespace`](autoray.get_namespace) and the dtype cache of [`to_backend_dtype`](autoray.to_backend_dtype). A namespace object that you already have keeps the functions that it found. This is the correct behavior: get a new namespace to use a later registration.
+- `autoray` no longer shows the internal exception chain in the `ImportError` that it raises when it cannot find a function.
+- `torch` `"random.default_rng"` now defaults to `seed=None`
 
 
 ## v0.9.0 (2026-07-15)
