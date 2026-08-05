@@ -29,6 +29,8 @@ Beyond that, abstracting the array interface allows you to:
 
 * *swap [custom versions of functions](automatic_dispatch.md#functions)
   for specific backends*
+* *generate [random numbers](random.md) with a single interface to every
+  backend's generators and state*
 * *trace through computations [lazily](lazy_computation) without actually
   running them*
 * *automatically [share intermediates and fold constants](lazy_computation)
@@ -110,6 +112,7 @@ Custom backends and functions can be dynamically registered with:
 
 installation.md
 automatic_dispatch.md
+random.md
 lazy_computation.ipynb
 compilation.ipynb
 ```

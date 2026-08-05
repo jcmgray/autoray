@@ -69,6 +69,13 @@ overrides method 1. above but 2. and 3. still take precedence. The argument to
 array.
 
 
+```{hint}
+Random number generation diverges enough between backends to have its own
+guide - see [](random.md) for [`do`](autoray.do)'s unified generators and the
+``"random.array"`` creation routine.
+```
+
+
 ## Namespace API
 
 An alternative way to call functions is to get a namespace object using
