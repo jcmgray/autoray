@@ -451,12 +451,12 @@ def _make_device_dtype_dispatch(like):
     # B) cache whether we should check dtype/device since relying on try/except
     # can be unexpectedly slow (https://github.com/jcmgray/autoray/pull/30)
     try:
-        like.device
+        _ = like.device
         has_device = True
     except AttributeError:
         has_device = False
     try:
-        like.dtype
+        _ = like.dtype
         has_dtype = True
     except AttributeError:
         has_dtype = False
@@ -545,6 +545,7 @@ _CREATION_ROUTINES = {
     # composed function, all implementations accept dtype and device
     "from_numpy": (True, True),
     "random.default_rng": (False, False),
+    "random.array": (True, True),
     # mark the following as creation routines despite (False, False) defaults
     # -> so specific backends can optionally inject dtype/device for them
     "array": (False, False),
@@ -672,7 +673,7 @@ _FUNC_ALIASES = {}
 #     name. For example, when kwargs need to be translated or results modified
 _CUSTOM_WRAPPERS = {}
 
-# actual cache of funtions to use - this is populated lazily and can be used
+# actual cache of functions to use - this is populated lazily and can be used
 #     to directly set an implementation of a function for a specific backend
 _FUNCS = {}
 
@@ -760,7 +761,7 @@ def import_lib_fn(backend, fn):
 
 def get_lib_fn(backend, fn):
     """Cached retrieval of correct function for backend, all the logic for
-    finding the correct funtion only runs the first time.
+    finding the correct function only runs the first time.
 
     Parameters
     ----------
@@ -985,6 +986,8 @@ def register_function(
     _NAMESPACE_CACHE.clear()
     # the dtype cache also keeps results from ``get_lib_fn``
     _to_backend_dtype_from_str_cached.cache_clear()
+    # this holds arrays built with ``array`` and ``astype``
+    _get_rademacher_table.cache_clear()
 
     if fn is None:
         if wrapper is True:
@@ -1443,7 +1446,7 @@ class Composed:
         return f"Composed('{self._name}')"
 
 
-def compose(fn, *, name=None):
+def compose(fn=None, *, name=None):
     """Take a function consisting of multiple ``autoray.do`` calls and compose
     it into a new, single, named function, registered with ``autoray.do``.
 
@@ -1466,10 +1469,19 @@ def compose(fn, *, name=None):
         def foo_numba(x):
             ...
 
+    Supply ``name`` to register the function under a name other than its own,
+    which requires calling ``compose`` first::
+
+        @compose(name="linalg.qr")
+        def qr(x):
+            ...
+
     Parameters
     ----------
-    fn : callable
-        The funtion to compose, and its default implementation.
+    fn : callable, optional
+        The function to compose, and its default implementation. Omitting it
+        returns a decorator that takes it, which is how the second form above
+        supplies ``name``.
     name : str, optional
         The name of the composed function. If not provided, the name of the
         function will be used.
@@ -2255,6 +2267,201 @@ register_dispatch("true_divide", binary_dispatcher, raw_signature=False)
 register_dispatch("add", binary_dispatcher, raw_signature=False)
 register_dispatch("subtract", binary_dispatcher, raw_signature=False)
 
+
+def random_array_dispatcher(shape, rng=None, **kwargs):
+    """Use the generator's backend when given, or infer it from ``shape``."""
+    if (rng is not None) and not isinstance(rng, numbers.Integral):
+        return _infer_class_backend_cached(rng.__class__)
+    backend = _infer_class_backend_cached(shape.__class__)
+    return "numpy" if backend == "builtins" else backend
+
+
+register_dispatch("random.array", random_array_dispatcher)
+
+
+_RANDOM_DISTS = ("normal", "uniform", "rademacher")
+
+
+_COMPLEX_TO_REAL_DTYPE = {
+    "complex64": "float32",
+    "complex128": "float64",
+}
+
+_RADEMACHER_SIGNS = (-1.0, 1.0)
+
+# four roots of unity, the complex analogue of {-1, +1}
+_RADEMACHER_ROOTS = (1.0 + 0.0j, 0.0 + 1.0j, -1.0 + 0.0j, -0.0 - 1.0j)
+
+# faster per backend implementations of _sample_rademacher
+_RADEMACHER_SAMPLERS = {}
+
+# those of the above that also accept rng=None, the rest need a generator,
+# since only these reach integers through the shared random state
+_RADEMACHER_SHARED = set()
+
+
+@functools.lru_cache(None)
+def _get_rademacher_table(dtype_name, backend):
+    """The lookup table to index for a rademacher sample: the two signs, or
+    the four roots of unity for a complex ``dtype_name``.
+    """
+    if dtype_name in _COMPLEX_TO_REAL_DTYPE:
+        values = _RADEMACHER_ROOTS
+    else:
+        values = _RADEMACHER_SIGNS
+    return astype(do("array", values, like=backend), dtype_name)
+
+
+def _sample_rademacher(rng, shape, dtype_name, device, backend):
+    """Draw from ``{-1, +1}``, or from the four roots of unity for a complex
+    ``dtype_name``. Both have modulus one and mean zero.
+    """
+    if (rng is not None) or (backend in _RADEMACHER_SHARED):
+        fast = _RADEMACHER_SAMPLERS.get(backend)
+        if fast is not None:
+            return fast(rng, shape, dtype_name, device)
+
+    if dtype_name in _COMPLEX_TO_REAL_DTYPE:
+        # draw a sign, then which component carries it
+        real_dtype = _COMPLEX_TO_REAL_DTYPE[dtype_name]
+        s = _sample_rademacher(rng, shape, real_dtype, device, backend)
+        m = _sample_random_array(
+            rng, "uniform", shape, real_dtype, device, backend
+        )
+        re = s * astype(m < 0.5, real_dtype)
+        return do("complex", re, s - re, like=backend)
+
+    # nothing above applies, so map a uniform sample onto {-1, +1}
+    u = _sample_random_array(
+        rng, "uniform", shape, dtype_name, device, backend
+    )
+    return 1.0 - 2.0 * astype(u < 0.5, dtype_name)
+
+
+def _sample_random_array(rng, dist, shape, dtype_name, device, backend):
+    kwargs = {}
+    if backend in ("cupy", "jax", "numpy", "torch"):
+        # these sample at a given dtype, the rest are cast after sampling
+        kwargs["dtype"] = to_backend_dtype(dtype_name, backend)
+    if (backend == "torch") and (device is not None):
+        kwargs["device"] = device
+
+    if rng is None:
+        # use the backend's shared random state
+        x = do(f"random.{dist}", size=shape, like=backend, **kwargs)
+    elif dist == "normal":
+        if hasattr(rng, "standard_normal"):
+            sample = rng.standard_normal
+        else:
+            sample = rng.normal
+        x = sample(size=shape, **kwargs)
+    else:
+        x = rng.random(size=shape, **kwargs)
+
+    if get_dtype_name(x) != dtype_name:
+        x = astype(x, dtype_name)
+    if (device is not None) and (backend != "torch"):
+        # only torch takes a device, so the rest generate on the default
+        # device and possibly move the samples after
+        x = to_device(x, device)
+    return x
+
+
+@compose(name="random.array")
+def random_array(
+    shape,
+    dist="normal",
+    loc=0.0,
+    scale=1.0,
+    dtype=None,
+    device=None,
+    rng=None,
+    backend=None,
+):
+    """Generate an array of random samples.
+
+    Parameters
+    ----------
+    shape : tuple[int]
+        Shape of the generated array.
+    dist : {"normal", "uniform", "rademacher"}, optional
+        Distribution to sample before applying ``loc`` and ``scale``.
+        ``"rademacher"`` draws each entry from ``{-1, +1}``, or from the four
+        roots of unity for a complex ``dtype``, with equal probability.
+    loc : float or complex, optional
+        Location applied after sampling.
+    scale : float or complex, optional
+        Scale applied after sampling.
+    dtype : str or dtype_like, optional
+        Output dtype, defaulting to that inferred from ``like``, or
+        ``float64`` if there is none.
+    device : str or device_like, optional
+        Output device. Defaults to that inferred from ``like``.
+    rng : int or random number generator, optional
+        ``None`` uses the backend's shared random state where one is available.
+        An integer makes a new generator for this call. A backend-specific
+        generator uses and advances its own state, and also supplies the
+        backend, so that ``like`` is not needed. Each backend additionally
+        accepts its own seed and state objects, such as a numpy
+        ``SeedSequence`` or ``BitGenerator``, or a jax key.
+
+    Returns
+    -------
+    array
+        Random samples with ``x = loc + scale * z``. Before this transform, a
+        complex normal or rademacher ``z`` has total variance one, and a
+        complex uniform ``z`` fills the unit square. A rademacher ``z`` has
+        modulus exactly one.
+    """
+    if dist not in _RANDOM_DISTS:
+        raise ValueError(
+            f"Unknown distribution {dist!r}, expected one of {_RANDOM_DISTS}."
+        )
+
+    dtype_name = "float64" if dtype is None else _dtype_to_name_cached(dtype)
+
+    # get a generator from the supplied seed, key, or generator
+    if rng is not None:
+        if backend == "torch":
+            # torch needs the generator and output on the same device
+            rng = do("random.default_rng", rng, device=device, like=backend)
+        else:
+            rng = do("random.default_rng", rng, like=backend)
+    elif backend == "jax":
+        # jax has no shared random state, so use the module level generator
+        rng = _get_jax_default_rng()
+
+    if dist == "rademacher":
+        x = _sample_rademacher(rng, shape, dtype_name, device, backend)
+    elif dtype_name in _COMPLEX_DTYPES:
+        if (dist == "normal") and (backend in ("jax", "torch")):
+            # can sample complex normal directly
+            x = _sample_random_array(
+                rng, dist, shape, dtype_name, device, backend
+            )
+        else:
+            real_dtype = _COMPLEX_TO_REAL_DTYPE[dtype_name]
+            re = _sample_random_array(
+                rng, dist, shape, real_dtype, device, backend
+            )
+            im = _sample_random_array(
+                rng, dist, shape, real_dtype, device, backend
+            )
+            if dist == "normal":
+                re = re / math.sqrt(2)
+                im = im / math.sqrt(2)
+            x = do("complex", re, im, like=backend)
+    else:
+        x = _sample_random_array(rng, dist, shape, dtype_name, device, backend)
+
+    # only compare with the default if it is a scalar, an array is always used
+    if not isinstance(scale, numbers.Number) or scale != 1.0:
+        x = scale * x
+    if not isinstance(loc, numbers.Number) or loc != 0.0:
+        x = loc + x
+    return x
+
+
 # TODO: register other binary functions?
 
 # --------------- object to act as drop-in replace for numpy ---------------- #
@@ -2265,7 +2472,11 @@ class InjectDtypeDevice:
     None, into the kwargs of function `fn`.
     """
 
-    __slots__ = ("_fn", "_device", "_dtype")
+    __slots__ = (
+        "_device",
+        "_dtype",
+        "_fn",
+    )
 
     def __init__(self, fn, device=None, dtype=None):
         self._fn = fn
@@ -2493,6 +2704,28 @@ register_function("numpy", "random.uniform", wrapper=with_dtype_wrapper)
 
 register_function("numpy", "complex", complex_add_re_im)
 
+
+def _rademacher_numpy(rng, shape, dtype_name, device):
+    # int8 is the narrowest draw numpy offers, and enough for one or two bits
+    complex_dtype = dtype_name in _COMPLEX_TO_REAL_DTYPE
+    high = 4 if complex_dtype else 2
+    if rng is None:
+        # the legacy global functions are numpy's shared random state, and
+        # randint takes a dtype, unlike uniform which is float64 only
+        import numpy
+
+        k = numpy.random.randint(0, high, size=shape, dtype="int8")
+    else:
+        k = rng.integers(0, high, size=shape, dtype="int8")
+
+    if complex_dtype:
+        return _get_rademacher_table(dtype_name, "numpy")[k]
+    return (2 * k - 1).astype(dtype_name)
+
+
+_RADEMACHER_SAMPLERS["numpy"] = _rademacher_numpy
+_RADEMACHER_SHARED.add("numpy")
+
 # ---------------------------------- cupy ----------------------------------- #
 
 
@@ -2553,6 +2786,28 @@ def cupy_from_numpy(x, dtype=None, device=None):  # pragma: no cover
         return cupy.asarray(x, dtype=dtype)
 
 
+def _rademacher_cupy(rng, shape, dtype_name, device):  # pragma: no cover
+    # int8 is both the cheapest draw and the fastest index here
+    table = _get_rademacher_table(dtype_name, "cupy")
+    if rng is None:
+        import cupy
+
+        k = cupy.random.randint(0, len(table), size=shape, dtype="int8")
+    else:
+        k = rng.integers(0, len(table), size=shape, dtype="int8")
+    # the cached table may have been built on another device
+    x = to_device(table, k.device)[k]
+    if device is not None:
+        # the generator has its own device, so this generates there and
+        # possibly moves the samples after
+        x = to_device(x, device)
+    return x
+
+
+_RADEMACHER_SAMPLERS["cupy"] = _rademacher_cupy
+_RADEMACHER_SHARED.add("cupy")
+
+
 register_module_alias("cupy.scipy", "cupyx.scipy")
 
 register_function("cupy", "linalg.cholesky", wrapper=cholesky_manual_upper)
@@ -2607,16 +2862,48 @@ def jax_from_numpy(x, dtype=None, device=None):
     return jax.numpy.asarray(x, dtype=dtype, device=device)
 
 
+@functools.cache
+def _warn_jax_generated_seed():
+    """Warn one time only, since the message applies to every seedless call."""
+    import warnings
+
+    warnings.warn(
+        "JAX has no shared random state, so random.default_rng(None) "
+        "generates a seed. Inside jax.jit that happens one time, while the "
+        "function is compiled, and every call then reuses the same seed. "
+        "Pass a seed or key into the compiled function instead.",
+        RuntimeWarning,
+    )
+
+
 class JaxDefaultRNG:
     """Stateful but deterministic random number generator for JAX following
-    numpy's Generator API, compatible with `jax.jit`.
+    numpy's Generator API.
+
+    Create this generator inside a ``jax.jit`` function from a seed or key
+    passed to that function. A compiled function that captures a generator
+    created outside it reuses the same values. Later use of that generator can
+    also fail. ``seed=None`` warns one time, because compilation chooses the
+    generated seed once.
     """
 
-    def __init__(self, seed, **kwargs):
+    def __init__(self, seed=None, **kwargs):
         jax = get_jax()
 
         self.jax = jax
+        if seed is None:
+            from random import SystemRandom
+
+            _warn_jax_generated_seed()
+            seed = SystemRandom().randint(-(2**63), 2**63 - 1)
         self.key = jax.random.key(seed, **kwargs)
+
+    @classmethod
+    def from_key(cls, key):
+        rng = object.__new__(cls)
+        rng.jax = get_jax()
+        rng.key = key
+        return rng
 
     def binomial(self, n, p, size=None, **kwargs):
         self.key, subkey = self.jax.random.split(self.key)
@@ -2702,9 +2989,20 @@ class JaxDefaultRNG:
 
 
 @register_function("jax", "random.default_rng")
-def jax_default_rng(seed, **kwargs):
+def jax_default_rng(seed=None, **kwargs):
     if isinstance(seed, JaxDefaultRNG):
         return seed
+
+    jax = get_jax()
+    if isinstance(seed, jax.Array):
+        # only a key has key data, this also accepts the old raw uint32 form
+        try:
+            jax.random.key_data(seed)
+        except TypeError:
+            pass
+        else:
+            return JaxDefaultRNG.from_key(seed)
+
     return JaxDefaultRNG(seed, **kwargs)
 
 
@@ -2722,7 +3020,6 @@ def jax_random_seed(seed=None):
 
 
 def _get_jax_default_rng():
-    global _JAX_DEFAULT_RNG
     if _JAX_DEFAULT_RNG is None:
         jax_random_seed()
     return _JAX_DEFAULT_RNG
@@ -2740,6 +3037,25 @@ def jax_random_normal(loc=0.0, scale=1.0, size=None, **kwargs):
     return _get_jax_default_rng().normal(
         loc=loc, scale=scale, size=size, **kwargs
     )
+
+
+def _rademacher_jax(rng, shape, dtype_name, device):
+    rng.key, subkey = rng.jax.random.split(rng.key)
+    if dtype_name in _COMPLEX_TO_REAL_DTYPE:
+        # take the two lowest bits, cheaper than randint
+        roots = _get_rademacher_table(dtype_name, "jax")
+        bits = rng.jax.random.bits(subkey, shape, dtype="uint8")
+        x = roots[bits & 3]
+    else:
+        x = rng.jax.random.rademacher(subkey, shape, dtype=dtype_name)
+    if device is not None:
+        # jax.random takes no device, so this generates on the default device
+        # and possibly moves the samples after
+        x = to_device(x, device)
+    return x
+
+
+_RADEMACHER_SAMPLERS["jax"] = _rademacher_jax
 
 
 register_backend_alias("jaxlib", "jax")
@@ -3072,10 +3388,15 @@ class TensorflowDefaultRNG:
 
 
 @register_function("tensorflow", "random.default_rng")
-def tensorflow_default_rng(seed, **kwargs):
+def tensorflow_default_rng(seed=None, **kwargs):
     if isinstance(seed, TensorflowDefaultRNG):
         return seed
     return TensorflowDefaultRNG(seed, **kwargs)
+
+
+register_function(
+    "tensorflow", "random.seed", module="tensorflow.random", alias="set_seed"
+)
 
 
 register_backend(TensorflowDefaultRNG, "tensorflow")
@@ -3337,7 +3658,25 @@ def torch_nonzero_wrap(torch_nonzero):
 class TorchDefaultRNG:
     def __init__(self, seed=None, device=None, dtype=None):
         self._torch = get_torch()
-        self._generator = self._torch.Generator(device=device)
+        if isinstance(seed, self._torch.Generator):
+            # a torch generator cannot be moved, so it must already match
+            if device is not None:
+                device = self._torch.device(device)
+                # an index of None means 'any', which torch accepts either way
+                if (device.type != seed.device.type) or (
+                    (device.index is not None)
+                    and (seed.device.index is not None)
+                    and (device.index != seed.device.index)
+                ):
+                    raise ValueError(
+                        f"The supplied generator is on device {seed.device}, "
+                        f"but device {device} was requested. torch requires "
+                        "the generator and the output to be on the same "
+                        "device."
+                    )
+            self._generator = seed
+        else:
+            self._generator = self._torch.Generator(device=device)
 
         if isinstance(dtype, str):
             dtype = to_backend_dtype(dtype, like="torch")
@@ -3346,7 +3685,7 @@ class TorchDefaultRNG:
         else:
             self._dtype = None
 
-        if seed is not None:
+        if (seed is not None) and not isinstance(seed, self._torch.Generator):
             self._generator.manual_seed(seed)
 
     def _set_default_dtype(self, kwargs):
@@ -3474,26 +3813,88 @@ def torch_default_rng(seed=None, **kwargs):
     return TorchDefaultRNG(seed, **kwargs)
 
 
+@register_function("torch", "random.seed")
+def torch_random_seed(seed=None):
+    torch = get_torch()
+    if seed is None:
+        # torch.random.seed does this, but does not accept a seed itself
+        torch.random.seed()
+    else:
+        torch.manual_seed(seed)
+
+
+def _rademacher_torch(rng, shape, dtype_name, device):
+    # a generator of None means torch's shared random state
+    torch = get_torch() if rng is None else rng._torch
+    generator = None if rng is None else rng._generator
+    real_dtype = _COMPLEX_TO_REAL_DTYPE.get(dtype_name, dtype_name)
+    kwargs = {"dtype": to_backend_dtype(real_dtype, "torch")}
+    if device is not None:
+        kwargs["device"] = torch.device(device)
+    elif rng is not None:
+        rng._set_default_device(kwargs)
+    else:
+        kwargs["device"] = torch.get_default_device()
+
+    if dtype_name in _COMPLEX_TO_REAL_DTYPE:
+        roots = _get_rademacher_table(dtype_name, "torch")
+        if kwargs["device"].type == "cpu":
+            # on cpu torch.randint costs the same at every width, and about
+            # twice a float sample, so take the two bits from one of those
+            u = torch.rand(shape, generator=generator, **kwargs)
+            k = (u * 4.0).long()
+        else:
+            # elsewhere it is the cheaper source, and narrower than int64
+            # only makes the indexing slower
+            k = torch.randint(
+                0, 4, shape, generator=generator, device=kwargs["device"]
+            )
+        return roots.to(kwargs["device"])[k]
+
+    u = torch.rand(shape, generator=generator, **kwargs)
+    one = torch.ones((), **kwargs)
+    return torch.where(u < 0.5, -one, one)
+
+
+_RADEMACHER_SAMPLERS["torch"] = _rademacher_torch
+_RADEMACHER_SHARED.add("torch")
+
+
 register_backend(TorchDefaultRNG, "torch")
 
 register_function("torch", "linalg.expm", module="torch", alias="matrix_exp")
 register_function(
     "torch", "scipy.linalg.expm", module="torch", alias="matrix_exp"
 )
-register_function(
-    "torch",
-    "random.normal",
-    module="torch",
-    alias="randn",
-    wrapper=scale_random_normal_manually,
-)
-register_function(
-    "torch",
-    "random.uniform",
-    module="torch",
-    alias="rand",
-    wrapper=scale_random_uniform_manually,
-)
+
+
+@register_function("torch", "random.normal")
+def torch_random_normal(loc=0.0, scale=1.0, size=None, dtype=None, **kwargs):
+    torch = get_torch()
+    if isinstance(dtype, str):
+        dtype = to_backend_dtype(dtype, like="torch")
+    if dtype is not None:
+        # sample at this dtype directly, not by casting a real draw
+        kwargs["dtype"] = dtype
+    x = torch.randn(_handle_size_to_shape(size), **kwargs)
+    if (loc != 0.0) or (scale != 1.0):
+        x = scale * x + loc
+    return x
+
+
+@register_function("torch", "random.uniform")
+def torch_random_uniform(low=0.0, high=1.0, size=None, dtype=None, **kwargs):
+    torch = get_torch()
+    if isinstance(dtype, str):
+        dtype = to_backend_dtype(dtype, like="torch")
+    if dtype is not None:
+        # as above, e.g. a complex dtype fills the complex unit square
+        kwargs["dtype"] = dtype
+    x = torch.rand(_handle_size_to_shape(size), **kwargs)
+    if (low != 0.0) or (high != 1.0):
+        x = (high - low) * x + low
+    return x
+
 
 register_function("torch", "array", alias="tensor")
 register_function("torch", "asarray", alias="as_tensor")
@@ -3650,7 +4051,7 @@ def torch_copy(x):
 @register_function("torch", "transpose")
 def torch_transpose(x, axes=None):
     if axes is None:
-        axes = reversed(range(0, x.dim()))
+        axes = reversed(range(x.dim()))
     return x.permute(*axes)
 
 
@@ -4056,9 +4457,13 @@ class MlxDefaultRNG:
     numpy's Generator API.
     """
 
-    def __init__(self, seed, **kwargs):
+    def __init__(self, seed=None, **kwargs):
         mx = get_mlx()
         self.mx = mx
+        if seed is None:
+            from random import SystemRandom
+
+            seed = SystemRandom().randint(0, 2**31 - 1)
         self.key = mx.random.key(seed, **kwargs)
 
     # TODO: implement binomial, choice, exponential, poisson when mlx adds them
@@ -4130,7 +4535,7 @@ class MlxDefaultRNG:
 
 
 @register_function("mlx", "random.default_rng")
-def mlx_default_rng(seed, **kwargs):
+def mlx_default_rng(seed=None, **kwargs):
     if isinstance(seed, MlxDefaultRNG):
         return seed
     return MlxDefaultRNG(seed, **kwargs)
@@ -4139,36 +4544,48 @@ def mlx_default_rng(seed, **kwargs):
 register_backend(MlxDefaultRNG, "mlx")
 
 
-_MLX_DEFAULT_RNG = None
+class MlxSharedRNG(MlxDefaultRNG):
+    """Draws from mlx's own shared random state, which ``mx.random.seed``
+    sets, rather than from a key of its own.
+    """
+
+    def __init__(self):
+        self.mx = get_mlx()
+
+    def _split_key(self):
+        # a key of None makes mlx use its shared state
+        return None
+
+
+register_backend(MlxSharedRNG, "mlx")
+
+
+@functools.cache
+def _get_mlx_shared_rng():
+    return MlxSharedRNG()
 
 
 @register_function("mlx", "random.seed")
 def mlx_random_seed(seed=None):
-    global _MLX_DEFAULT_RNG
+    mx = get_mlx()
     if seed is None:
+        # mx.random.seed requires an integer
         from random import SystemRandom
 
         seed = SystemRandom().randint(0, 2**31 - 1)
-    _MLX_DEFAULT_RNG = MlxDefaultRNG(seed)
-
-
-def _get_mlx_default_rng():
-    global _MLX_DEFAULT_RNG
-    if _MLX_DEFAULT_RNG is None:
-        mlx_random_seed()
-    return _MLX_DEFAULT_RNG
+    mx.random.seed(seed)
 
 
 @register_function("mlx", "random.uniform")
 def mlx_random_uniform(low=0.0, high=1.0, size=None, **kwargs):
-    return _get_mlx_default_rng().uniform(
+    return _get_mlx_shared_rng().uniform(
         low=low, high=high, size=size, **kwargs
     )
 
 
 @register_function("mlx", "random.normal")
 def mlx_random_normal(loc=0.0, scale=1.0, size=None, **kwargs):
-    return _get_mlx_default_rng().normal(
+    return _get_mlx_shared_rng().normal(
         loc=loc, scale=scale, size=size, **kwargs
     )
 

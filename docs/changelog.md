@@ -2,6 +2,21 @@
 
 Release notes for `autoray`.
 
+## v0.10.0 (unreleased)
+
+**Enhancements:**
+
+- Added [`random_array`](autoray.autoray.random_array), i.e. `do("random.array", ...)`, for backend-agnostic normal, uniform and rademacher random arrays. It accepts backend-specific generators or seeds, inherits dtype and device from `like`, and generates complex normal samples with unit total variance. A complex rademacher sample is a choice from the four roots of unity, so it also has modulus one. `jax` `"random.default_rng"` with `seed=None` warns one time, because tracing fixes its generated seed.
+- `jax`, `mlx` and `tensorflow` `"random.default_rng"` now default to `seed=None`, and `jax` also accepts a key. `torch` `"random.default_rng"` accepts a `torch.Generator`, and raises a descriptive error if a device is also requested that the generator cannot supply.
+- Added a [random numbers](random.md) documentation guide, covering [`random_array`](autoray.autoray.random_array), the generator objects and their per backend method coverage, the shared random state, the complex normal convention, and the rules for `jax.jit` and `torch.compile`.
+
+**Bug Fixes:**
+
+- `torch` `"random.normal"` and `"random.uniform"` now generate at the requested `dtype` rather than casting afterwards. A complex `dtype` therefore gets a complex sample rather than a real one cast up, which previously left the imaginary part zero, and `float64` now carries full double precision entropy.
+- `torch` `"random.seed"` is now registered, and seeds the shared random state. Previously it resolved to `torch.random.seed`, which takes no seed and thus raised `TypeError`.
+- `tensorflow` `"random.seed"` is now registered, as an alias of `tf.random.set_seed`. Previously it raised `ImportError`.
+- `mlx` now uses mlx's own shared random state, rather than a separate module level generator of autoray's. `do("random.seed", seed, like="mlx")` therefore reaches `mx.random.seed`, and mixing autoray and raw `mlx.core.random` calls is now reproducible in both directions.
+
 ## v0.9.1 (2026-08-03)
 
 **Bug Fixes:**
