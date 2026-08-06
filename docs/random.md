@@ -53,6 +53,10 @@ The sampled value `z` is set by `dist`:
 
 * `dist="normal"` draws a normal sample with mean zero and variance one.
 * `dist="uniform"` draws a sample from `[0, 1)`.
+* `dist="rademacher"` draws `-1` or `+1` with equal probability, giving mean
+  zero and variance one like `"normal"`, but with every entry the same
+  magnitude. This is the usual choice for a Hutchinson trace estimator, where
+  it has the lower variance of the two.
 
 If `loc` and `scale` are provided, the final values are transformed as
 `scale * z + loc`. Either can be an array, which broadcasts against the
@@ -108,7 +112,9 @@ ar.do("random.normal", size=(3,), dtype="complex128", like="numpy")
 ````
 
 A complex `"uniform"` sample fills the complex unit square, i.e. the real and
-imaginary parts are each drawn from `[0, 1)`.
+imaginary parts are each drawn from `[0, 1)`. A complex `"rademacher"` sample
+is a choice from the four roots of unity $\{1, i, -1, -i\}$, which likewise
+satisfy $\mathbb{E}[|z|^2] = 1$ and $\mathbb{E}[z z^\dagger] = I$.
 
 
 ## Controlling the state with `rng`
@@ -158,6 +164,10 @@ the generator and the output to share a device. Requesting a `device` that the
 supplied generator cannot serve raises a descriptive `ValueError` rather than
 a torch internal error.
 ```
+
+Of the backends here only torch generates directly on a requested `device`. The
+rest take no device at all, so `"random.array"` generates on their default
+device and moves the result, meaning a `device` that differs costs a copy.
 
 
 ## Generator objects

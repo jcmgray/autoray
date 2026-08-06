@@ -6,9 +6,9 @@ Release notes for `autoray`.
 
 **Enhancements:**
 
-- Added ``do("random.array", ...)`` for backend-agnostic normal and uniform random arrays. It accepts backend-specific generators or seeds, inherits dtype and device from ``like``, and generates complex normal samples with unit total variance. JAX ``random.default_rng(None)`` warns one time, because tracing fixes its generated seed.
+- Added [`random_array`](autoray.autoray.random_array), i.e. `do("random.array", ...)`, for backend-agnostic normal, uniform and rademacher random arrays. It accepts backend-specific generators or seeds, inherits dtype and device from `like`, and generates complex normal samples with unit total variance. A complex rademacher sample is a choice from the four roots of unity, so it also has modulus one. `jax` `"random.default_rng"` with `seed=None` warns one time, because tracing fixes its generated seed.
 - `jax`, `mlx` and `tensorflow` `"random.default_rng"` now default to `seed=None`, and `jax` also accepts a key. `torch` `"random.default_rng"` accepts a `torch.Generator`, and raises a descriptive error if a device is also requested that the generator cannot supply.
-- Added a [random numbers](random.md) documentation guide, covering `"random.array"`, the generator objects and their per backend method coverage, the shared random state, the complex normal convention, and the rules for `jax.jit` and `torch.compile`.
+- Added a [random numbers](random.md) documentation guide, covering [`random_array`](autoray.autoray.random_array), the generator objects and their per backend method coverage, the shared random state, the complex normal convention, and the rules for `jax.jit` and `torch.compile`.
 
 **Bug Fixes:**
 

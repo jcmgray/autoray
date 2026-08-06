@@ -1,3 +1,5 @@
+from collections import Counter
+
 import pytest
 
 import autoray as ar
@@ -163,7 +165,7 @@ def test_jax_jit_random():
 
 class TestRandomArray:
     @pytest.mark.parametrize("device", ["inherited", "cpu", "cuda"])
-    @pytest.mark.parametrize("dist", ["normal", "uniform"])
+    @pytest.mark.parametrize("dist", ["normal", "uniform", "rademacher"])
     @pytest.mark.parametrize(
         "backend,dtype,fn",
         gen_params(
@@ -237,7 +239,7 @@ class TestRandomArray:
         x = ar.do("to_numpy", x)
         assert (abs(x) ** 2).mean() == pytest.approx(1.0, abs=0.03)
 
-    @pytest.mark.parametrize("dist", ["normal", "uniform"])
+    @pytest.mark.parametrize("dist", ["normal", "uniform", "rademacher"])
     @pytest.mark.parametrize(
         "backend,fn",
         gen_params(
@@ -268,11 +270,36 @@ class TestRandomArray:
             2.0 + 3.0 * ar.do("to_numpy", x)
         )
 
+    # rng=None takes the generic path, an rng the per backend fast one
+    @pytest.mark.parametrize("rng", [42, None])
+    @pytest.mark.parametrize(
+        "backend,dtype,fn",
+        gen_params(
+            backends=_RANDOM_BACKENDS,
+            dtypes=...,
+            fns=["random.array"],
+        ),
+    )
+    def test_rademacher_values(self, backend, dtype, fn, rng):
+        n = 20_000
+        x = ar.do(
+            fn, (n,), dist="rademacher", dtype=dtype, rng=rng, like=backend
+        )
+        assert ar.get_dtype_name(x) == dtype
+        x = ar.do("to_numpy", x)
+        assert abs(x) == pytest.approx(1.0)
+
+        # both signs appear, and all four roots of unity for a complex dtype
+        counts = Counter(x.tolist())
+        assert len(counts) == (4 if "complex" in dtype else 2)
+        # each is equally likely, well within 5 sigma at this size
+        expected = n / len(counts)
+        assert min(counts.values()) > expected * 0.9
+        assert max(counts.values()) < expected * 1.1
+
     def test_unknown_distribution(self):
-        with pytest.raises(
-            ValueError, match="Unknown distribution 'rademacher'"
-        ):
-            ar.do("random.array", (2, 3), dist="rademacher", like="numpy")
+        with pytest.raises(ValueError, match="Unknown distribution 'cauchy'"):
+            ar.do("random.array", (2, 3), dist="cauchy", like="numpy")
 
     def test_numpy_generator_selects_backend(self):
         numpy = pytest.importorskip("numpy")
@@ -304,7 +331,7 @@ class TestRandomArray:
         y = getattr(rng, method)((3, 4), dtype=numpy.float32)
         assert x == pytest.approx(y)
 
-    @pytest.mark.parametrize("dist", ["normal", "uniform"])
+    @pytest.mark.parametrize("dist", ["normal", "uniform", "rademacher"])
     @pytest.mark.parametrize(
         "backend,dtype,fn",
         gen_params(
