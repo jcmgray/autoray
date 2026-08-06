@@ -2,7 +2,14 @@
 
 Release notes for `autoray`.
 
-## v0.10.0 (unreleased)
+## v0.10.1 (unreleased)
+
+**Enhancements:**
+
+**Bug Fixes:**
+
+
+## v0.10.0 (2026-08-06)
 
 **Enhancements:**
 
@@ -16,6 +23,7 @@ Release notes for `autoray`.
 - `torch` `"random.seed"` is now registered, and seeds the shared random state. Previously it resolved to `torch.random.seed`, which takes no seed and thus raised `TypeError`.
 - `tensorflow` `"random.seed"` is now registered, as an alias of `tf.random.set_seed`. Previously it raised `ImportError`.
 - `mlx` now uses mlx's own shared random state, rather than a separate module level generator of autoray's. `do("random.seed", seed, like="mlx")` therefore reaches `mx.random.seed`, and mixing autoray and raw `mlx.core.random` calls is now reproducible in both directions.
+
 
 ## v0.9.1 (2026-08-03)
 
@@ -51,6 +59,7 @@ Release notes for `autoray`.
 - Fixed [`get_namespace`](autoray.get_namespace) caching for backends with unhashable device objects such as `cupy.cuda.Device`.
 - Added cupy `linalg.cholesky` support for the `upper` kwarg via the new generic [`cholesky_manual_upper`](autoray.autoray.cholesky_manual_upper) wrapper.
 - Torch: `random.default_rng` now only inherits floating point dtypes from the `like` argument and creates generated arrays on the same device as its generator.
+
 
 ## v0.8.11 (2026-06-08)
 
