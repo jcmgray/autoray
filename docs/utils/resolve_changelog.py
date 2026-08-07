@@ -13,11 +13,11 @@ If ``output.md`` is not given, prints to stdout.
 
 from __future__ import annotations
 
+import ast
 import functools
-import importlib
-import inspect
 import re
 import sys
+import warnings
 from pathlib import Path
 
 DOCS_DIR = Path(__file__).resolve().parents[1]
@@ -41,6 +41,7 @@ def get_project_metadata():
 
 
 PACKAGE, BASE, REPO_BASE = get_project_metadata()
+PACKAGE_DIR = PROJECT_DIR / PACKAGE
 API_BASE = f"{BASE}/autoapi"
 
 OBJECT_ROLES = {
@@ -56,7 +57,7 @@ OBJECT_ROLES = {
 }
 CALLABLE_ROLES = {"func", "meth"}
 DOC_SUFFIXES = {".ipynb", ".md", ".rst"}
-RESOLUTION_ERRORS = (AttributeError, ImportError, ValueError)
+RESOLUTION_ERRORS = (ValueError,)
 
 
 def is_package_reference(target):
@@ -79,8 +80,8 @@ def display_name(role, raw_target):
         return explicit_title, target
 
     target = target.strip()
-    shortened = target.startswith("~")
-    canonical = target.lstrip("~")
+    shortened = target.startswith(("~", "."))
+    canonical = target.lstrip("~.")
 
     if role == "doc":
         label = canonical.split("#", 1)[0].rstrip("/")
@@ -103,44 +104,152 @@ def display_name(role, raw_target):
     return label, canonical
 
 
+def iter_api_names(nodes, prefix=()):
+    """Yield statically defined API names from a sequence of AST nodes."""
+    for node in nodes:
+        if isinstance(node, ast.ClassDef):
+            name = ".".join((*prefix, node.name))
+            yield name
+            yield from iter_api_names(node.body, (*prefix, node.name))
+        elif isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):
+            yield ".".join((*prefix, node.name))
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = (
+                node.targets if isinstance(node, ast.Assign) else [node.target]
+            )
+            for target in targets:
+                if isinstance(target, ast.Name):
+                    yield ".".join((*prefix, target.id))
+
+
+def dotted_ast_name(node):
+    """Return the dotted name represented by an AST node, if available."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        parent = dotted_ast_name(node.value)
+        if parent is not None:
+            return f"{parent}.{node.attr}"
+    return None
+
+
 @functools.cache
-def import_dotted_name(name):
-    """Import a dotted Python name by finding the longest module prefix."""
-    parts = name.split(".")
+def discover_api_objects():
+    """Map API definitions and import aliases without importing modules."""
+    objects = {}
+    aliases = {}
 
-    for index in range(len(parts), 0, -1):
-        module_name = ".".join(parts[:index])
-        try:
-            obj = importlib.import_module(module_name)
-        except ImportError:
-            continue
+    for path in PACKAGE_DIR.rglob("*.py"):
+        relative = path.relative_to(PACKAGE_DIR).with_suffix("")
+        parts = relative.parts
+        is_package = parts[-1] == "__init__"
+        if is_package:
+            parts = parts[:-1]
+        module = ".".join((PACKAGE, *parts))
+        objects[module] = module
 
-        for attr in parts[index:]:
-            obj = getattr(obj, attr)
-        return obj
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", SyntaxWarning)
+            tree = ast.parse(
+                path.read_text(encoding="utf-8"),
+                filename=str(path),
+            )
+        for name in iter_api_names(tree.body):
+            objects[f"{module}.{name}"] = module
 
-    raise ImportError(f"Could not import '{name}'.")
+        package_parts = module.split(".")
+        if not is_package:
+            package_parts = package_parts[:-1]
+
+        for node in tree.body:
+            if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                value = dotted_ast_name(node.value)
+                if value is None:
+                    continue
+                targets = (
+                    node.targets
+                    if isinstance(node, ast.Assign)
+                    else [node.target]
+                )
+                for target in targets:
+                    public_name = dotted_ast_name(target)
+                    if public_name is not None and "." in public_name:
+                        aliases[f"{module}.{public_name}"] = (
+                            f"{module}.{value}"
+                        )
+                continue
+
+            if not isinstance(node, ast.ImportFrom) or node.module is None:
+                continue
+
+            if node.level:
+                keep = len(package_parts) - node.level + 1
+                imported_parts = package_parts[:keep]
+                imported_parts.extend(node.module.split("."))
+                imported_module = ".".join(imported_parts)
+            else:
+                imported_module = node.module
+
+            for alias in node.names:
+                if alias.name == "*":
+                    continue
+                public_name = alias.asname or alias.name
+                aliases[f"{module}.{public_name}"] = (
+                    f"{imported_module}.{alias.name}"
+                )
+
+    return objects, aliases
+
+
+@functools.cache
+def resolve_object(name):
+    """Resolve an object suffix to its full name and defining module."""
+    objects, aliases = discover_api_objects()
+    target = name.lstrip(".#")
+
+    if target in objects:
+        return target, objects[target]
+
+    seen = set()
+    while target not in seen:
+        seen.add(target)
+        alias = max(
+            (
+                name
+                for name in aliases
+                if target == name or target.startswith(f"{name}.")
+            ),
+            key=len,
+            default=None,
+        )
+        if alias is None:
+            break
+        target = f"{aliases[alias]}{target[len(alias) :]}"
+        if target in objects:
+            return target, objects[target]
+
+    if is_package_reference(target):
+        target = target.removeprefix(PACKAGE).lstrip(".")
+
+    suffix = f".{target}"
+    matches = [fqn for fqn in objects if fqn.endswith(suffix)]
+    if len(matches) != 1:
+        raise ValueError(f"Could not resolve unique API target '{name}'.")
+
+    fqn = matches[0]
+    return fqn, objects[fqn]
 
 
 @functools.cache
 def object_to_url(name):
     """Convert a dotted package object reference to an AutoAPI URL."""
-    obj = import_dotted_name(name)
+    fqn, module = resolve_object(name)
+    module_path = module.replace(".", "/")
 
-    if inspect.ismodule(obj):
-        module_name = obj.__name__
-        return f"{API_BASE}/{module_name.replace('.', '/')}/index.html"
+    if fqn == module:
+        return f"{API_BASE}/{module_path}/index.html"
 
-    module = inspect.getmodule(obj)
-    qualname = getattr(obj, "__qualname__", None)
-
-    if module is None or qualname is None:
-        raise ValueError(f"Could not resolve documentation target '{name}'.")
-
-    module_name = module.__name__
-    anchor = f"{module_name}.{qualname}"
-    module_path = module_name.replace(".", "/")
-    return f"{API_BASE}/{module_path}/index.html#{anchor}"
+    return f"{API_BASE}/{module_path}/index.html#{fqn}"
 
 
 @functools.lru_cache(maxsize=1)
@@ -185,8 +294,6 @@ def doc_to_url(target):
 def role_to_url(role, target):
     """Resolve a single MyST/Sphinx role target to a URL."""
     if role in OBJECT_ROLES:
-        if not is_package_reference(target):
-            raise ValueError(f"Unsupported object target '{target}'.")
         return object_to_url(target)
 
     if role == "doc":
@@ -209,7 +316,7 @@ def resolve_markdown_links(text):
         target = match.group(2).strip()
 
         try:
-            if is_package_reference(target):
+            if target.startswith("#") or is_package_reference(target):
                 url = object_to_url(target)
             else:
                 page = target.partition("#")[0]

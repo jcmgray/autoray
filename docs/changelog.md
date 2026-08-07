@@ -2,11 +2,9 @@
 
 Release notes for `autoray`.
 
-## v0.10.1 (unreleased)
+## v0.10.1 (2026-08-07)
 
-**Enhancements:**
-
-**Bug Fixes:**
+This is a re-release of v0.10.1, see below.
 
 
 ## v0.10.0 (2026-08-06)
