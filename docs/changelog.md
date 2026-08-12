@@ -2,6 +2,19 @@
 
 Release notes for `autoray`.
 
+## v0.11.0 (unreleased)
+
+**Enhancements:**
+
+- `autoray.lazy` `"sum"`, `"prod"`, `"min"` and `"max"` now accept `keepdims`, matching the eager and array API signatures. The reduced axes are kept as size 1 in the inferred lazy shape.
+- Added the lazy reductions `"mean"`, `"std"`, `"var"`, `"all"`, `"any"`, `"count_nonzero"`, `"argmin"` and `"argmax"`, which also take `axis` and `keepdims`, and `"cumsum"`, which takes `axis` and accumulates over the flattened array when it is `None`. `"argmin"` and `"argmax"` follow the eager convention of only accepting a scalar `axis`. Backend support for `keepdims` varies: see `XFAILS` in `tests/conftest.py`.
+- The lazy reductions and `"cumsum"` pass any further keyword arguments, such as `ddof` or `dtype`, straight through to the backend function. A `LazyArray` supplied this way, for example as `where`, is tracked as a dependency of the result.
+
+**Bug Fixes:**
+
+- `autoray.lazy` reductions now pass `axis` on as supplied, rather than always normalizing it to a tuple. `do("prod", x, axis=0)` on a lazy `torch` array therefore works, since `torch.prod` only accepts a scalar `dim`.
+
+
 ## v0.10.1 (2026-08-07)
 
 This is a re-release of v0.10.1, see below.

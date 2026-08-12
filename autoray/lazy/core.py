@@ -1959,22 +1959,50 @@ imag = make_unary_func("imag", var_name="imag")
 
 def make_reduction_func(name, var_name=None):
     @lazy_cache(name)
-    def reduction_func(a, axis=None):
+    def reduction_func(a, axis=None, keepdims=False, **kwargs):
         a = ensure_lazy(a)
         fn = get_lib_fn(a.backend, name)
+
+        # only pass keepdims on if requested, for backends lacking the kwarg
+        if keepdims:
+            kwargs["keepdims"] = True
+
+        if kwargs:
+            # extra kwargs such as ddof or where are passed straight through
+            deps = (a, *find_lazy(kwargs))
+        else:
+            kwargs = deps = None
 
         nd = a.ndim
         if axis is None:
             return a.to(
                 fn=fn,
-                shape=(),
+                kwargs=kwargs,
+                deps=deps,
+                shape=(1,) * nd if keepdims else (),
             )
         elif not hasattr(axis, "__len__"):
-            axis = (axis,)
-        axis = tuple(nd + i if i < 0 else i for i in axis)
+            reduced = (nd + axis if axis < 0 else axis,)
+        else:
+            reduced = tuple(nd + i if i < 0 else i for i in axis)
 
-        newshape = tuple(d for i, d in enumerate(shape(a)) if i not in axis)
-        return a.to(fn=fn, args=(a, axis), shape=newshape)
+        if keepdims:
+            newshape = tuple(
+                1 if i in reduced else d for i, d in enumerate(shape(a))
+            )
+        else:
+            newshape = tuple(
+                d for i, d in enumerate(shape(a)) if i not in reduced
+            )
+
+        # pass axis on as supplied, some backends only accept a scalar
+        return a.to(
+            fn=fn,
+            args=(a, axis),
+            kwargs=kwargs,
+            deps=deps,
+            shape=newshape,
+        )
 
     if var_name is not None:
         reduction_func.__name__ = var_name
@@ -1987,6 +2015,32 @@ sum_ = make_reduction_func("sum", var_name="sum_")
 prod = make_reduction_func("prod", var_name="prod")
 min_ = make_reduction_func("min", var_name="min_")
 max_ = make_reduction_func("max", var_name="max_")
+mean = make_reduction_func("mean", var_name="mean")
+std = make_reduction_func("std", var_name="std")
+var = make_reduction_func("var", var_name="var")
+all_ = make_reduction_func("all", var_name="all_")
+any_ = make_reduction_func("any", var_name="any_")
+count_nonzero = make_reduction_func("count_nonzero", var_name="count_nonzero")
+# these only accept a scalar axis, but otherwise reduce identically
+argmin = make_reduction_func("argmin", var_name="argmin")
+argmax = make_reduction_func("argmax", var_name="argmax")
+
+
+@lazy_cache("cumsum")
+def cumsum(a, axis=None, **kwargs):
+    a = ensure_lazy(a)
+    fn = get_lib_fn(a.backend, "cumsum")
+
+    if kwargs:
+        deps = (a, *find_lazy(kwargs))
+    else:
+        kwargs = deps = None
+
+    if axis is None:
+        # accumulates over the flattened array
+        return a.to(fn=fn, kwargs=kwargs, deps=deps, shape=(a.size,))
+
+    return a.to(fn=fn, args=(a, axis), kwargs=kwargs, deps=deps)
 
 
 @lazy_cache("allclose")
