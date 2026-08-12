@@ -859,6 +859,88 @@ def test_concatenate():
     assert_allclose(lxyz.compute(), xyz)
 
 
+@pytest.mark.parametrize(
+    "backend,fn,args,kwargs",
+    gen_params(
+        backends=...,
+        fns=[
+            (fn, (), {**axis_kwargs, "keepdims": keepdims})
+            for fn in (
+                "sum",
+                "prod",
+                "min",
+                "max",
+                "mean",
+                "std",
+                "var",
+                "all",
+                "any",
+                "count_nonzero",
+            )
+            for axis_kwargs in (
+                {},
+                {"axis": 1},
+                {"axis": -1},
+                {"axis": (0, 2)},
+            )
+            for keepdims in (False, True)
+        ]
+        # argmin and argmax only accept a scalar axis
+        + [
+            (fn, (), {**axis_kwargs, "keepdims": keepdims})
+            for fn in ("argmin", "argmax")
+            for axis_kwargs in ({}, {"axis": 1}, {"axis": -1})
+            for keepdims in (False, True)
+        ],
+        requires="random.default_rng",
+    ),
+)
+def test_reductions(backend, fn, args, kwargs):
+    assert_unary_fn_with_kwargs(
+        fn, [(2, 3, 4)], seed=1234, kwargs=kwargs, backend=backend
+    )
+
+
+@pytest.mark.parametrize(
+    "backend,fn,args,kwargs",
+    gen_params(
+        backends=...,
+        fns=[("cumsum", (), {"axis": axis}) for axis in (None, 1, -1)],
+        requires="random.default_rng",
+    ),
+)
+def test_cumsum(backend, fn, args, kwargs):
+    assert_unary_fn_with_kwargs(
+        fn, [(2, 3, 4)], seed=1234, kwargs=kwargs, backend=backend
+    )
+
+
+class TestReductionPassthroughKwargs:
+    def test_ddof(self):
+        x = gen_rand((2, 3, 4), "numpy")
+        ly = ar.do("std", lazy.array(x), axis=1, ddof=1, keepdims=True)
+        assert ly.shape == (2, 1, 4)
+        assert_allclose(
+            ly.compute(), ar.do("std", x, 1, ddof=1, keepdims=True)
+        )
+
+    def test_dtype(self):
+        x = gen_rand((2, 3, 4), "numpy")
+        lx = lazy.array(x)
+        for fn in ("sum", "cumsum"):
+            ly = ar.do(fn, lx, axis=0, dtype="float32")
+            assert ar.get_dtype_name(ly.compute()) == "float32"
+
+    def test_lazy_kwarg_is_a_dependency(self):
+        x = gen_rand((2, 3, 4), "numpy")
+        lx = lazy.array(x)
+        lw = lazy.array(x > 0.5)
+        ly = ar.do("sum", lx, axis=0, where=lw)
+        assert any(dep is lw for dep in ly.deps)
+        assert ly.history_num_nodes() == 3
+        assert_allclose(ly.compute(), ar.do("sum", x, 0, where=x > 0.5))
+
+
 @pytest.mark.parametrize("keepdims", [False, True])
 @pytest.mark.parametrize(
     "backend,fn,args,kwargs",

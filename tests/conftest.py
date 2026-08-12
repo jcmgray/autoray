@@ -53,6 +53,24 @@ ALL_DTYPES = FLOAT_DTYPES + COMPLEX_DTYPES
 #   str                        → always xfail (parametrize + test time)
 #   callable(args, kwargs)     → returns reason str or None (test time only)
 
+
+def _torch_keepdims_needs_axis(args, kwargs):
+    # torch maps keepdims -> keepdim, which it only accepts alongside dim
+    if "keepdims" in kwargs and "axis" not in kwargs:
+        return "torch needs an explicit axis to use keepdims"
+    return None
+
+
+def _keepdims_unsupported(what):
+    # build an xfail checker for a function lacking the keepdims kwarg
+    def check(args, kwargs):
+        if "keepdims" in kwargs:
+            return f"{what} doesn't support keepdims"
+        return None
+
+    return check
+
+
 XFAILS = {
     # cupy
     ("cupy", "choice"): "cupy: no choice interface yet",
@@ -68,6 +86,7 @@ XFAILS = {
         "cupy arrays cannot be moved to cpu" if a and a[0] == "cpu" else None
     ),
     # dask
+    ("dask", "count_nonzero"): _keepdims_unsupported("dask count_nonzero"),
     # https://github.com/dask/dask/issues/12335
     ("dask", "linalg.cholesky", "complex64"): "dask complex cholesky broken",
     ("dask", "linalg.cholesky", "complex128"): "dask complex cholesky broken",
@@ -200,6 +219,7 @@ XFAILS = {
         "sparse doesn't support mean with axis" if a else None
     ),
     ("sparse", "power"): "sparse doesn't support power",
+    ("sparse", "random.default_rng"): "sparse has no generator interface",
     ("sparse", "ravel"): "sparse doesn't support ravel",
     ("sparse", "scipy.linalg.expm"): "sparse doesn't support scipy",
     (
@@ -212,8 +232,14 @@ XFAILS = {
     ("sparse", "trace"): "sparse doesn't support trace",
     ("sparse", "where"): "sparse doesn't support where",
     # tensorflow
+    ("tensorflow", "argmax"): _keepdims_unsupported("tensorflow argmax"),
+    ("tensorflow", "argmin"): _keepdims_unsupported("tensorflow argmin"),
     ("tensorflow", "binomial"): "tensorflow: no binomial interface yet",
     ("tensorflow", "choice"): "tensorflow: no choice interface yet",
+    (
+        "tensorflow",
+        "count_nonzero",
+    ): _keepdims_unsupported("tensorflow count_nonzero"),
     ("tensorflow", "einsum"): lambda a, kw: (
         "tensorflow einsum doesn't support interleaved format"
         if a[0] == "interleaved"
@@ -226,15 +252,23 @@ XFAILS = {
     ("tensorflow", "scipy.linalg.expm"): "tensorflow doesn't support scipy",
     # torch
     ("torch", "binomial"): "torch: no binomial interface yet",
+    ("torch", "count_nonzero"): _keepdims_unsupported("torch count_nonzero"),
+    ("torch", "cumsum"): lambda a, kw: (
+        "torch cumsum needs an explicit axis"
+        if not a and kw.get("axis") is None
+        else None
+    ),
     ("torch", "exponential"): "torch: no exponential interface yet",
     ("torch", "gumbel"): "torch: no gumbel interface yet",
+    ("torch", "mean"): _torch_keepdims_needs_axis,
     ("torch", "poisson"): "torch: no poisson interface yet",
     ("torch", "prod"): lambda a, kw: (
         "torch doesn't support prod with tuple axis"
         if isinstance(kw.get("axis"), tuple)
-        else None
+        else _torch_keepdims_needs_axis(a, kw)
     ),
     ("torch", "scipy.linalg.expm"): "torch doesn't support scipy",
+    ("torch", "sum"): _torch_keepdims_needs_axis,
 }
 
 
