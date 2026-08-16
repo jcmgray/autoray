@@ -418,11 +418,17 @@ def test_pad(backend):
         (((1, 2),), (6, 7, 8)),
         # different pad for every axis
         (((4, 3), (2, 4), (3, 2)), (10, 10, 10)),
+        # asymmetric, including zero pads
+        (((0, 1), (2, 0), (3, 1)), (4, 6, 9)),
     ]:
         B = ar.do("pad", A, pad_width)
         assert shape(B) == new_shape
         assert ar.to_numpy(ar.do("sum", A)) == pytest.approx(
             ar.to_numpy(ar.do("sum", B))
+        )
+        # check the padding is placed the same way numpy places it
+        np.testing.assert_allclose(
+            ar.to_numpy(B), np.pad(ar.to_numpy(A), pad_width)
         )
 
 

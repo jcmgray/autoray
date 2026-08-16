@@ -4124,7 +4124,8 @@ def torch_pad(array, pad_width, mode="constant", constant_values=0):
     try:
         # numpy takes pads like ((0, 0), (1, 1), ... (n-1, n-1))
         # torch takes pads like (n-1, n-1, n-2, n-2, n-3, n-3, ...)
-        pad = tuple(itertools.chain.from_iterable(pad_width))[::-1]
+        # i.e. axes reversed, but each (before, after) pair kept in order
+        pad = tuple(itertools.chain.from_iterable(reversed(pad_width)))
 
         # a single tuple was specified ((a, b),) - use for all axes
         if len(pad) == 2:
