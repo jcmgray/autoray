@@ -802,6 +802,117 @@ def test_compose():
     assert y == 2
 
 
+@pytest.mark.parametrize(
+    "backend",
+    gen_params(
+        backends=("numpy", "torch"),
+        requires=("random.uniform", "zeros"),
+    ),
+)
+def test_compose_supplies_namespace(backend):
+    seen = []
+    name = f"_test_composed_namespace_{backend}"
+
+    @ar.compose(name=name)
+    def _test_composed_namespace(x, backend, namespace):
+        seen.append(namespace)
+        assert namespace._backend == backend
+        return namespace.zeros(1)
+
+    x = gen_rand((1,), backend, dtype="float32")
+
+    y = _test_composed_namespace(x)
+    assert ar.get_dtype_name(y) == "float32"
+
+    y = ar.do(name, x)
+    assert ar.get_dtype_name(y) == "float32"
+    assert seen[-1] is ar.get_namespace(x)
+
+    xp = ar.get_namespace(like=backend, dtype="float64")
+    y = getattr(xp, name)(x)
+    assert ar.get_dtype_name(y) == "float64"
+    assert seen[-1] is xp
+
+
+def test_compose_namespace_from_first_argument():
+    @ar.compose
+    def _test_composed_namespace_like(x, namespace):
+        return namespace.zeros(x.size)
+
+    like = np.ones(1, dtype="float32")
+
+    y = _test_composed_namespace_like(like)
+    assert y.dtype == np.dtype("float32")
+
+    y = ar.do("_test_composed_namespace_like", like)
+    assert y.dtype == np.dtype("float32")
+
+    y = ar.DoFunc("_test_composed_namespace_like")(like)
+    assert y.dtype == np.dtype("float32")
+
+
+def test_compose_namespace_is_root_namespace():
+    seen = []
+
+    @ar.compose(name="linalg._test_composed_namespace_root")
+    def _test_composed_namespace_root(x, namespace):
+        seen.append(namespace)
+        return x
+
+    x = np.ones(1)
+    xp = ar.get_namespace(x)
+    y = xp.linalg._test_composed_namespace_root(x)
+
+    assert y is x
+    assert seen[-1] is xp
+
+
+def test_compose_override_not_supplied_namespace():
+    @ar.compose
+    def _test_composed_namespace_override(x, namespace):
+        return namespace.sum(x)
+
+    x = np.ones(1)
+    assert _test_composed_namespace_override(x) == 1.0
+
+    @_test_composed_namespace_override.register("numpy")
+    def numpy_override(x):
+        return "override"
+
+    assert _test_composed_namespace_override(x) == "override"
+    assert (
+        ar.get_namespace(x)._test_composed_namespace_override(x) == "override"
+    )
+
+
+def test_compose_namespace_falls_back_to_backend():
+    @ar.compose
+    def _test_composed_namespace_fallback(x, namespace):
+        return namespace.zeros(1)
+
+    # the first argument does not belong to the dispatched backend
+    y = ar.do("_test_composed_namespace_fallback", [1.0, 2.0], like="numpy")
+    assert y.dtype == np.dtype("float64")
+
+    @ar.compose
+    def _test_composed_namespace_noargs(namespace):
+        return namespace.zeros(1)
+
+    # there is no first argument at all
+    y = ar.do("_test_composed_namespace_noargs", like="numpy")
+    assert y.dtype == np.dtype("float64")
+
+
+def test_compose_explicit_namespace_not_overridden():
+    @ar.compose
+    def _test_composed_namespace_explicit(x, namespace):
+        return namespace.zeros(1)
+
+    xp = ar.get_namespace(like="numpy", dtype="complex128")
+    y = _test_composed_namespace_explicit(np.ones(1), namespace=xp)
+    assert y.dtype == np.dtype("complex128")
+
+
 def test_builtins_complex():
     re = 1.0
     im = 2.0
@@ -1236,6 +1347,27 @@ def test_register_function_direct_seen_by_new_namespace():
 
     # a new namespace must not get the old function
     assert ar.get_namespace(like="faux_direct").sum(x) == "custom"
+
+
+def test_register_function_seen_by_existing_namespace():
+    ar.autoray.register_module_alias("faux_held", "numpy")
+    x = np.ones(3)
+
+    xp = ar.get_namespace(like="faux_held")
+    sub = xp.linalg
+    assert xp.sum(x) == 3.0
+    assert sub.norm(x) == pytest.approx(3**0.5)
+
+    ar.register_function("faux_held", "sum", lambda a, **kw: "custom")
+    ar.register_function("faux_held", "linalg.norm", lambda a, **kw: "custom")
+
+    # namespaces are stable objects that just drop their cached lookups
+    assert ar.get_namespace(like="faux_held") is xp
+    assert xp.sum(x) == "custom"
+    assert xp.linalg.norm(x) == "custom"
+
+    # including a submodule namespace already held by a caller
+    assert sub.norm(x) == "custom"
 
 
 def test_register_function_alias_after_import():

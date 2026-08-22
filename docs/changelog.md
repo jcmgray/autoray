@@ -6,6 +6,8 @@ Release notes for `autoray`.
 
 **Enhancements:**
 
+- `compose` now supplies an [`AutoNamespace`](autoray.autoray.AutoNamespace) to any *default* implementation taking a `namespace` parameter: the namespace itself when called as `xp.my_func(...)`, so its dtype and device defaults apply, otherwise one from the first argument if it matches the dispatched backend. Implementations registered for a specific backend keep their own signatures.
+- Namespaces from `get_namespace` are now stable objects: registering a function drops their cached lookups rather than discarding the namespaces, so one already held picks up the new function.
 - `autoray.lazy` `"sum"`, `"prod"`, `"min"` and `"max"` now accept `keepdims`, matching the eager and array API signatures. The reduced axes are kept as size 1 in the inferred lazy shape.
 - Added the lazy reductions `"mean"`, `"std"`, `"var"`, `"all"`, `"any"`, `"count_nonzero"`, `"argmin"` and `"argmax"`, which also take `axis` and `keepdims`, and `"cumsum"`, which takes `axis` and accumulates over the flattened array when it is `None`. `"argmin"` and `"argmax"` follow the eager convention of only accepting a scalar `axis`. Backend support for `keepdims` varies: see `XFAILS` in `tests/conftest.py`.
 - The lazy reductions and `"cumsum"` pass any further keyword arguments, such as `ddof` or `dtype`, straight through to the backend function. A `LazyArray` supplied this way, for example as `where`, is tracked as a dependency of the result.

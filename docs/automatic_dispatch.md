@@ -375,6 +375,24 @@ def my_func_numba(x):
 do("my_func", x_numpy)
 ```
 
+If the default implementation has a `namespace` parameter, `compose` supplies
+it automatically, which is often faster and tidier than repeated `do` calls:
+
+```python
+@compose
+def my_func(x, namespace):
+    # get how many elements are needed to sum to 20
+    return namespace.sum(namespace.cumsum(x, 0) < 20)
+```
+
+Calling through a namespace, as `xp.my_func(x)`, supplies that namespace, so
+its dtype and device defaults apply. Other calls take the namespace from the
+first argument if it matches the dispatched backend, and otherwise get one
+with no dtype or device defaults. Note that an explicit `like` argument
+selects the backend only, it does not supply these defaults. Implementations
+registered with `my_func.register(...)` are called with their own signatures
+instead.
+
 
 ### Deviations from `numpy`
 

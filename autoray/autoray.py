@@ -982,8 +982,8 @@ def register_function(
         _FUNCS.pop((backend, name), None)
         _FUNCS.pop((backend + "[alt]", name), None)
 
-    # remove all namespaces, because each one keeps the functions that it found
-    _NAMESPACE_CACHE.clear()
+    # each namespace holds the functions that it found -> drop
+    _reset_namespaces()
     # the dtype cache also keeps results from ``get_lib_fn``
     _to_backend_dtype_from_str_cached.cache_clear()
     # this holds arrays built with ``array`` and ``astype``
@@ -1395,17 +1395,42 @@ tree_register_container(dict, tree_map_dict, tree_iter_dict, tree_apply_dict)
 # --------------------------- composed functions ---------------------------- #
 
 
+def _choose_namespace(backend, args):
+    """Choose the namespace to supply to a composed function, given the
+    already chosen ``backend`` and the positional ``args`` of the call. The
+    first argument supplies the dtype and device defaults if it belongs to
+    ``backend``, otherwise the namespace has none.
+    """
+    try:
+        like = args[0]
+    except IndexError:
+        # without an array there is no dtype or device context to inherit
+        return get_namespace(like=backend)
+
+    # only inherit context from an argument belonging to the chosen backend,
+    # a string would be read as a backend name rather than an array
+    if not isinstance(like, str):
+        if _infer_class_backend_cached(like.__class__) == backend:
+            return get_namespace(like)
+
+    # backend selection may have been independent of the first argument
+    return get_namespace(like=backend)
+
+
 class Composed:
     """Compose an ``autoray.do`` using function. See the main wrapper
     ``compose``.
     """
 
+    # no __slots__: functools.wraps writes function metadata to each instance
     def __init__(self, fn, name=None):
         self._default_fn = fn
         if name is None:
             name = fn.__name__
         self._name = name
-        self._supply_backend = "backend" in signature(fn).parameters
+        parameters = signature(fn).parameters
+        self._supply_backend = "backend" in parameters
+        self._supply_namespace = "namespace" in parameters
 
         # this registers the fact that when `get_lib_fn` is called, the
         # function can be created even if it doesn't exist for a specific
@@ -1424,16 +1449,48 @@ class Composed:
 
             return wrapper
 
+    def _make_default_function(self, backend, namespace=None):
+        if self._supply_namespace and namespace is None:
+            # ordinary dispatch knows the backend but not the namespace, so
+            # infer it per call, keeping array dtype and device defaults
+            default_fn = self._default_fn
+            supply_backend = self._supply_backend
+
+            @functools.wraps(default_fn)
+            def fn(*args, **kwargs):
+                if "namespace" not in kwargs:
+                    kwargs["namespace"] = _choose_namespace(backend, args)
+                if supply_backend and "backend" not in kwargs:
+                    kwargs["backend"] = backend
+                return default_fn(*args, **kwargs)
+
+            # attach the composed function so a namespace lookup can find
+            # it and rebuild this default with a fixed namespace
+            fn._autoray_composed = self
+            return fn
+
+        # collect the special arguments known before the composed body runs
+        supplied = {}
+        if self._supply_backend:
+            supplied["backend"] = backend
+        if self._supply_namespace:
+            # a namespace lookup supplies the exact root xp to bind
+            supplied["namespace"] = namespace
+
+        if not supplied:
+            return self._default_fn
+
+        # make sure it inherits __name__ etc
+        return functools.wraps(self._default_fn)(
+            functools.partial(self._default_fn, **supplied)
+        )
+
     def make_function(self, backend):
         """Make a new function for the specific ``backend``."""
-        if self._supply_backend:
-            # make sure it inherits __name__ etc
-            fn = functools.wraps(self._default_fn)(
-                functools.partial(self._default_fn, backend=backend)
-            )
-        else:
-            fn = self._default_fn
-        self.register(backend, fn)
+        fn = self._make_default_function(backend)
+        # nothing can have looked this up before it existed, so unlike
+        # ``register`` there is nothing to invalidate
+        _FUNCS[backend, self._name] = fn
         return fn
 
     def __call__(self, *args, like=None, **kwargs):
@@ -1455,7 +1512,11 @@ def compose(fn=None, *, name=None):
     for specific implementations to be overridden for specific backends.
 
     If the function takes a ``backend`` argument, it will be supplied with the
-    backend name, to save having to re-choose the backend.
+    backend name, to save having to re-choose the backend. If it takes a
+    ``namespace`` argument, it will similarly be supplied with an
+    ``AutoNamespace``. Calling through a namespace supplies that namespace,
+    otherwise it is taken from the first argument if that matches the
+    backend, and has no dtype or device defaults if not.
 
     Specific implementations can be provided by calling the ``register`` method
     of the composed function, or it can itself be used like a decorator::
@@ -2550,6 +2611,18 @@ class AutoNamespace:
         new._submodule = name
         return new
 
+    def _get_root_namespace(self):
+        # a root namespace is already the object that should be supplied
+        if self._submodule is None:
+            return self
+
+        # namespaces are cached, so this is the root this submodule came from
+        return get_namespace(
+            like=self._backend,
+            device=self._device,
+            dtype=self._dtype,
+        )
+
     def _get_fn(self, name):
         if name.startswith("__") and name.endswith("__"):
             # raise correct error for dunder methods, so
@@ -2568,10 +2641,21 @@ class AutoNamespace:
             return self._get_submodule(name)
 
         if self._backend is None:
-            # use auto dispatch
+            # defer dispatch, including namespace inference, until the call
             return DoFunc(name)
 
         fn = get_lib_fn(self._backend, name)
+
+        # only a default generated by compose has this attribute, a
+        # registered implementation does not and is called as it is
+        composed = getattr(fn, "_autoray_composed", None)
+        if composed is not None:
+            # rebuild the default with this exact namespace, rather than one
+            # inferred on every call
+            fn = composed._make_default_function(
+                self._backend,
+                namespace=self._get_root_namespace(),
+            )
 
         # possibly wrap for dtype and device injection
         if name in _CREATION_ROUTINES:
@@ -2618,7 +2702,38 @@ class AutoNamespace:
         )
 
 
+# the instance attributes of an ``AutoNamespace``, everything else in its
+# ``__dict__`` is a cached function or submodule lookup
+_NAMESPACE_ATTRS = ("_backend", "_device", "_dtype", "_submodule")
+
 _NAMESPACE_CACHE = {}
+
+
+@functools.lru_cache(2**14)
+def _namespace_key_part(x):
+    """Cached ``str`` of a device or dtype, which normalizes them for the
+    namespace cache key. Cached because ``numpy.dtype.__str__`` is slow, and
+    a composed function taking a ``namespace`` looks one up on every call.
+    """
+    return str(x)
+
+
+def _reset_namespace(xp):
+    """Drop the cached lookups of ``xp`` and of any submodule it made."""
+    d = xp.__dict__
+    xp.__dict__ = {k: d[k] for k in _NAMESPACE_ATTRS}
+    for v in d.values():
+        if isinstance(v, AutoNamespace):
+            _reset_namespace(v)
+
+
+def _reset_namespaces():
+    """Drop the cached function and submodule lookups of every live namespace,
+    keeping the namespace objects themselves, so that a namespace held by a
+    caller stays valid when functions are registered.
+    """
+    for xp in _NAMESPACE_CACHE.values():
+        _reset_namespace(xp)
 
 
 def get_namespace(like=None, device=None, dtype=None, submodule=None):
@@ -2648,7 +2763,16 @@ def get_namespace(like=None, device=None, dtype=None, submodule=None):
         An automatic namespace object.
     """
     backend, device, dtype = infer_backend_device_dtype(like, device, dtype)
-    key = (backend, str(device), str(dtype), submodule)
+    try:
+        key = (
+            backend,
+            _namespace_key_part(device),
+            _namespace_key_part(dtype),
+            submodule,
+        )
+    except TypeError:
+        # unhashable device or dtype
+        key = (backend, str(device), str(dtype), submodule)
     try:
         xp = _NAMESPACE_CACHE[key]
     except KeyError:
