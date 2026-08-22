@@ -55,8 +55,8 @@ def to_queue(lz):
 
 
 def descend(lz):
-    """Generate each unique computational node. Use ``ascend`` if you need to
-    visit children before parents.
+    """Generate each unique computational node. Use :func:`.ascend` if you need
+    to visit children before parents.
 
     Parameters
     ----------
@@ -344,15 +344,16 @@ class LazyArray:
         is an input).
     args : tuple
         The positional arguments to pass to ``fn``, which might be
-        ``LazyArray`` instances.
+        :class:`.LazyArray` instances.
     kwargs : dict
         The keyword arguments to pass to ``fn``, which might be
-        ``LazyArray`` instances.
+        :class:`.LazyArray` instances.
     shape : tuple
         The shape of the array that ``fn(*args, **kwargs)`` will return, or
         the shape of the array that ``data`` has.
     deps : tuple, optional
-        The ``LazyArray`` instances that ``fn(*args, **kwargs)`` depends on.
+        The :class:`.LazyArray` instances that ``fn(*args, **kwargs)`` depends
+        on.
         If not specified, these will be automatically found from ``args`` and
         ``kwargs``, specifying them manually is slightly more efficient.
 
@@ -407,7 +408,7 @@ class LazyArray:
 
     @classmethod
     def from_data(cls, data):
-        """Create a new ``LazyArray`` directly from a concrete array."""
+        """Create a new :class:`.LazyArray` directly from a concrete array."""
         obj = cls.__new__(cls)
         obj._backend = infer_backend(data)
         obj._fn = obj._args = obj._kwargs = None
@@ -419,7 +420,7 @@ class LazyArray:
 
     @classmethod
     def from_shape(cls, shape, backend="numpy"):
-        """Create a new ``LazyArray`` with a given shape."""
+        """Create a new :class:`.LazyArray` with a given shape."""
         obj = cls.__new__(cls)
         obj._backend = backend
         obj._fn = obj._args = obj._kwargs = None
@@ -438,8 +439,8 @@ class LazyArray:
         shape=None,
         deps=None,
     ):
-        """Create a new ``LazyArray``, by default propagating backend, shape,
-        and deps from the the current LazyArray.
+        """Create a new :class:`.LazyArray`, by default propagating backend,
+        shape, and deps from the the current LazyArray.
         """
         return LazyArray(
             fn=fn,
@@ -509,8 +510,9 @@ class LazyArray:
 
     def get_function(self, variables, fold_constants=True):
         """Get a compiled function that computes ``fn(arrays)``, with ``fn``
-        describing the computational graph of this ``LazyArray`` and ``arrays``
-        corresponding to the downstream ``LazyArray`` nodes ``variables``.
+        describing the computational graph of this :class:`.LazyArray` and
+        ``arrays`` corresponding to the downstream :class:`.LazyArray` nodes
+        ``variables``.
 
         Parameters
         ----------
@@ -626,7 +628,7 @@ class LazyArray:
 
     def history_num_nodes(self):
         """Return the number of unique computational nodes in the history of
-        this ``LazyArray``.
+        this :class:`.LazyArray`.
         """
         num_nodes = 0
         for _ in self.descend():
@@ -736,7 +738,7 @@ class LazyArray:
         return self.history_stats("count")
 
     def to_nx_digraph(self, variables=None):
-        """Convert this ``LazyArray`` into a ``networkx.DiGraph``."""
+        """Convert this :class:`.LazyArray` into a ``networkx.DiGraph``."""
         import networkx as nx
 
         if variables is None:
@@ -973,7 +975,7 @@ def ensure_lazy(array):
 
 
 def find_lazy(x):
-    """Recursively search for ``LazyArray`` instances in pytrees."""
+    """Recursively search for :class:`.LazyArray` instances in pytrees."""
     if isinstance(x, LazyArray):
         yield x
         return
@@ -1166,7 +1168,7 @@ def lazy_cache(fn_name, hasher=None):
     hasher : callable
         A function with signature ``hasher(fn_name, *args, **kwargs)`` that
         returns a hashable key for the cache. If not specified, the default
-        is to use ``hash_args_kwargs``.
+        is to use :func:`.hash_args_kwargs`.
     """
 
     if hasher is None:
@@ -1256,7 +1258,7 @@ def find_broadcast_shape(xshape, yshape):
 
 
 def Variable(shape, backend=None):
-    """Create a ``LazyArray`` from a shape only, representing a leaf node
+    """Create a :class:`.LazyArray` from a shape only, representing a leaf node
     in the computational graph. It can only act as a placeholder for data.
     """
     return LazyArray.from_shape(shape, backend=backend)
@@ -1264,8 +1266,8 @@ def Variable(shape, backend=None):
 
 @lazy_cache("array")
 def array(x):
-    """Create a ``LazyArray`` from an input array, representing a leaf node
-    in the computational graph.
+    """Create a :class:`.LazyArray` from an input array, representing a leaf
+    node in the computational graph.
     """
     return LazyArray.from_data(x)
 

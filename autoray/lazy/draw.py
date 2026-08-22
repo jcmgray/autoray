@@ -1,4 +1,6 @@
-"""Visualizations for ``LazyArray`` computational graphs."""
+"""Visualizations for :class:`~autoray.lazy.core.LazyArray` computational
+graphs.
+"""
 
 import functools
 import importlib.util
@@ -384,7 +386,9 @@ def plot_graph(
     show_and_close=True,
     **layout_opts,
 ):
-    """Plot the computational graph of this ``LazyArray``."""
+    """Plot the computational graph of this
+    :class:`~autoray.lazy.core.LazyArray`.
+    """
     import matplotlib.pyplot as plt
     import networkx as nx
     import numpy as np

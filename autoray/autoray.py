@@ -165,7 +165,7 @@ def _default_infer_from_sig(fn, *args, **kwargs):
     """This is the default backend dispatcher, used if no global backend has
     been set. Hot swapping this function out as below avoids having to check
     manually for a global backend or worse, a thread aware global backend, on
-    every call to ``do``.
+    every call to :func:`.do`.
     """
     return _DISPATCHERS[fn](*args, **kwargs)
 
@@ -197,7 +197,7 @@ def _default_infer_from_sig_threadaware(fn, args, kwargs):
 
 class ConstantInferrer:
     """A simple dispatch inferrer that always returns the same backend. Used
-    with `set_backend` to set a uniform constant backend for all calls.
+    with :func:`.set_backend` to set a uniform constant backend for all calls.
     """
 
     __slots__ = ("backend",)
@@ -564,7 +564,7 @@ _CREATION_INJECT = {}
 def _register_creation_inject(backend, fn, inject_dtype, inject_device):
     """Record whether ``dtype`` and/or ``device`` should be injected into the
     call to creation routine ``fn`` for ``backend``, based on the ``like``
-    argument. See ``register_function``.
+    argument. See :func:`.register_function`.
     """
     if fn not in _CREATION_ROUTINES:
         import warnings
@@ -587,9 +587,10 @@ def register_creation_routine(
     not necessary for array creation routines that don't accept either.
 
     .. deprecated:: 0.8.12
-        Prefer ``register_function(backend, fn, inject_dtype=...,
-        inject_device=...)``, which can register the location, name, wrapper
-        and creation-injection behaviour of a function in a single call.
+        Prefer :func:`.register_function` with ``inject_dtype=...``
+        and ``inject_device=...``, which can register the location, name,
+        wrapper and creation-injection behaviour of a function in a single
+        call.
 
     Parameters
     ----------
@@ -817,7 +818,7 @@ def register_submodule_alias(backend, fn, module):
     """Register an alias for a submodule location of a function.
 
     .. deprecated:: 0.8.12
-        Prefer ``register_function(backend, fn, module=module)``.
+        Prefer :func:`.register_function` with ``module=module``.
 
     Parameters
     ----------
@@ -835,7 +836,7 @@ def register_func_alias(backend, fn, alias):
     """Register an alias for a function name.
 
     .. deprecated:: 0.8.12
-        Prefer ``register_function(backend, fn, alias=alias)``.
+        Prefer :func:`.register_function` with ``alias=alias``.
 
     Parameters
     ----------
@@ -854,8 +855,8 @@ def register_custom_wrapper(backend, fn, wrapper=None):
     so that no imports are done until the function is actually used.
 
     .. deprecated:: 0.8.12
-        Prefer ``register_function(backend, fn, wrapper=wrapper)``, or as a
-        decorator ``register_function(backend, fn, wrapper=True)``.
+        Prefer :func:`.register_function` with ``wrapper=wrapper``, or as a
+        decorator with ``wrapper=True``.
 
     Parameters
     ----------
@@ -1101,8 +1102,8 @@ TREE_ITER_REGISTRY = {}
 
 
 def tree_register_container(cls, mapper, iterator, applier):
-    """Register a new container type for use with ``tree_map`` and
-    ``tree_apply``.
+    """Register a new container type for use with :func:`.tree_map` and
+    :func:`.tree_apply`.
 
     Parameters
     ----------
@@ -1297,8 +1298,9 @@ def tree_flatten(tree, is_leaf=is_not_container, get_ref=False):
     objs : list
         The flattened list of leaf objects.
     (ref_tree) : pytree
-        If ``get_ref`` is ``True``, a reference tree, with leaves of ``Leaf``,
-        is returned which can be used to reconstruct the original tree.
+        If ``get_ref`` is ``True``, a reference tree, with leaves of
+        :class:`.Leaf`, is returned which can be used to reconstruct the
+        original tree.
     """
     objs = []
     if get_ref:
@@ -1328,8 +1330,8 @@ def tree_unflatten(objs, tree, is_leaf=is_leaf_placeholder):
     is_leaf : callable
         A function to determine if an object is a leaf, only objects for which
         ``is_leaf(x)`` returns ``True`` will have the next item from ``objs``
-        inserted. By default checks for the ``Leaf`` object inserted by
-        ``tree_flatten(..., get_ref=True)``.
+        inserted. By default checks for the :class:`.Leaf` object inserted by
+        :func:`.tree_flatten` with ``get_ref=True``.
 
     Returns
     -------
@@ -1418,8 +1420,8 @@ def _choose_namespace(backend, args):
 
 
 class Composed:
-    """Compose an ``autoray.do`` using function. See the main wrapper
-    ``compose``.
+    """Compose an :func:`.do` using function. See the main wrapper
+    :func:`.compose`.
     """
 
     # no __slots__: functools.wraps writes function metadata to each instance
@@ -1504,8 +1506,8 @@ class Composed:
 
 
 def compose(fn=None, *, name=None):
-    """Take a function consisting of multiple ``autoray.do`` calls and compose
-    it into a new, single, named function, registered with ``autoray.do``.
+    """Take a function consisting of multiple :func:`.do` calls and compose
+    it into a new, single, named function, registered with :func:`.do`.
 
     This creates a default implementation of this function for each new backend
     encountered without explicitly having to write each out, but also allows
@@ -1514,9 +1516,9 @@ def compose(fn=None, *, name=None):
     If the function takes a ``backend`` argument, it will be supplied with the
     backend name, to save having to re-choose the backend. If it takes a
     ``namespace`` argument, it will similarly be supplied with an
-    ``AutoNamespace``. Calling through a namespace supplies that namespace,
-    otherwise it is taken from the first argument if that matches the
-    backend, and has no dtype or device defaults if not.
+    :class:`.AutoNamespace`. Calling through a namespace supplies that
+    namespace, otherwise it is taken from the first argument if that matches
+    the backend, and has no dtype or device defaults if not.
 
     Specific implementations can be provided by calling the ``register`` method
     of the composed function, or it can itself be used like a decorator::
@@ -1531,7 +1533,7 @@ def compose(fn=None, *, name=None):
             ...
 
     Supply ``name`` to register the function under a name other than its own,
-    which requires calling ``compose`` first::
+    which requires calling :func:`.compose` first::
 
         @compose(name="linalg.qr")
         def qr(x):
@@ -2577,7 +2579,7 @@ class AutoNamespace:
     ----------
     like : array_like, str, or None
         The backend to use, or an object to infer the backend from. If None,
-        the default behavior is to use `autoray.do` and auto dispatch backend
+        the default behavior is to use :func:`.do` and auto dispatch backend
         at function call time. If given, the functions are cached at first
         call.
     device : str, optional
@@ -2740,8 +2742,8 @@ def get_namespace(like=None, device=None, dtype=None, submodule=None):
     """Get an automatic namespace object.
 
     If `like` is None, the namespace essentially provides an alternative syntax
-    to `do`, dispatching each function at calltime, and allowing the backend
-    and function implementations to be dynamically updated.
+    to :func:`.do`, dispatching each function at calltime, and allowing the
+    backend and function implementations to be dynamically updated.
 
     If `like` is supplied however, the backend is eagerly dispatched and
     functions are loaded and cached specifically for that backend. In this

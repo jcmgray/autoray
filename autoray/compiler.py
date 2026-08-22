@@ -24,7 +24,7 @@ class CompilePython:
         ``fn(*args, **kwargs) -> array``, with ``args`` and ``kwargs`` any
         nested combination of ``tuple``, ``list`` and ``dict`` objects
         containing arrays (or other constant arguments), and perform array
-        operations on these using ``autoray.do``.
+        operations on these using :func:`~autoray.autoray.do`.
     fold_constants : bool, optional
         Whether to fold all constant array operations into the graph, which
         might increase memory usage.
@@ -229,8 +229,8 @@ _compiler_lookup = {
 
 
 class AutoCompiled:
-    """Just in time compile a ``autoray.do`` using function. See the main
-    wrapper ``autojit``.
+    """Just in time compile a :func:`~autoray.autoray.do` using function. See
+    the main wrapper :func:`.autojit`.
     """
 
     def __init__(self, fn, backend=None, compiler_opts=None):
@@ -295,12 +295,12 @@ def autojit(fn=None, *, backend=None, compiler_opts=None):
     then the returned array will also be converted back, i.e.
     ``cfn(*numpy_arrays, backend='tensorflow')`` will return a ``numpy`` array.
 
-    The ``'python'`` backend simply extracts and unravels all the ``do`` calls
-    into a code object using ``compile`` which is then run with ``exec``.
-    This makes use of shared intermediates and constant folding, strips
-    away any python scaffoliding, and is compatible with any library, but the
-    resulting function is not 'low-level' in the same way as the other
-    backends.
+    The ``'python'`` backend simply extracts and unravels all the
+    :func:`~autoray.autoray.do` calls into a code object using ``compile``
+    which is then run with ``exec``. This makes use of shared intermediates and
+    constant folding, strips away any python scaffoliding, and is compatible
+    with any library, but the resulting function is not 'low-level' in the same
+    way as the other backends.
 
     Parameters
     ----------
@@ -309,8 +309,9 @@ def autojit(fn=None, *, backend=None, compiler_opts=None):
     backend : str, optional
         If set, use this as the default backend. The options are:
 
-        - ``'python'``: extract and unravel all the ``do`` calls into a
-          code object using ``compile`` which is then run with ``exec``.
+        - ``'python'``: extract and unravel all the :func:`~autoray.autoray.do`
+          calls into a code object using ``compile`` which is run with
+          ``exec``.
         - ``'jax'``: use `jax.jit` to compile the function.
         - ``'tensorflow'``: use `tf.function` to compile the function.
         - ``'torch'``: use `torch.jit.trace` to compile the function.
