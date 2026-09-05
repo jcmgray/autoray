@@ -15,6 +15,7 @@ Release notes for `autoray`.
 **Bug Fixes:**
 
 - `autoray.lazy` reductions now pass `axis` on as supplied, rather than always normalizing it to a tuple. `do("prod", x, axis=0)` on a lazy `torch` array therefore works, since `torch.prod` only accepts a scalar `dim`.
+- Experimental complexity tracing now accounts for batched matrix operations, supports pytrees of output nodes without double-counting shared dependencies, covers the operations used by Quimb projector and stabilized-QR traces, validates scaling dimension labels, and can reject incomplete traces with `allow_missed=False`.
 
 
 ## v0.10.1 (2026-08-07)
