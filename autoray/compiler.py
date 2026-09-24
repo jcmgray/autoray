@@ -1,4 +1,5 @@
 import functools
+import threading
 
 from . import lazy
 from .autoray import (
@@ -12,7 +13,38 @@ from .autoray import (
 )
 
 
-class CompilePython:
+class _LockedSetup:
+    """Mixin that excludes a ``threading.Lock`` attribute from pickling and
+    recreates it when unpickling.
+    """
+
+    _lock_name = "_setup_lock"
+
+    def __getstate__(self):
+        """Return the instance state without the lock.
+
+        Returns
+        -------
+        state : dict
+            Shallow copy of ``__dict__`` with the lock removed.
+        """
+        state = self.__dict__.copy()
+        state.pop(self._lock_name, None)
+        return state
+
+    def __setstate__(self, state):
+        """Restore the instance state and create a fresh lock.
+
+        Parameters
+        ----------
+        state : dict
+            The state as returned by :meth:`__getstate__`.
+        """
+        self.__dict__.update(state)
+        setattr(self, self._lock_name, threading.Lock())
+
+
+class CompilePython(_LockedSetup):
     """A simple compiler that unravels all autoray calls, optionally sharing
     intermediates and folding constants, converts this to a code object using
     ``compile``, then executes this using ``exec``.
@@ -38,6 +70,7 @@ class CompilePython:
         self._fold_constants = fold_constants
         self._share_intermediates = share_intermediates
         self._jit_fn = None
+        self._setup_lock = threading.Lock()
 
     def setup(self, args, kwargs):
         """Convert the example arrays to lazy variables and trace them through
@@ -60,12 +93,14 @@ class CompilePython:
     def __call__(self, *args, array_backend=None, **kwargs):
         """If necessary, build, then call the compiled function."""
         if self._jit_fn is None:
-            self._jit_fn = self.setup(args, kwargs)
+            with self._setup_lock:
+                if self._jit_fn is None:
+                    self._jit_fn = self.setup(args, kwargs)
 
         return self._jit_fn(args, kwargs)
 
 
-class CompileJax:
+class CompileJax(_LockedSetup):
     """ """
 
     def __init__(self, fn, enable_x64=None, platform_name=None, **kwargs):
@@ -74,6 +109,7 @@ class CompileJax:
         self._platform_name = platform_name
         self._jit_fn = None
         self._jit_kwargs = kwargs
+        self._setup_lock = threading.Lock()
 
     def setup(self):
         import jax  # type: ignore
@@ -88,14 +124,16 @@ class CompileJax:
 
     def __call__(self, *args, array_backend=None, **kwargs):
         if self._jit_fn is None:
-            self.setup()
+            with self._setup_lock:
+                if self._jit_fn is None:
+                    self.setup()
         out = self._jit_fn(*args, **kwargs)
         if array_backend != "jax":
             out = do("asarray", out, like=array_backend)
         return out
 
 
-class CompileTensorFlow:
+class CompileTensorFlow(_LockedSetup):
     """ """
 
     def __init__(self, fn, **kwargs):
@@ -103,6 +141,7 @@ class CompileTensorFlow:
         kwargs.setdefault("autograph", False)
         self._jit_fn = None
         self._jit_kwargs = kwargs
+        self._setup_lock = threading.Lock()
 
     def setup(self):
         import tensorflow as tf  # type: ignore
@@ -112,14 +151,16 @@ class CompileTensorFlow:
 
     def __call__(self, *args, array_backend=None, **kwargs):
         if self._jit_fn is None:
-            self.setup()
+            with self._setup_lock:
+                if self._jit_fn is None:
+                    self.setup()
         out = self._jit_fn(*args, **kwargs)
         if array_backend != "tensorflow":
             out = do("asarray", out, like=array_backend)
         return out
 
 
-class CompileTorch:
+class CompileTorch(_LockedSetup):
     """ """
 
     def __init__(self, fn, **kwargs):
@@ -135,6 +176,7 @@ class CompileTorch:
         self._jit_fn = None
         kwargs.setdefault("check_trace", False)
         self._jit_kwargs = kwargs
+        self._setup_lock = threading.Lock()
 
     def setup(self, *args, **kwargs):
         flat_tensors, ref_tree = tree_flatten((args, kwargs), get_ref=True)
@@ -152,7 +194,9 @@ class CompileTorch:
             # torch doesn't handle numpy arrays itself
             args = tree_map(self.torch.as_tensor, args, is_array)
         if self._jit_fn is None:
-            self.setup(*args, **kwargs)
+            with self._setup_lock:
+                if self._jit_fn is None:
+                    self.setup(*args, **kwargs)
         out = self._jit_fn(tree_flatten((args, kwargs)))
         if array_backend != "torch":
             out = do("asarray", out, like=array_backend)
@@ -181,12 +225,13 @@ class CompileTorch2:
         return out
 
 
-class CompilePytensor:
+class CompilePytensor(_LockedSetup):
     def __init__(self, fn, **kwargs):
         self._fn = fn
         self._jit_fn = None
         self._jit_kwargs = kwargs
         self._output_ref_tree = None
+        self._setup_lock = threading.Lock()
 
     def setup(self, args, kwargs):
         import pytensor  # type: ignore
@@ -209,7 +254,9 @@ class CompilePytensor:
 
     def __call__(self, *args, array_backend=None, **kwargs):
         if self._jit_fn is None:
-            self.setup(args, kwargs)
+            with self._setup_lock:
+                if self._jit_fn is None:
+                    self.setup(args, kwargs)
 
         flat_arrays = tree_flatten((args, kwargs))
         flat_outs = self._jit_fn(*flat_arrays)
@@ -228,10 +275,12 @@ _compiler_lookup = {
 }
 
 
-class AutoCompiled:
+class AutoCompiled(_LockedSetup):
     """Just in time compile a :func:`~autoray.autoray.do` using function. See
     the main wrapper :func:`.autojit`.
     """
+
+    _lock_name = "_compile_lock"
 
     def __init__(self, fn, backend=None, compiler_opts=None):
         self._fn = fn
@@ -241,6 +290,7 @@ class AutoCompiled:
             self._compiler_kwargs = {}
         else:
             self._compiler_kwargs = compiler_opts
+        self._compile_lock = threading.Lock()
 
     def __call__(self, *args, backend=None, **kwargs):
         array_backend = infer_backend(
@@ -268,12 +318,18 @@ class AutoCompiled:
         try:
             fn_compiled = self._compiled_fns[key]
         except KeyError:
-            if "python" in key:
-                backend = "python"
-            backend_compiler = _compiler_lookup.get(backend, CompilePython)
-            compiler_kwargs = self._compiler_kwargs.get(backend, {})
-            fn_compiled = backend_compiler(self._fn, **compiler_kwargs)
-            self._compiled_fns[key] = fn_compiled
+            with self._compile_lock:
+                try:  # try again after acquiring the lock
+                    fn_compiled = self._compiled_fns[key]
+                except KeyError:
+                    if "python" in key:
+                        backend = "python"
+                    backend_compiler = _compiler_lookup.get(
+                        backend, CompilePython
+                    )
+                    compiler_kwargs = self._compiler_kwargs.get(backend, {})
+                    fn_compiled = backend_compiler(self._fn, **compiler_kwargs)
+                    self._compiled_fns[key] = fn_compiled
 
         return fn_compiled(*args, array_backend=array_backend, **kwargs)
 

@@ -1,3 +1,6 @@
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 from numpy.testing import assert_allclose
 
@@ -97,3 +100,85 @@ def test_multi_output():
 
     assert_allclose(x, a - b.sum() + 1)
     assert_allclose(y, b - (a - b.sum()).sum() - 1)
+
+
+class _SignalOnContention:
+    """Lock that waits on ``barrier`` before blocking, if already held.
+
+    Parameters
+    ----------
+    barrier : threading.Barrier
+        Barrier to wait on when the lock is contended.
+    """
+
+    def __init__(self, barrier):
+        self._lock = threading.Lock()
+        self._barrier = barrier
+
+    def __enter__(self):
+        if not self._lock.acquire(blocking=False):
+            self._barrier.wait()
+            self._lock.acquire()
+
+    def __exit__(self, *exc):
+        self._lock.release()
+
+
+@pytest.mark.parametrize("stage", ["setup", "compile"])
+def test_first_call_interlaced(mgs_case, monkeypatch, stage):
+    from autoray import compiler
+
+    x, y = mgs_case
+    # synchronize when A is inside the locked stage and B starts its call
+    b_start = threading.Barrier(2, timeout=10)
+    # synchronize when B is done and A resumes
+    b_queued = threading.Barrier(2, timeout=10)
+    ncalls = 0
+
+    def hooked(fn):
+        def wrapped(*args, **kwargs):
+            nonlocal ncalls
+            ncalls += 1
+            if ncalls == 1:
+                b_start.wait()
+            b_queued.wait()
+            return fn(*args, **kwargs)
+
+        return wrapped
+
+    if stage == "setup":
+        # tracing, guarded by CompilePython._setup_lock
+        cfn = compiler.CompilePython(hooked(modified_gram_schmidt))
+        cfn._setup_lock = _SignalOnContention(b_queued)
+    else:
+        # compiler creation, guarded by AutoCompiled._compile_lock
+        make_compiler = hooked(compiler.CompilePython)
+        monkeypatch.setitem(compiler._compiler_lookup, "python", make_compiler)
+        cfn = autojit(modified_gram_schmidt)
+        cfn._compile_lock = _SignalOnContention(b_queued)
+
+    def call_b():
+        b_start.wait()
+        return cfn(x)
+
+    with ThreadPoolExecutor(2) as pool:
+        futures = [pool.submit(cfn, x), pool.submit(call_b)]
+        results = [f.result(timeout=10) for f in futures]
+
+    assert ncalls == 1
+    for y2 in results:
+        assert_allclose(y, y2)
+
+
+def test_autojit_pickle(mgs_case):
+    import pickle
+
+    x, y = mgs_case
+    cfn = autojit(modified_gram_schmidt)
+    cfn(x)
+    cfn2 = pickle.loads(pickle.dumps(cfn))
+    assert_allclose(y, cfn2(x))
+    # locks should be recreated as new objects
+    assert cfn2._compile_lock is not cfn._compile_lock
+    (compiled,) = cfn2._compiled_fns.values()
+    assert compiled._setup_lock is not None
