@@ -577,6 +577,65 @@ def test_can_pickle_traced_function():
     assert ar.shape(z) == (2, 4)
 
 
+def test_traced_function_reentrancy():
+    import threading
+
+    # thread A is paused mid-execution -> thread B makes a full call
+    b_paused = threading.Barrier(2, timeout=10)
+    # thread B has finished its call -> thread A resumes
+    b_done = threading.Barrier(2, timeout=10)
+    tls = threading.local()
+
+    def hook(x):
+        # only pauses in thread A, after its inputs have been injected but
+        # before the second read of ``a`` below
+        if getattr(tls, "pause", False):
+            b_paused.wait()
+            b_done.wait()
+        return x
+
+    a = lazy.Variable(shape=(4, 4), backend="numpy")
+    h = lazy.LazyArray("numpy", hook, (a,), None, shape=(4, 4))
+    f = ar.do("tanh", h + a).get_function([a])
+
+    xa = ar.do("random.uniform", size=(4, 4), like="numpy")
+    xb = ar.do("random.uniform", size=(4, 4), like="numpy")
+
+    def thread_a():
+        tls.pause = True
+        return f([xa])
+
+    def thread_b():
+        b_paused.wait()
+        try:
+            return f([xb])
+        finally:
+            b_done.wait()
+
+    results = [None, None]
+    errors = []
+
+    def worker(i, target):
+        try:
+            results[i] = target()
+        except Exception as e:
+            errors.append(e)
+
+    threads = [
+        threading.Thread(target=worker, args=(i, target))
+        for i, target in enumerate((thread_a, thread_b))
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(10)
+    assert not any(t.is_alive() for t in threads), "threads deadlocked"
+
+    assert not errors
+    assert_allclose(results[0], ar.do("tanh", 2 * xa))
+    assert_allclose(results[1], ar.do("tanh", 2 * xb))
+
+
 def test_where():
     a = lazy.Variable(shape=(4,), backend="numpy")
     b = lazy.Variable(shape=(4,), backend="numpy")

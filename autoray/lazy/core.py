@@ -260,19 +260,18 @@ class Function:
         self._out_names = tuple(f"x{id(v)}" for v in outs_flat)
 
     def __call__(self, *args):
+        # create a shallow copy of the locals
+        _locals = self._locals.copy()
+
         # this allows any matching zipped tree
         for name, array in zip(self._in_names, tree_iter(args)):
-            self._locals[name] = array
+            _locals[name] = array
 
         # run the byte-compiled function with the updated locals
-        exec(self._code, None, self._locals)
+        exec(self._code, None, _locals)
 
-        # remove inputs from locals
-        for name in self._in_names:
-            del self._locals[name]
-
-        # pop outputs from locals
-        outs = tuple(self._locals.pop(name) for name in self._out_names)
+        # read the outputs out
+        outs = tuple(_locals[name] for name in self._out_names)
 
         # return the outputs in the original tree structure
         return tree_unflatten(outs, self._out_tree)
