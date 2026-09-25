@@ -102,6 +102,24 @@ def test_multi_output():
     assert_allclose(y, b - (a - b.sum()).sum() - 1)
 
 
+def _run_pair(call_a, call_b):
+    """Run two functions in separate threads and wait for their results.
+
+    Parameters
+    ----------
+    call_a, call_b : callable
+        Zero-argument functions to run.
+
+    Returns
+    -------
+    results : list
+        The return values of ``call_a`` and ``call_b``, re-raising any error.
+    """
+    with ThreadPoolExecutor(2) as pool:
+        futures = [pool.submit(call_a), pool.submit(call_b)]
+        return [f.result(timeout=10) for f in futures]
+
+
 class _SignalOnContention:
     """Lock that waits on ``barrier`` before blocking, if already held.
 
@@ -124,48 +142,77 @@ class _SignalOnContention:
         self._lock.release()
 
 
-@pytest.mark.parametrize("stage", ["setup", "compile"])
-def test_first_call_interlaced(mgs_case, monkeypatch, stage):
+def test_setup_interlaced(mgs_case):
     from autoray import compiler
 
     x, y = mgs_case
-    # synchronize when A is inside the locked stage and B starts its call
+    # A is tracing (holding the setup lock) -> B starts its call
     b_start = threading.Barrier(2, timeout=10)
-    # synchronize when B is done and A resumes
+    # B is queued on the lock (or, if unlocked, also tracing) -> A resumes
     b_queued = threading.Barrier(2, timeout=10)
-    ncalls = 0
+    ntraces = 0
 
-    def hooked(fn):
-        def wrapped(*args, **kwargs):
-            nonlocal ncalls
-            ncalls += 1
-            if ncalls == 1:
-                b_start.wait()
-            b_queued.wait()
-            return fn(*args, **kwargs)
+    def traced_mgs(X):
+        nonlocal ntraces
+        ntraces += 1
+        if ntraces == 1:
+            b_start.wait()
+        b_queued.wait()
+        return modified_gram_schmidt(X)
 
-        return wrapped
-
-    if stage == "setup":
-        # tracing, guarded by CompilePython._setup_lock
-        cfn = compiler.CompilePython(hooked(modified_gram_schmidt))
-        cfn._setup_lock = _SignalOnContention(b_queued)
-    else:
-        # compiler creation, guarded by AutoCompiled._compile_lock
-        make_compiler = hooked(compiler.CompilePython)
-        monkeypatch.setitem(compiler._compiler_lookup, "python", make_compiler)
-        cfn = autojit(modified_gram_schmidt)
-        cfn._compile_lock = _SignalOnContention(b_queued)
+    cfn = compiler.CompilePython(traced_mgs)
+    compiler._SETUP_LOCKS[cfn] = _SignalOnContention(b_queued)
 
     def call_b():
         b_start.wait()
         return cfn(x)
 
-    with ThreadPoolExecutor(2) as pool:
-        futures = [pool.submit(cfn, x), pool.submit(call_b)]
-        results = [f.result(timeout=10) for f in futures]
+    results = _run_pair(lambda: cfn(x), call_b)
 
-    assert ncalls == 1
+    assert ntraces == 1
+    for y2 in results:
+        assert_allclose(y, y2)
+
+
+def test_compiler_creation_interlaced(mgs_case, monkeypatch):
+    from autoray import compiler
+
+    x, y = mgs_case
+    # A is creating its compiler -> B makes a full call
+    b_start = threading.Barrier(2, timeout=10)
+    # B has finished its call -> A resumes
+    b_done = threading.Barrier(2, timeout=10)
+    ncreated = ntraces = 0
+
+    def make_compiler(fn, **kwargs):
+        nonlocal ncreated
+        ncreated += 1
+        if ncreated == 1:
+            b_start.wait()
+            b_done.wait()
+        return compiler.CompilePython(fn, **kwargs)
+
+    def traced_mgs(X):
+        nonlocal ntraces
+        ntraces += 1
+        return modified_gram_schmidt(X)
+
+    monkeypatch.setitem(compiler._compiler_lookup, "python", make_compiler)
+    cfn = autojit(traced_mgs)
+
+    def call_b():
+        b_start.wait()
+        try:
+            return cfn(x)
+        finally:
+            b_done.wait()
+
+    results = _run_pair(lambda: cfn(x), call_b)
+
+    # both threads missed the cache, but A must reuse B's compiler
+    assert ncreated == 2
+    assert ntraces == 1
+    assert len(cfn._compiled_fns) == 1
     for y2 in results:
         assert_allclose(y, y2)
 
@@ -173,12 +220,14 @@ def test_first_call_interlaced(mgs_case, monkeypatch, stage):
 def test_autojit_pickle(mgs_case):
     import pickle
 
+    from autoray import compiler
+
     x, y = mgs_case
     cfn = autojit(modified_gram_schmidt)
     cfn(x)
     cfn2 = pickle.loads(pickle.dumps(cfn))
     assert_allclose(y, cfn2(x))
-    # locks should be recreated as new objects
-    assert cfn2._compile_lock is not cfn._compile_lock
-    (compiled,) = cfn2._compiled_fns.values()
-    assert compiled._setup_lock is not None
+    # the unpickled compiler should get its own setup lock
+    (c1,) = cfn._compiled_fns.values()
+    (c2,) = cfn2._compiled_fns.values()
+    assert compiler._get_setup_lock(c1) is not compiler._get_setup_lock(c2)
