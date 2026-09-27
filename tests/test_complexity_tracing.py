@@ -6,9 +6,12 @@ from autoray import lazy
 from autoray.experimental.complexity_tracing import (
     COST_SCALINGS,
     COSTS,
+    closest_prime,
     compute_cost,
     compute_cost_scalings,
     cost_node,
+    is_prime,
+    plot_scalings,
 )
 
 
@@ -136,3 +139,73 @@ def test_compute_cost_scalings_rejects_ambiguous_factors(factor_map):
 
     with pytest.raises(ValueError, match="factor_map"):
         compute_cost_scalings(x, factor_map)
+
+
+def test_plot_scalings_merges_points_and_picks_labels():
+    pytest.importorskip("matplotlib")
+    import matplotlib
+
+    matplotlib.use("Agg")
+
+    a = lazy.Variable((2, 3, 3), backend="numpy")
+    b = lazy.Variable((3, 3, 5, 5), backend="numpy")
+    c = lazy.tensordot(a, b, axes=((1, 2), (0, 1)))
+    d = lazy.tensordot(a, b, axes=((1, 2), (0, 1)))
+    e = lazy.add(c, d)
+
+    fig, ax = plot_scalings(
+        e, {"p": 2, "D": 3, "chi": 5}, show_and_close=False
+    )
+    assert ax.get_xlabel() == "$D$ scaling"
+    assert ax.get_ylabel() == "$\\chi$ scaling"
+    (sc,) = ax.collections
+    points = {
+        tuple(xy): n
+        for xy, n in zip(sc.get_offsets().tolist(), sc.get_array())
+    }
+    # both tensordots merge into one point
+    assert points == {(2.0, 2.0): 2, (0.0, 2.0): 1}
+
+    import matplotlib.pyplot as plt
+
+    plt.close(fig)
+
+
+def test_is_prime():
+    primes = [n for n in range(200) if is_prime(n)]
+    expected = [n for n in range(2, 200) if all(n % d for d in range(2, n))]
+    assert primes == expected
+
+
+@pytest.mark.parametrize(
+    ("n", "expected"),
+    [(2, 2), (4, 3), (10, 11), (24, 23), (120, 113), (121, 127), (126, 127)],
+)
+def test_closest_prime(n, expected):
+    assert closest_prime(n) == expected
+
+
+class TestComputeCostScalingsDimensions:
+    def test_products_of_primes_are_allowed(self):
+        x = lazy.Variable((2, 9, 6), backend="numpy")
+        y = lazy.multiply(x, 2)
+
+        scalings = compute_cost_scalings(
+            y, {"a": 2, "b": 3}, allow_missed=False
+        )
+        (op,) = [op for op in scalings if op["name"] == "mul"]
+        assert (op["a"], op["b"]) == (2, 3)
+
+    def test_other_dimensions_warn(self):
+        x = lazy.Variable((2, 7), backend="numpy")
+        y = lazy.multiply(x, 2)
+
+        with pytest.warns(UserWarning, match=r"Dimensions \[7\]"):
+            compute_cost_scalings(y, {"a": 2, "b": 3})
+
+    def test_other_dimensions_can_be_rejected(self):
+        x = lazy.Variable((2, 7), backend="numpy")
+        y = lazy.multiply(x, 2)
+
+        with pytest.raises(ValueError, match=r"Dimensions \[7\]"):
+            compute_cost_scalings(y, {"a": 2, "b": 3}, allow_missed=False)

@@ -10,6 +10,8 @@ so that we can prime number decompose it and extract the scaling.
 
 import math
 
+from ..lazy.draw import default_to_neutral_style
+
 
 def _get_batch_matrix_sizes(x):
     """Get the batch size and ordered matrix dimensions of ``x``."""
@@ -252,10 +254,16 @@ def prime_factors(n) -> list[int]:
 
 
 def is_prime(n: int) -> bool:
-    for i in range(int(n**0.5), 1, -2 if int(n**0.5) % 2 == 0 else -1):
+    if n < 2:
+        return False
+    if n % 2 == 0:
+        return n == 2
+    i = 3
+    while i * i <= n:
         if n % i == 0:
             return False
-    return False if n in (0, 1) else True
+        i += 2
+    return True
 
 
 def closest_prime(nt: int) -> int:
@@ -313,22 +321,34 @@ def compute_cost_scalings(
         The output node or nodes to trace. Shared dependencies are counted
         once.
     factor_map : dict[str, int]
-        Mapping from dimension labels to distinct prime numbers.
+        Mapping from dimension labels to distinct prime numbers. Every
+        dimension in the traced computation should be a product of these.
     print_missed : bool, optional
-        Whether to warn about unregistered operations and prime factors.
+        Whether to warn about unregistered operations, dimensions that are not
+        products of the ``factor_map`` primes, and other prime factors.
     allow_missed : bool, optional
-        Whether to omit operations without a registered scaling. If ``False``,
-        raise a ``ValueError`` listing them instead.
+        Whether to omit operations without a registered scaling and allow
+        dimensions that are not products of the ``factor_map`` primes. If
+        ``False``, raise a ``ValueError`` listing them instead.
     """
     from autoray.lazy import descend
 
     _check_factor_map(factor_map)
+    primes = set(factor_map.values())
 
     counts = {}
     missed = {}
+    dim_ok = {}
+    bad_dims = {}
 
     for node in descend(z):
         f = node.fn_name
+
+        for d in node.shape:
+            if d not in dim_ok:
+                dim_ok[d] = set(prime_factors(d)) <= primes
+            if not dim_ok[d]:
+                bad_dims[d] = bad_dims.get(d, 0) + 1
 
         if f in COST_SCALINGS:
             CS = COST_SCALINGS[f](node)
@@ -348,6 +368,18 @@ def compute_cost_scalings(
 
             warnings.warn(f"Missed {missed} in cost scaling computation.")
 
+    if bad_dims:
+        msg = (
+            f"Dimensions {sorted(bad_dims)} are not products of the "
+            f"factor_map primes {sorted(primes)}, so their scaling is lost."
+        )
+        if not allow_missed:
+            raise ValueError(msg)
+        if print_missed:
+            import warnings
+
+            warnings.warn(msg)
+
     scalings = []
 
     for key, freq in counts.items():
@@ -360,7 +392,8 @@ def compute_cost_scalings(
         for name, factor in factor_map.items():
             op[name] = pf.pop(factor, 0)
 
-        if pf and print_missed:
+        # bad dimensions have already been reported
+        if pf and print_missed and not bad_dims:
             import warnings
 
             warnings.warn(
@@ -372,3 +405,135 @@ def compute_cost_scalings(
 
     scalings.sort(key=lambda x: x["cost"], reverse=True)
     return scalings
+
+
+@default_to_neutral_style
+def plot_scalings(
+    z,
+    factor_map,
+    x=None,
+    y=None,
+    marker="s",
+    size=400,
+    cmap=None,
+    norm="log",
+    colorbar=True,
+    print_missed=True,
+    allow_missed=True,
+    ax=None,
+    figsize=None,
+    show_and_close=True,
+):
+    """Plot the cost scaling of every operation in one or more lazy output
+    nodes, as the exponents of two dimension labels, colored by how often
+    each occurs.
+
+    Operations with zero cost are left out. Operations with the same ``x`` and
+    ``y`` exponents are merged into one point, whose count is their total
+    number of repeats.
+
+    Parameters
+    ----------
+    z : pytree of LazyArray
+        The output node or nodes to trace.
+    factor_map : dict[str, int]
+        Mapping from dimension labels to distinct prime numbers, see
+        ``compute_cost_scalings``.
+    x : str, optional
+        The label whose exponent is plotted on the x-axis. By default the
+        label with the second largest dimension in ``factor_map``.
+    y : str, optional
+        The label whose exponent is plotted on the y-axis. By default the
+        label with the largest dimension in ``factor_map``.
+    marker : str, optional
+        Marker for each point.
+    size : float, optional
+        Size of each marker.
+    cmap : str or Colormap, optional
+        Colormap for the number of repeats.
+    norm : str or Normalize, optional
+        Color normalization for the number of repeats, by default ``"log"``.
+    colorbar : bool, optional
+        Whether to add a colorbar showing the number of repeats.
+    print_missed : bool, optional
+        Whether to warn about unregistered operations and prime factors.
+    allow_missed : bool, optional
+        Whether to omit operations without a registered scaling.
+    ax : matplotlib.axes.Axes, optional
+        Axes to plot on, will be created if not provided.
+    figsize : tuple, optional
+        Size of the figure, if one is created.
+    show_and_close : bool, optional
+        Whether to show and close a created figure.
+    style : str or dict, optional
+        Matplotlib style to use, by default a neutral style that works on
+        light and dark backgrounds.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure or None
+        The created figure, or ``None`` if ``ax`` was given.
+    ax : matplotlib.axes.Axes
+        The axes plotted on.
+    """
+    import matplotlib.pyplot as plt
+
+    scalings = compute_cost_scalings(
+        z,
+        factor_map,
+        print_missed=print_missed,
+        allow_missed=allow_missed,
+    )
+    scalings = [op for op in scalings if op["cost"] > 0]
+
+    if x is None or y is None:
+        # default to the labels with the largest dimensions
+        ranked = sorted(
+            (name for name in factor_map if name not in (x, y)),
+            key=factor_map.get,
+            reverse=True,
+        )
+        if y is None:
+            y = ranked.pop(0)
+        if x is None:
+            x = ranked.pop(0)
+
+    counts = {}
+    for op in scalings:
+        key = (op[x], op[y])
+        counts[key] = counts.get(key, 0) + op["freq"]
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+    else:
+        fig = None
+
+    sc = ax.scatter(
+        x=[k[0] for k in counts],
+        y=[k[1] for k in counts],
+        c=list(counts.values()),
+        s=size,
+        marker=marker,
+        cmap=cmap,
+        norm=norm,
+        clip_on=False,
+    )
+
+    greek = {"alpha", "beta", "gamma", "delta", "epsilon", "theta", "lambda"}
+    greek.update(("mu", "sigma", "tau", "phi", "chi", "psi", "omega"))
+    xlabel = f"\\{x}" if x in greek else x
+    ylabel = f"\\{y}" if y in greek else y
+    ax.set_xlabel(f"${xlabel}$ scaling")
+    ax.set_ylabel(f"${ylabel}$ scaling")
+    ax.set_xlim(-0.5, None)
+    ax.set_ylim(-0.5, None)
+    ax.set_aspect("equal")
+
+    if colorbar:
+        ax.figure.colorbar(sc, ax=ax, label="Repeats", shrink=0.6)
+
+    if (fig is not None) and show_and_close:
+        plt.show()
+        plt.close(fig)
+
+    return fig, ax
