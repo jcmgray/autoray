@@ -1,4 +1,4 @@
-from . import linalg
+from . import linalg, random
 from .core import (
     Function,
     LazyArray,
@@ -142,6 +142,7 @@ __all__ = (
     "ones",
     "permute_dims",
     "prod",
+    "random",
     "real",
     "reshape",
     "shared_intermediates",

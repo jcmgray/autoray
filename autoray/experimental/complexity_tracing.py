@@ -133,6 +133,7 @@ _LINEAR_COSTS = {
     "norm",
     "linalg_norm",
     "pow",
+    "random_array",
     "reshape",
     "sqrt",
     "sum",

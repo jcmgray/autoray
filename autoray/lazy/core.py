@@ -136,27 +136,27 @@ def compute(lz):
 
 
 def compute_constants(lz, variables):
-    """Fold constant arrays - everything not dependent on ``variables`` -
-    into the graph.
+    """Compute graph nodes whose values stay constant between calls.
+
+    Keep nodes with nonfoldable functions and nodes that depend on them.
 
     Parameters
     ----------
     lz : pytree of LazyArray
-        The output node(s) of the computational graph.
+        Output nodes of the graph.
     variables : pytree of LazyArray
-        Nodes that should be treated as variable. I.e. any descendants will
-        not be folded into the graph.
+        Input nodes whose values can change between calls.
     """
     variables = set(tree_iter(variables, is_lazy_array))
 
-    # must ascend
+    # visit each node after its dependencies
     for node in ascend(lz):
-        if not any(c in variables for c in node._deps):
-            # can fold
-            node._materialize()
-        else:
-            # inherit variable status
+        if any(c in variables for c in node._deps) or getattr(
+            node._fn, "_autoray_nonfoldable", False
+        ):
             variables.add(node)
+        else:
+            node._materialize()
 
 
 def get_source(lz, params=None):
@@ -228,12 +228,12 @@ class Function:
     """
 
     __slots__ = (
+        "_code",
         "_in_names",
+        "_locals",
         "_out_names",
         "_out_tree",
         "_source",
-        "_code",
-        "_locals",
     )
 
     def __init__(self, inputs, outputs, fold_constants=True):
@@ -268,7 +268,7 @@ class Function:
             _locals[name] = array
 
         # run the byte-compiled function with the updated locals
-        exec(self._code, None, _locals)
+        exec(self._code, None, _locals)  # noqa: S102
 
         # read the outputs out
         outs = tuple(_locals[name] for name in self._out_names)
@@ -359,14 +359,14 @@ class LazyArray:
     """
 
     __slots__ = (
-        "_backend",
-        "_fn",
         "_args",
-        "_kwargs",
-        "_shape",
+        "_backend",
         "_data",
         "_deps",
         "_depth",
+        "_fn",
+        "_kwargs",
+        "_shape",
     )
 
     def __init__(
@@ -543,7 +543,7 @@ class LazyArray:
         args, kwargs = tree_map(_maybe_replace, (self._args, self._kwargs))
         args = [repr(a) for a in args]
         for k, v in kwargs.items():
-            args.append(f"{k}={repr(v)}")
+            args.append(f"{k}={v!r}")
 
         s = ", ".join(args)
         s = f"{self.fn_name}({s}) → {list(self.shape)}"
@@ -1496,7 +1496,7 @@ def getitem(a, key):
             adv_idx_locs.append(i)
 
     if adv_idx_shape is not None:
-        if not all(i + 1 == j for i, j in zip(adv_idx_locs, adv_idx_locs[1:])):
+        if not all(i + 1 == j for i, j in itertools.pairwise(adv_idx_locs)):
             # 'move to front' advanced indexing
             newshape = (*adv_idx_shape, *newshape)
         else:
