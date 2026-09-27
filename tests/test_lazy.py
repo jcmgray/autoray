@@ -1071,3 +1071,142 @@ def test_lazy_to_numpy_to_device_from_numpy():
 
     with pytest.raises(TypeError, match="device"):
         ar.do("from_numpy", xn, device="cuda:0", like="autoray.lazy")
+
+
+class TestLazyNamespace:
+    def test_dtype_not_inferred(self):
+        import numpy as np
+
+        a = lazy.array(np.ones(3, dtype="complex128"))
+        b = lazy.array(np.ones(3, dtype="float32"))
+        xa = ar.get_namespace(a)
+        assert xa is ar.get_namespace(b)
+        assert xa is ar.get_namespace("autoray.lazy")
+        assert xa._dtype is None
+        assert ar.get_dtype_name(xa.zeros((2,)).compute()) == "float64"
+
+    def test_explicit_dtype(self):
+        import numpy as np
+
+        a = lazy.array(np.ones(3, dtype="complex128"))
+        xp = ar.get_namespace(a, dtype="float32")
+        assert ar.get_dtype_name(xp.zeros((2,)).compute()) == "float32"
+
+
+class TestLazyRandom:
+    _BACKENDS = (
+        "cupy",
+        "dask",
+        "jax",
+        "mlx",
+        "numpy",
+        "tensorflow",
+        "torch",
+    )
+
+    @pytest.mark.parametrize("dist", ["normal", "uniform", "rademacher"])
+    @pytest.mark.parametrize(
+        "backend,dtype,fn",
+        gen_params(
+            backends=_BACKENDS,
+            dtypes=...,
+            fns=["random.array"],
+        ),
+    )
+    def test_compute_backend_dtype_device(self, backend, dtype, fn, dist):
+        like = gen_rand((), backend, dtype)
+        lazy_like = lazy.array(like)
+        x = ar.do(fn, (2, 3), dist=dist, like=lazy_like)
+
+        assert isinstance(x, lazy.LazyArray)
+        assert x.backend == backend
+        assert x.shape == (2, 3)
+        assert x.fn_name == "random_array"
+
+        y = x.compute()
+        assert ar.infer_backend(y) == backend
+        assert ar.get_dtype_name(y) == dtype
+
+        _, like_device, _ = ar.infer_backend_device_dtype(like)
+        _, actual_device, _ = ar.infer_backend_device_dtype(y)
+        assert str(actual_device) == str(like_device)
+
+    def test_direct_lazy_backend(self):
+        x = ar.do(
+            "random.array",
+            (2, 3),
+            dtype="float32",
+            like="autoray.lazy",
+        )
+        assert isinstance(x, lazy.LazyArray)
+        assert x.backend == "numpy"
+        assert x.shape == (2, 3)
+        assert ar.get_dtype_name(x.compute()) == "float32"
+
+    def test_explicit_dtype_and_device_keep_backend(self):
+        torch = pytest.importorskip("torch")
+        like = lazy.array(torch.ones((), dtype=torch.float64))
+        x = ar.do(
+            "random.array",
+            (2, 3),
+            dtype="float32",
+            device="cpu",
+            like=like,
+        ).compute()
+        assert isinstance(x, torch.Tensor)
+        assert x.dtype == torch.float32
+        assert x.device.type == "cpu"
+
+    @pytest.mark.parametrize("rng", [42, object()])
+    def test_only_none_rng_supported(self, rng):
+        with pytest.raises(TypeError, match="only rng=None"):
+            ar.do(
+                "random.array",
+                (2, 3),
+                rng=rng,
+                like="autoray.lazy",
+            )
+
+    def test_compute_caches_sample(self):
+        x = ar.do("random.array", (2, 3), like="autoray.lazy")
+        y = x.compute()
+        assert x.compute() is y
+
+    @pytest.mark.parametrize(
+        "backend,fn",
+        gen_params(backends=_BACKENDS, fns=["random.array"]),
+    )
+    def test_compiled_draws_are_independent_and_fresh(self, backend, fn):
+        like_data = gen_rand((), backend, "float32")
+        like = lazy.array(like_data)
+        x = ar.do(fn, (20,), like=like)
+        y = ar.do(fn, (20,), like=like)
+        compiled = lazy.Function(like, (x, y))
+
+        x1, y1 = compiled(like_data)
+        x2, y2 = compiled(like_data)
+        assert not ar.do("allclose", x1, y1)
+        assert not ar.do("allclose", x2, y2)
+        assert not ar.do("allclose", x1, x2)
+        assert not ar.do("allclose", y1, y2)
+
+    def test_compiled_draw_is_pickleable(self):
+        import pickle
+
+        x = ar.do("random.array", (2, 3), like="autoray.lazy")
+        fn = pickle.loads(pickle.dumps(lazy.Function((), x)))
+        x1 = fn()
+        x2 = fn()
+        assert not ar.do("allclose", x1, x2)
+
+    def test_shared_intermediates_do_not_merge_draws(self):
+        with lazy.shared_intermediates():
+            x = ar.do("random.array", (2, 3), like="autoray.lazy")
+            y = ar.do("random.array", (2, 3), like="autoray.lazy")
+        assert x is not y
+
+    def test_complexity_cost(self):
+        from autoray.experimental.complexity_tracing import compute_cost
+
+        x = ar.do("random.array", (2, 3), like="autoray.lazy")
+        assert compute_cost(x, print_missed=False) == 6

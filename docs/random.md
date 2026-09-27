@@ -237,6 +237,28 @@ generator and uses that for `rng=None`, so seedless code still works and
 `do("random.seed", ..., like="jax")` still makes it reproducible.
 
 
+## Lazy random arrays
+
+Lazy `"random.array"` calls use the backend's shared random state. Use a lazy
+`like` array to select the backend:
+
+```python
+import autoray as ar
+from autoray import lazy
+
+like = lazy.Variable((2, 3), backend="numpy")
+x = ar.do("random.array", (4, 5), dtype="float32", like=like)
+```
+
+At execution, `like` supplies the concrete backend, dtype and device. Calling
+`x.compute()` draws and caches one sample. Compiled functions with random nodes
+draw new samples on each call. Separate random nodes draw independently, even
+when shared intermediates are enabled.
+
+Lazy random arrays require `rng=None`. An integer seed or generator raises
+`TypeError`. Lazy `"random.default_rng"` is not supported yet.
+
+
 ## Compiled functions
 
 Random state and tracing interact awkwardly, in opposite ways for the two main

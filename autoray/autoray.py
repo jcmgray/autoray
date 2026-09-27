@@ -423,6 +423,7 @@ def infer_backend_multi(*arrays):
 
 
 _backend_device_dtype_dispatchers = {}
+_namespace_dispatchers = {}
 
 
 def _invalidate_backend_inference_caches():
@@ -430,6 +431,7 @@ def _invalidate_backend_inference_caches():
     _infer_class_backend_cached.cache_clear()
     _infer_class_backend_multi_cached.cache_clear()
     _backend_device_dtype_dispatchers.clear()
+    _namespace_dispatchers.clear()
 
 
 def _make_device_dtype_dispatch(like):
@@ -626,6 +628,11 @@ def _choose_backend(fn, args, kwargs, like=None):
         if fn in _CREATION_ROUTINES:
             # possibly inject device and dtype from like into fn kwargs
             backend, device, dtype = infer_backend_device_dtype(like)
+
+            if (backend == "autoray.lazy") and (fn == "random.array"):
+                # pass lazy ``like`` through for dtype and device lookup
+                kwargs.setdefault("_like", like)
+                return backend
 
             try:
                 # check for backend specific defaults
@@ -1409,11 +1416,11 @@ def _choose_namespace(backend, args):
         # without an array there is no dtype or device context to inherit
         return get_namespace(like=backend)
 
-    # only inherit context from an argument belonging to the chosen backend,
-    # a string would be read as a backend name rather than an array
-    if not isinstance(like, str):
-        if _infer_class_backend_cached(like.__class__) == backend:
-            return get_namespace(like)
+    # use dtype and device defaults only from matching arrays
+    if not isinstance(like, str) and (
+        _infer_class_backend_cached(like.__class__) == backend
+    ):
+        return get_namespace(like)
 
     # backend selection may have been independent of the first argument
     return get_namespace(like=backend)
@@ -2738,33 +2745,50 @@ def _reset_namespaces():
         _reset_namespace(xp)
 
 
+def _make_namespace_dispatch(like):
+    """Make a namespace dispatcher for the class of ``like``."""
+    backend = _infer_class_backend_cached(like.__class__)
+    if backend == "autoray.lazy":
+        # ``LazyArray.dtype`` creates a graph node that a cache would retain
+
+        def _dispatcher(like, device, dtype):
+            return backend, device, dtype
+
+        return _dispatcher
+
+    return _make_device_dtype_dispatch(like)
+
+
 def get_namespace(like=None, device=None, dtype=None, submodule=None):
-    """Get an automatic namespace object.
+    """Get a namespace for array functions.
 
-    If `like` is None, the namespace essentially provides an alternative syntax
-    to :func:`.do`, dispatching each function at calltime, and allowing the
-    backend and function implementations to be dynamically updated.
-
-    If `like` is supplied however, the backend is eagerly dispatched and
-    functions are loaded and cached specifically for that backend. In this
-    case, default `device` and `dtype` can also be specified for various array
-    creation routines, or if `like` is an array, inferred from that.
+    If ``like`` is ``None``, choose a backend on each call. Otherwise, use
+    the selected backend and cache function lookups. Concrete arrays also
+    supply default dtype and device values. Lazy arrays do not.
 
     Parameters
     ----------
     like : array-like, str or None, optional
-        An array-like object to dispatch on, an explicit backend name, or None.
-    device : str or None, optional
-        The device to use for array creation, or None to infer from `like`.
-    dtype : str or None, optional
-        The data type to use for array creation, or None to infer from `like`.
+        An array to infer the backend from, a backend string, or ``None``.
+    device : str or device_like or None, optional
+        Device for array creation. If ``None``, infer from a concrete ``like``.
+    dtype : str or dtype_like or None, optional
+        Dtype for array creation. If ``None``, infer from a concrete ``like``.
+    submodule : str or None, optional
+        Submodule used for nested lookups, e.g. ``"random"``.
 
     Returns
     -------
     AutoNamespace
-        An automatic namespace object.
+        Namespace with cached function lookups.
     """
-    backend, device, dtype = infer_backend_device_dtype(like, device, dtype)
+    try:
+        f = _namespace_dispatchers[like.__class__]
+    except KeyError:
+        f = _namespace_dispatchers[like.__class__] = _make_namespace_dispatch(
+            like
+        )
+    backend, device, dtype = f(like, device=device, dtype=dtype)
     try:
         key = (
             backend,
@@ -2778,8 +2802,9 @@ def get_namespace(like=None, device=None, dtype=None, submodule=None):
     try:
         xp = _NAMESPACE_CACHE[key]
     except KeyError:
+        # pass the backend to avoid another dtype and device lookup
         xp = _NAMESPACE_CACHE[key] = AutoNamespace(
-            like=like,
+            like=backend,
             device=device,
             dtype=dtype,
             submodule=submodule,
