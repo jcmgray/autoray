@@ -145,6 +145,7 @@ _LINEAR_COSTS = {
 }
 
 _NOTHING_COSTS = {
+    "default_rng",
     "getitem",
     "None",
 }

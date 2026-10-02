@@ -1157,15 +1157,22 @@ class TestLazyRandom:
         assert x.dtype == torch.float32
         assert x.device.type == "cpu"
 
-    @pytest.mark.parametrize("rng", [42, object()])
-    def test_only_none_rng_supported(self, rng):
-        with pytest.raises(TypeError, match="only rng=None"):
-            ar.do(
-                "random.array",
-                (2, 3),
-                rng=rng,
-                like="autoray.lazy",
-            )
+    def test_seed_passed_through(self):
+        import numpy as np
+
+        like = lazy.array(np.ones(3))
+        x = ar.do("random.array", (3,), rng=7, like=like).compute()
+        y = ar.do("random.array", (3,), rng=7, like=like).compute()
+        assert ar.do("allclose", x, y)
+
+    def test_concrete_generator_passed_through(self):
+        import numpy as np
+
+        like = lazy.array(np.ones(3))
+        x = ar.do(
+            "random.array", (3,), rng=np.random.default_rng(7), like=like
+        ).compute()
+        assert ar.do("allclose", x, np.random.default_rng(7).normal(size=3))
 
     def test_compute_caches_sample(self):
         x = ar.do("random.array", (2, 3), like="autoray.lazy")
@@ -1210,3 +1217,112 @@ class TestLazyRandom:
 
         x = ar.do("random.array", (2, 3), like="autoray.lazy")
         assert compute_cost(x, print_missed=False) == 6
+
+
+class TestLazyGenerator:
+    _BACKENDS = TestLazyRandom._BACKENDS
+
+    @pytest.mark.parametrize(
+        "backend,dtype,fn",
+        gen_params(
+            backends=_BACKENDS,
+            dtypes=...,
+            fns=["random.default_rng"],
+            requires="random.array",
+        ),
+    )
+    def test_draw_backend_dtype(self, backend, dtype, fn):
+        like = lazy.array(gen_rand((), backend, dtype))
+        rng = ar.do(fn, 42, like=like)
+        assert isinstance(rng, lazy.random.LazyGenerator)
+        assert rng.backend == backend
+
+        x = ar.do("random.array", (2, 3), rng=rng, like=like)
+        assert x.backend == backend
+        assert x.shape == (2, 3)
+        y = x.compute()
+        assert ar.infer_backend(y) == backend
+        assert ar.get_dtype_name(y) == dtype
+
+    def test_generator_supplies_backend(self):
+        import numpy as np
+
+        rng = ar.do("random.default_rng", 42, like="autoray.lazy")
+        x = ar.do("random.array", (2, 3), rng=rng)
+        assert isinstance(x, lazy.LazyArray)
+        assert x.backend == "numpy"
+        assert isinstance(x.compute(), np.ndarray)
+
+    def test_default_rng_returns_lazy_generator(self):
+        rng = ar.do("random.default_rng", 42, like="autoray.lazy")
+        assert ar.do("random.default_rng", rng) is rng
+
+    @pytest.mark.parametrize(
+        "method,kwargs",
+        [
+            ("normal", {"loc": 1.0, "scale": 2.0}),
+            ("standard_normal", {}),
+            ("uniform", {"low": -1.0, "high": 1.0}),
+            ("random", {}),
+        ],
+    )
+    def test_methods(self, method, kwargs):
+        rng = ar.do("random.default_rng", 42, like="autoray.lazy")
+        x = getattr(rng, method)(size=(2, 3), **kwargs)
+        assert x.fn_name == "random_array"
+        assert x.shape == (2, 3)
+        assert x.compute().shape == (2, 3)
+        assert getattr(rng, method)(**kwargs).shape == ()
+
+    def test_draws_share_generator(self):
+        rng = ar.do("random.default_rng", 42, like="autoray.lazy")
+        x = rng.normal(size=(3,))
+        y = rng.normal(size=(3,))
+        (gx,) = x.deps
+        (gy,) = y.deps
+        assert gx is gy
+        assert gx.fn_name == "default_rng"
+        assert not ar.do("allclose", *lazy.compute((x, y)))
+
+    def test_compiled_seeded_draws_repeat(self):
+        import pickle
+
+        import numpy as np
+
+        like = lazy.Variable((3,), backend="numpy")
+        rng = ar.do("random.default_rng", 42, like=like)
+        z = like + rng.normal(size=(3,))
+        fn = lazy.Function(like, z)
+        x = np.ones(3)
+        assert ar.do("allclose", fn(x), fn(x))
+        fn2 = pickle.loads(pickle.dumps(fn))
+        assert ar.do("allclose", fn(x), fn2(x))
+
+    def test_compiled_unseeded_draws_fresh(self):
+        import numpy as np
+
+        like = lazy.Variable((3,), backend="numpy")
+        rng = ar.do("random.default_rng", like=like)
+        fn = lazy.Function(like, like + rng.normal(size=(3,)))
+        x = np.ones(3)
+        assert not ar.do("allclose", fn(x), fn(x))
+
+    def test_complexity_cost(self):
+        from autoray.experimental.complexity_tracing import (
+            compute_cost,
+            compute_cost_scalings,
+        )
+
+        rng = ar.do("random.default_rng", 42, like="autoray.lazy")
+        a = rng.normal(size=(2, 3))
+        b = ar.do("random.array", (3, 5), rng=rng)
+        z = a @ b
+        assert compute_cost(z, allow_missed=False) == 6 + 15 + 30
+        scalings = compute_cost_scalings(
+            z, {"n": 2, "m": 3, "k": 5}, allow_missed=False
+        )
+        assert {op["name"] for op in scalings} == {
+            "default_rng",
+            "matmul",
+            "random_array",
+        }

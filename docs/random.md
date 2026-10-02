@@ -167,7 +167,7 @@ a torch internal error.
 
 Of the backends here only torch generates directly on a requested `device`. The
 rest take no device at all, so `"random.array"` generates on their default
-device and moves the result, meaning a `device` that differs costs a copy.
+device and moves the result, meaning a `device` that differs incurs a copy.
 
 
 ## Generator objects
@@ -239,8 +239,8 @@ generator and uses that for `rng=None`, so seedless code still works and
 
 ## Lazy random arrays
 
-Lazy `"random.array"` calls use the backend's shared random state. Use a lazy
-`like` array to select the backend:
+Lazy `"random.array"` calls with `rng=None` use the backend's shared random
+state. Use a lazy `like` array to select the backend:
 
 ```python
 import autoray as ar
@@ -251,12 +251,26 @@ x = ar.do("random.array", (4, 5), dtype="float32", like=like)
 ```
 
 At execution, `like` supplies the concrete backend, dtype and device. Calling
-`x.compute()` draws and caches one sample. Compiled functions with random nodes
-draw new samples on each call. Separate random nodes draw independently, even
-when shared intermediates are enabled.
+`x.compute()` materializes that node which is then constant. Compiled functions
+with random nodes draw new samples on each call. Separate random nodes draw
+independently, even when shared intermediates are enabled.
 
-Lazy random arrays require `rng=None`. An integer seed or generator raises
-`TypeError`. Lazy `"random.default_rng"` is not supported yet.
+A seed or backend generator given as `rng` is passed on to `"random.array"`
+when materialized. `"random.default_rng"` with a lazy `like` gives a lazy
+generator. It has `normal`, `standard_normal`, `uniform` and `random` methods,
+and can be passed along as `rng`, in which case it also supplies the backend:
+
+```python
+rng = ar.do("random.default_rng", 42, like=like)
+y = rng.normal(size=(4, 5))
+z = ar.do("random.array", (4, 5), dist="rademacher", rng=rng)
+```
+
+The lazy generator makes a new concrete generator from its seed each time the
+graph is computed, and its draws all use it. A compiled function therefore
+gives the same samples on every call when the seed is fixed. Note they may not
+match the *eager* samples for the same seed, since the computational graph may
+be traversed in a different other.
 
 
 ## Compiled functions

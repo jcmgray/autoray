@@ -629,7 +629,9 @@ def _choose_backend(fn, args, kwargs, like=None):
             # possibly inject device and dtype from like into fn kwargs
             backend, device, dtype = infer_backend_device_dtype(like)
 
-            if (backend == "autoray.lazy") and (fn == "random.array"):
+            if (backend == "autoray.lazy") and (
+                fn in ("random.array", "random.default_rng")
+            ):
                 # pass lazy ``like`` through for dtype and device lookup
                 kwargs.setdefault("_like", like)
                 return backend
