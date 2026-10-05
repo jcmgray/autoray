@@ -7,6 +7,7 @@ Release notes for `autoray`.
 **Enhancements:**
 
 - `autoray.lazy` now supports `"random.array"` and `"random.default_rng"`, so these can be traced for cost and complexity estimates. A lazy `like` supplies backend, dtype and device when computed. `rng` can be a seed, a backend generator, or a lazy generator from `"random.default_rng"`, which has methods `normal`, `standard_normal`, `uniform` and `random`. Each call of a compiled `Function` draws new samples, unless `rng` is a seed or a seeded lazy generator, which give the same samples on every call.
+- Improved experimental complexity tracing
 
 ## v0.11.0 (2026-08-22)
 

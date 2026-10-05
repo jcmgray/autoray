@@ -186,6 +186,41 @@ def test_closest_prime(n, expected):
 
 
 class TestComputeCostScalingsDimensions:
+    @pytest.mark.parametrize(
+        "operation",
+        ["qr", "svd", "eigh", "qr_stabilized_numpy", "svd_truncated_numpy"],
+    )
+    def test_decomposition_tuple_shapes_are_ignored(self, operation):
+        x = lazy.Variable((11, 11), backend="numpy")
+        if operation in ("qr", "svd", "eigh"):
+            outputs = getattr(lazy.linalg, operation)(x)
+        else:
+            node = make_node(operation, (3,), (x,))
+            outputs = (
+                node.to(operator.getitem, (node, 0), shape=x.shape),
+                node.to(operator.getitem, (node, 2), shape=x.shape),
+            )
+
+        scalings = compute_cost_scalings(
+            outputs, {"D": 11}, allow_missed=False
+        )
+        (op,) = [op for op in scalings if op["name"] == operation]
+        assert (op["cost"], op["D"], op["freq"]) == (11**3, 3, 1)
+
+    @pytest.mark.parametrize("allow_missed", [True, False])
+    def test_decomposition_real_dimensions_are_checked(self, allow_missed):
+        x = lazy.Variable((3, 11), backend="numpy")
+        outputs = lazy.linalg.qr(x)
+        if allow_missed:
+            context = pytest.warns(UserWarning, match=r"Dimensions \[3\]")
+        else:
+            context = pytest.raises(ValueError, match=r"Dimensions \[3\]")
+
+        with context:
+            compute_cost_scalings(
+                outputs, {"D": 11}, allow_missed=allow_missed
+            )
+
     def test_products_of_primes_are_allowed(self):
         x = lazy.Variable((2, 9, 6), backend="numpy")
         y = lazy.multiply(x, 2)
@@ -200,12 +235,20 @@ class TestComputeCostScalingsDimensions:
         x = lazy.Variable((2, 7), backend="numpy")
         y = lazy.multiply(x, 2)
 
-        with pytest.warns(UserWarning, match=r"Dimensions \[7\]"):
+        with pytest.warns(UserWarning, match=r"Dimensions \[7\]") as record:
             compute_cost_scalings(y, {"a": 2, "b": 3})
+        msg = str(record[0].message)
+        assert "7:" in msg
+        assert "fn=mul, shape=(2, 7), backend='numpy'" in msg
+        assert "fn=None, shape=(2, 7), backend='numpy'" in msg
 
     def test_other_dimensions_can_be_rejected(self):
         x = lazy.Variable((2, 7), backend="numpy")
         y = lazy.multiply(x, 2)
 
-        with pytest.raises(ValueError, match=r"Dimensions \[7\]"):
+        with pytest.raises(ValueError, match=r"Dimensions \[7\]") as exc:
             compute_cost_scalings(y, {"a": 2, "b": 3}, allow_missed=False)
+        msg = str(exc.value)
+        assert "7:" in msg
+        assert "fn=mul, shape=(2, 7), backend='numpy'" in msg
+        assert "fn=None, shape=(2, 7), backend='numpy'" in msg

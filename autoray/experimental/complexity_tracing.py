@@ -345,15 +345,22 @@ def compute_cost_scalings(
 
     for node in descend(z):
         f = node.fn_name
+        cost_fn = COST_SCALINGS.get(f)
 
-        for d in node.shape:
+        # decomposition node shapes describe their result tuples
+        if cost_fn is cost_scaling_linalg:
+            dims = node.deps[0].shape
+        else:
+            dims = node.shape
+
+        for d in dims:
             if d not in dim_ok:
                 dim_ok[d] = set(prime_factors(d)) <= primes
             if not dim_ok[d]:
-                bad_dims[d] = bad_dims.get(d, 0) + 1
+                bad_dims.setdefault(d, set()).add(repr(node))
 
-        if f in COST_SCALINGS:
-            CS = COST_SCALINGS[f](node)
+        if cost_fn is not None:
+            CS = cost_fn(node)
         else:
             missed[f] = missed.get(f, 0) + 1
             continue
@@ -374,6 +381,11 @@ def compute_cost_scalings(
         msg = (
             f"Dimensions {sorted(bad_dims)} are not products of the "
             f"factor_map primes {sorted(primes)}, so their scaling is lost."
+            "\nNodes with these dimensions:\n"
+            + "\n".join(
+                f"  {d}: {', '.join(sorted(nodes))}"
+                for d, nodes in sorted(bad_dims.items())
+            )
         )
         if not allow_missed:
             raise ValueError(msg)
