@@ -68,14 +68,15 @@ def test_qr_thin_square_fat(backend, shape):
     gen_params(backends=..., dtypes=..., requires="linalg.solve"),
 )
 def test_solve(backend, dtype):
-
+    # diagonal shift keeps A well conditioned
     A = gen_rand((4, 4), backend, dtype)
+    A = A + 4 * ar.do("eye", 4, like=A)
     b = gen_rand((4, 1), backend, dtype)
     x = ar.do("linalg.solve", A, b)
 
     Ax = ar.to_numpy(A @ x)
     b = ar.to_numpy(b)
-    np.testing.assert_allclose(Ax, b, rtol=1e-2, atol=1e-3)
+    np.testing.assert_allclose(Ax, b, rtol=1e-3, atol=1e-4)
 
 
 @pytest.mark.parametrize(
@@ -83,7 +84,9 @@ def test_solve(backend, dtype):
     gen_params(backends=..., dtypes=..., requires="linalg.inv"),
 )
 def test_inv(backend, dtype):
+    # diagonal shift keeps A well conditioned
     A = gen_rand((4, 4), backend, dtype)
+    A = A + 4 * ar.do("eye", 4, like=A)
     A_inv = ar.do("linalg.inv", A)
     I = ar.to_numpy(A @ A_inv)
     np.testing.assert_allclose(I, np.eye(4), rtol=1e-3, atol=1e-4)
